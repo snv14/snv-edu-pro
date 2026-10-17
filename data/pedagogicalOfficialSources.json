@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "id": "men-medium-official-pedagogical-documents",
+      "kind": "companionDocument",
+      "title": "الوثائق الرسمية البيداغوجية لمرحلة التعليم المتوسط",
+      "authority": "وزارة التربية الوطنية الجزائرية",
+      "url": "https://www.education.gov.dz/2017/11/15/%D8%A7%D9%84%D9%88%D8%AB%D8%A7%D8%A6%D9%82-%D8%A7%D9%84%D8%B1%D8%B3%D9%85%D9%8A%D8%A9-%D8%A7%D9%84%D8%A8%D9%8A%D8%AF%D8%A7%D8%BA%D9%88%D8%AC%D9%8A%D8%A9-%D9%84%D9%85%D8%B1%D8%AD%D9%84%D8%AA%D9%8A/",
+      "status": "official",
+      "role": "فهرس المصادر الرسمية والتوجيهات"
+    },
+    {
+      "id": "men-medium-curriculum-summary",
+      "kind": "curriculum",
+      "title": "ملخص منهاج الطور الأول من التعليم المتوسط",
+      "authority": "وزارة التربية الوطنية الجزائرية",
+      "url": "https://www.education.gov.dz/category/ressources-pedagogiques/",
+      "status": "official",
+      "role": "مرجع للمفاهيم والأبعاد والأهداف العامة للمادة"
+    },
+    {
+      "id": "men-companion-document-introduction",
+      "kind": "companionDocument",
+      "title": "مقدمة الوثيقة المرافقة للتعليم المتوسط",
+      "authority": "وزارة التربية الوطنية الجزائرية / اللجنة الوطنية للمناهج",
+      "url": "https://www.education.gov.dz/2017/11/15/%D8%A7%D9%84%D9%88%D8%AB%D8%A7%D8%A6%D9%82-%D8%A7%D9%84%D8%B1%D8%B3%D9%85%D9%8A%D8%A9-%D8%A7%D9%84%D8%A8%D9%8A%D8%AF%D8%A7%D8%BA%D9%88%D8%AC%D9%8A%D8%A9-%D9%84%D9%85%D8%B1%D8%AD%D9%84%D8%AA%D9%8A/",
+      "status": "official",
+      "role": "مرجع توجيهي ومنهجي"
+    },
+    {
+      "id": "men-4am-snv-book-adaptation",
+      "kind": "teacherGuide",
+      "title": "تكييف كتاب السنة الرابعة متوسط - علوم الطبيعة والحياة",
+      "authority": "وزارة التربية الوطنية الجزائرية",
+      "url": "https://education.gov.dz/wp-content/uploads/2015/04/TAK-4-AM-sc-nat.pdf",
+      "status": "official",
+      "role": "مرجع للأنشطة وعناوينها وتسلسل الموارد في السنة الرابعة"
+    }
+  ]
+}

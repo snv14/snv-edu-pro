@@ -1,0 +1,51 @@
+{
+  "entities": {
+    "MemoConfigDocument": {
+      "title": "Memo Configuration",
+      "description": "User specific configurations",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "config": { "type": "object" },
+        "updatedAt": { "type": "timestamp" }
+      },
+      "required": ["userId", "config"]
+    },
+    "AnnualDistDocument": {
+      "title": "Annual Distribution Items",
+      "description": "Annual distribution array",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "items": { "type": "array" },
+        "updatedAt": { "type": "timestamp" }
+      },
+      "required": ["userId", "items"]
+    },
+    "LogbookDocument": {
+      "title": "Logbook Data",
+      "description": "Logbook settings and rows",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "data": { "type": "object" },
+        "updatedAt": { "type": "timestamp" }
+      },
+      "required": ["userId", "data"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/data/config": {
+      "schema": { "$ref": "#/entities/MemoConfigDocument" },
+      "description": "User specific configurations"
+    },
+    "/users/{userId}/data/annualDist": {
+      "schema": { "$ref": "#/entities/AnnualDistDocument" },
+      "description": "Annual distribution items"
+    },
+    "/users/{userId}/data/logbook": {
+      "schema": { "$ref": "#/entities/LogbookDocument" },
+      "description": "Logbook settings and rows"
+    }
+  }
+}

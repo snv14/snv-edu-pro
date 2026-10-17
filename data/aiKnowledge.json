@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "updatedAt": null,
+  "policy": {
+    "description": "لقطة معرفة مساعدة وليست بديلاً عن المنهاج الرسمي. لا تُستخدم لإثبات معلومة رسمية دون مصدر.",
+    "priority": ["official_platform", "official_education_sources", "attached_teacher_documents", "trusted_scientific_sources", "web_updates"],
+    "refreshCadence": "weekly"
+  },
+  "sources": [
+    {
+      "id": "dz-education",
+      "label": "وزارة التربية الوطنية الجزائرية",
+      "url": "https://www.education.gov.dz/",
+      "priority": "official_education_sources",
+      "topics": ["education", "curriculum", "official_updates"]
+    },
+    {
+      "id": "dz-pedagogical-docs",
+      "label": "الوثائق الرسمية البيداغوجية للتعليم المتوسط",
+      "url": "https://www.education.gov.dz/2017/11/15/الوثائق-الرسمية-البيداغوجية-لمرحلتي/",
+      "priority": "official_education_sources",
+      "topics": ["middle_school", "pedagogy", "curriculum"]
+    }
+  ],
+  "updates": []
+}

@@ -1,0 +1,39 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+
+# متغيرات البيئة - حماية البيانات الحساسة
+.env
+.env.local
+.env.*.local
+.env.production.local
+.env.development.local
+
+# السماح فقط بالنموذج الآمن
+!.env.example
+
+# ملفات النظام
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ملفات مؤقتة
+*.tmp
+*.temp
+*.bak
+
+# ملفات التطوير
+.history/
+.env.test
+
+# ملفات الإصدار
+*.tgz
+*.zip
+firebase-applet-config.json
