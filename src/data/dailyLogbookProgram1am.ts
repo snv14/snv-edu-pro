@@ -5,7 +5,7 @@
  * لا يعتمد هذا الملف على قاعدة بيانات المذكرات أو التدرج السنوي.
  */
 export interface DailyLogbookProgramItem {
-  level: '1am' | '2am';
+  level: '1am' | '2am' | '3am';
   midan: string;
   maqta: string;
   mawrid: string;
