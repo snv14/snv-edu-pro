@@ -1320,6 +1320,9 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
         assignedLevels,
         orientation
       );
+      if (!(blob instanceof Blob) || blob.size === 0) {
+        throw new Error('ملف Word الناتج فارغ أو غير صالح.');
+      }
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -1330,8 +1333,9 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       setTimeout(() => window.URL.revokeObjectURL(url), 1000);
       showToast('✅ تم تصدير الدفتر كملف Word قابل للتعديل بنجاح');
     } catch (error) {
-      console.error(error);
-      showToast('تعذر تصدير Word');
+      console.error('Daily logbook Word export failed:', error);
+      const detail = error instanceof Error ? error.message : 'خطأ غير معروف';
+      showToast(`تعذر تصدير Word: ${detail}`);
     }
   };
 
@@ -1388,8 +1392,9 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       await generatePreviewMatchPdf(pages, orientation);
       showToast('✅ تم تصدير PDF للدفتر اليومي بنجاح');
     } catch (error) {
-      console.error(error);
-      showToast('تعذر تصدير PDF للدفتر اليومي');
+      console.error('Daily logbook PDF export failed:', error);
+      const detail = error instanceof Error ? error.message : 'خطأ غير معروف';
+      showToast(`تعذر تصدير PDF للدفتر اليومي: ${detail}`);
     }
   };
 
