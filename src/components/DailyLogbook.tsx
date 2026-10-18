@@ -1378,7 +1378,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       let pages: HTMLElement[] = [];
       for (let i = 0; i < 20; i++) {
         await new Promise(resolve => setTimeout(resolve, 150));
-        pages = Array.from(document.querySelectorAll<HTMLElement>('[data-preview-export-page="true"]'));
+        pages = Array.from(document.querySelectorAll<HTMLElement>('[data-logbook-content-page="true"]'));
         if (pages.length > 0) break;
       }
       if (!pages.length) throw new Error('تعذر العثور على صفحات الحصص للتصدير');
@@ -3438,7 +3438,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                 {previewPagesToDisplay.map((pageRows, pageIdx) => (
                   <div
                     key={pageIdx}
-                    data-preview-export-page="true" className="print-page shadow-[0_25px_80px_rgba(0,0,0,0.5),0_0_0_1px_rgba(0,0,0,0.1)] rounded-[2px] overflow-hidden shrink-0 bg-white"
+                    data-preview-export-page="true" data-logbook-content-page="true" className="print-page logbook-content-page shadow-[0_25px_80px_rgba(0,0,0,0.5),0_0_0_1px_rgba(0,0,0,0.1)] rounded-[2px] overflow-hidden shrink-0 bg-white"
                     style={{ width: `${pageDimensions.w}mm`, height: `${pageDimensions.h}mm`, minHeight: `${pageDimensions.h}mm`, maxWidth: "none" }}
                   >
                     <div style={{ padding: PAGE_INNER_PADDING }} className="h-full flex flex-col justify-between">
