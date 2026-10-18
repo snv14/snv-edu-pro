@@ -172,10 +172,10 @@ const AUTO_FILLED_TIMETABLE_ROWS: TimetableGridRow[] = [
   { id: 'r2', time: '09:00 - 10:00', cells: { الأحد: '1م2', الإثنين: '1م1', الثلاثاء: '1م2', الأربعاء: '1م1', الخميس: '' } },
   { id: 'r3', time: '10:00 - 11:00', cells: createEmptyDayCells() },
   { id: 'r4', time: '11:00 - 12:00', cells: createEmptyDayCells() },
-  { id: 'r5', time: '13:00 - 14:00', cells: createEmptyDayCells() },
-  { id: 'r6', time: '14:00 - 15:00', cells: createEmptyDayCells() },
-  { id: 'r7', time: '15:00 - 16:00', cells: createEmptyDayCells() },
-  { id: 'r8', time: '16:00 - 17:00', cells: createEmptyDayCells() },
+  { id: 'r5', time: '13:30 - 14:30', cells: createEmptyDayCells() },
+  { id: 'r6', time: '14:30 - 15:30', cells: createEmptyDayCells() },
+  { id: 'r7', time: '15:30 - 16:30', cells: createEmptyDayCells() },
+  { id: 'r8', time: '16:30 - 17:30', cells: createEmptyDayCells() },
 ];
 
 const LOGBOOK_DATA_VERSION = '2026-10-18-progressive-activities-v13';
@@ -245,7 +245,7 @@ function formatDateToIsoString(d: Date): string {
 const LOGBOOK_ARABIC_MONTHS = ['جانفي','فيفري','مارس','أفريل','ماي','جوان','جويلية','أوت','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
 
 function formatLogbookDateLabel(dateStr: string): string {
-  const match = String(dateStr || '').match(/^(\\d{4})-(\\d{2})-(\\d{2})$/);
+  const match = String(dateStr || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!match) return dateStr || '';
   const monthIndex = Number(match[2]) - 1;
   if (monthIndex < 0 || monthIndex > 11) return dateStr;
