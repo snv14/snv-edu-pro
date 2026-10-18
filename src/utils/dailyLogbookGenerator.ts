@@ -1,6 +1,7 @@
 import { LogEntry, TimetableGridRow, HolidayEntry } from '../components/DailyLogbook';
 import { DAILY_LOGBOOK_PROGRAM_1AM } from '../data/dailyLogbookProgram1am';
 import { DAILY_LOGBOOK_PROGRAM_2AM } from '../data/dailyLogbookProgram2am';
+import { DAILY_LOGBOOK_PROGRAM_3AM } from '../data/dailyLogbookProgram3am';
 
 const JS_DAY_NAMES = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
 
@@ -135,8 +136,30 @@ export function generateLogbookEntries({
           sourceActivityId: unit.sourceActivityIds[0],
           sourceActivityId2: unit.sourceActivityIds[1],
         });
+      } else if (lvl === '3م') {
+        // كل قسم في السنة الثالثة يتقدم مستقلاً وفق التدرج البيداغوجي المرفق.
+        const programIndex = (sessionNum - 1) % DAILY_LOGBOOK_PROGRAM_3AM.length;
+        const unit = DAILY_LOGBOOK_PROGRAM_3AM[programIndex];
+        generated.push({
+          id: `${dateStr}-${sess.section.replace(/\s+/g, '')}-${sess.time.replace(/\s+/g, '')}-${generated.length}`,
+          dayName, dateStr, time: sess.time, section: sess.section, level: lvl,
+          midan: unit.midan,
+          maqta: unit.maqta,
+          mawrid: unit.mawrid,
+          ta3alom: unit.ta3alom,
+          moshkila: unit.moshkila,
+          activitiesList: [...unit.activities],
+          content: unit.activities.join('؛ '),
+          taqwim: unit.taqwim || '',
+          note: '',
+          lessonType: 'curriculum',
+          resourceIndex: programIndex + 1,
+          sourceLearningUnitId: unit.sourceLearningUnitId,
+          sourceActivityId: unit.sourceActivityIds[0],
+          sourceActivityId2: unit.sourceActivityIds[1],
+        });
       } else {
-        // الإبقاء على سلوك المستويين الثالث والرابع كما هو إلى حين توفير برنامجيهما.
+        // يبقى المستوى الرابع على السلوك العام إلى حين توفير برنامجه.
         generated.push({
           id: `${dateStr}-${sess.section.replace(/\s+/g, '')}-${sess.time.replace(/\s+/g, '')}-${generated.length}`,
           dayName, dateStr, time: sess.time, section: sess.section, level: lvl,
