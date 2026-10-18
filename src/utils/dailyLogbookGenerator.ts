@@ -1,4 +1,5 @@
 import { LogEntry, TimetableGridRow, HolidayEntry } from '../components/DailyLogbook';
+import { DAILY_LOGBOOK_PROGRAM_1AM } from '../data/dailyLogbookProgram1am';
 
 const JS_DAY_NAMES = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
 
@@ -11,9 +12,7 @@ function formatDateToIsoString(date: Date): string {
 
 function getBaseSection(sec: string): string {
   if (!sec) return 'قسم غير محدد';
-  return sec
-    .replace(/\s*\(?(?:فوج|ف|فـ|g|grp|group)\s*\d+\)?\s*/gi, '')
-    .trim();
+  return sec.replace(/\s*\(?(?:فوج|ف|فـ|g|grp|group)\s*\d+\)?\s*/gi, '').trim();
 }
 
 function detectLevelFromSection(sec: string): '1م' | '2م' | '3م' | '4م' | null {
@@ -40,98 +39,100 @@ export function generateLogbookEntries({
 }): LogEntry[] {
   if (!startDate) return [];
 
-  // بناء جدول الحصص الأسبوعي من شبكة استعمال الزمن
+  // استعمال الزمن هو الذي يحدد الأيام والأقسام والتوقيت؛ محتوى حصص 1م يأتي حصراً من برنامج السنة الأولى.
   const days = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
   const timetableSchedule: Record<string, { time: string; section: string; level: '1م' | '2م' | '3م' | '4م' }[]> = {};
-  
+
   for (const day of days) {
     timetableSchedule[day] = [];
     for (const row of gridRows) {
       const cell = row.cells?.[day];
       if (cell && cell.trim()) {
-        const lvl = detectLevelFromSection(cell.trim()) || '1م';
         timetableSchedule[day].push({
           time: row.time,
           section: cell.trim(),
-          level: lvl,
+          level: detectLevelFromSection(cell.trim()) || '1م',
         });
       }
     }
   }
 
-  const hasAnySessions = Object.values(timetableSchedule).some(arr => arr.length > 0);
-  if (!hasAnySessions) return [];
+  if (!Object.values(timetableSchedule).some((arr) => arr.length > 0)) return [];
 
-  const isDateInHoliday = (dateStr: string): boolean => {
-    return holidays.some((h) => {
-      const start = h.startDate;
-      const end = h.endDate || h.startDate;
-      return dateStr >= start && dateStr <= end;
-    });
-  };
+  const isDateInHoliday = (dateStr: string): boolean =>
+    holidays.some((h) => dateStr >= h.startDate && dateStr <= (h.endDate || h.startDate));
 
   const targetDaysCount =
     period === 'أسبوع' ? 5 :
     period === 'أسبوعين' ? 10 :
     period === 'شهر' ? 30 :
     period === 'فصل' || period === 'ثلاثي' ? 90 : 180;
-
   const maxIterations = period === 'سنة' ? 365 : targetDaysCount * 2.5;
 
   const sectionSessionIndex: Record<string, number> = {};
   const generatedKeys = new Set<string>();
   const generated: LogEntry[] = [];
-  const baseDate = new Date(`${startDate}T12:00:00`);
-  const currDate = new Date(baseDate);
-
+  const currDate = new Date(`${startDate}T12:00:00`);
   let schoolDaysCounted = 0;
   let iterationGuard = 0;
 
   const processDaySessions = (dayName: string, dateStr: string): boolean => {
     const daySessions = timetableSchedule[dayName];
-    if (!daySessions || daySessions.length === 0) return false;
+    if (!daySessions?.length) return false;
 
     for (const sess of daySessions) {
       const baseSection = getBaseSection(sess.section);
       const lvl = sess.level || detectLevelFromSection(baseSection) || '1م';
-
       const generatedKey = `${dateStr}|${sess.time}|${sess.section}`;
       if (generatedKeys.has(generatedKey)) continue;
       generatedKeys.add(generatedKey);
 
-      if (sectionSessionIndex[baseSection] === undefined) {
-        sectionSessionIndex[baseSection] = 0;
-      }
-      sectionSessionIndex[baseSection] += 1;
+      sectionSessionIndex[baseSection] = (sectionSessionIndex[baseSection] || 0) + 1;
       const sessionNum = sectionSessionIndex[baseSection];
 
-      generated.push({
-        id: `${dateStr}-${sess.section.replace(/\s+/g, '')}-${sess.time.replace(/\s+/g, '')}-${generated.length}`,
-        dayName,
-        dateStr,
-        time: sess.time,
-        section: sess.section,
-        level: lvl,
-        ta3alom: `حصة ${sessionNum}`,
-        content: `حصة ${sessionNum} — نشاط وسير التعلمات`,
-        note: '',
-        lessonType: 'curriculum',
-        resourceIndex: sessionNum,
-      });
+      if (lvl === '1م') {
+        // كل قسم يتقدم في تسلسل البرنامج مستقلاً؛ بعد إكمال الوحدات يبدأ التسلسل من أوله.
+        const programIndex = (sessionNum - 1) % DAILY_LOGBOOK_PROGRAM_1AM.length;
+        const unit = DAILY_LOGBOOK_PROGRAM_1AM[programIndex];
+        generated.push({
+          id: `${dateStr}-${sess.section.replace(/\s+/g, '')}-${sess.time.replace(/\s+/g, '')}-${generated.length}`,
+          dayName, dateStr, time: sess.time, section: sess.section, level: lvl,
+          midan: unit.midan,
+          maqta: unit.maqta,
+          mawrid: unit.mawrid,
+          ta3alom: unit.ta3alom,
+          moshkila: unit.moshkila,
+          activitiesList: [...unit.activities],
+          content: unit.activities.join('؛ '),
+          taqwim: unit.taqwim || '',
+          note: '',
+          lessonType: 'curriculum',
+          resourceIndex: programIndex + 1,
+          sourceLearningUnitId: unit.sourceLearningUnitId,
+          sourceActivityId: unit.sourceActivityIds[0],
+          sourceActivityId2: unit.sourceActivityIds[1],
+        });
+      } else {
+        // الإبقاء على سلوك المستويات الأخرى كما هو إلى حين توفير برامجها المستقلة.
+        generated.push({
+          id: `${dateStr}-${sess.section.replace(/\s+/g, '')}-${sess.time.replace(/\s+/g, '')}-${generated.length}`,
+          dayName, dateStr, time: sess.time, section: sess.section, level: lvl,
+          ta3alom: `حصة ${sessionNum}`,
+          content: `حصة ${sessionNum} — نشاط وسير التعلمات`,
+          note: '',
+          lessonType: 'curriculum',
+          resourceIndex: sessionNum,
+        });
+      }
     }
-
     return daySessions.length > 0;
   };
 
   while (schoolDaysCounted < targetDaysCount && iterationGuard < maxIterations) {
     const dayName = JS_DAY_NAMES[currDate.getDay()];
     const dateStr = formatDateToIsoString(currDate);
-    const isWeekend = dayName === 'الجمعة' || dayName === 'السبت';
-    const isHoliday = isDateInHoliday(dateStr);
-
-    if (!isWeekend && !isHoliday) {
-      const hasSessions = processDaySessions(dayName, dateStr);
-      if (hasSessions) schoolDaysCounted++;
+    if (dayName !== 'الجمعة' && dayName !== 'السبت' && !isDateInHoliday(dateStr)) {
+      if (processDaySessions(dayName, dateStr)) schoolDaysCounted++;
     }
     currDate.setDate(currDate.getDate() + 1);
     iterationGuard++;
