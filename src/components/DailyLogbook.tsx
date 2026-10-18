@@ -335,7 +335,7 @@ function buildHierarchicalContent(
 
   const clean = (value?: string) => String(value || '').trim();
   const unique = (values: string[] = []) =>
-    Array.from(new Set(values.map(clean).filter(Boolean))).slice(0, 2);
+    Array.from(new Set(values.map(clean).filter(Boolean)));
 
   const activities = unique(row.activitiesList);
   const parts: string[] = [];
