@@ -6,6 +6,38 @@ import { DAILY_LOGBOOK_PROGRAM_4AM } from '../data/dailyLogbookProgram4am';
 
 const JS_DAY_NAMES = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
 
+type ProgramUnit = {
+  activities: string[];
+  sourceActivityIds: string[];
+  [key: string]: any;
+};
+
+function getProgressiveSession(program: ProgramUnit[], sessionNumber: number): {
+  unit: ProgramUnit;
+  activity: string;
+  activityIndex: number;
+  resourceIndex: number;
+  sourceActivityId?: string;
+} | null {
+  let remaining = sessionNumber;
+  for (let resourceIndex = 0; resourceIndex < program.length; resourceIndex++) {
+    const unit = program[resourceIndex];
+    const activities = unit.activities?.length ? unit.activities : [unit.ta3alom || unit.mawrid || 'حصة تعليمية'];
+    if (remaining <= activities.length) {
+      const activityIndex = remaining - 1;
+      return {
+        unit,
+        activity: activities[activityIndex],
+        activityIndex,
+        resourceIndex,
+        sourceActivityId: unit.sourceActivityIds?.[activityIndex] || unit.sourceActivityIds?.[0],
+      };
+    }
+    remaining -= activities.length;
+  }
+  return null;
+}
+
 function formatDateToIsoString(date: Date): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -95,10 +127,10 @@ export function generateLogbookEntries({
 
       if (lvl === '1م') {
         // كل قسم يتقدم في تسلسل البرنامج مستقلاً؛ بعد إكمال الوحدات يبدأ التسلسل من أوله.
-        const programIndex = sessionNum - 1;
-        // احترام التدرج: لا نعيد البرنامج إلى بدايته تلقائياً بعد آخر مورد.
-        if (programIndex >= DAILY_LOGBOOK_PROGRAM_1AM.length) continue;
-        const unit = DAILY_LOGBOOK_PROGRAM_1AM[programIndex];
+        const progressiveSession = getProgressiveSession(DAILY_LOGBOOK_PROGRAM_1AM, sessionNum);
+        // يبقى المورد الحالي فعالاً بعدد حصص أنشطته، ثم ينتقل إلى المورد التالي.
+        if (!progressiveSession) continue;
+        const { unit, activity, activityIndex, resourceIndex, sourceActivityId } = progressiveSession;
         generated.push({
           id: `${dateStr}-${sess.section.replace(/\s+/g, '')}-${sess.time.replace(/\s+/g, '')}-${generated.length}`,
           dayName, dateStr, time: sess.time, section: sess.section, level: lvl,
@@ -107,22 +139,22 @@ export function generateLogbookEntries({
           mawrid: unit.mawrid,
           ta3alom: unit.ta3alom,
           moshkila: unit.moshkila,
-          activitiesList: [...unit.activities],
-          content: unit.activities.join('؛ '),
+          activitiesList: [activity],
+          content: activity,
           taqwim: unit.taqwim || '',
           note: '',
           lessonType: 'curriculum',
-          resourceIndex: programIndex + 1,
+          resourceIndex: resourceIndex + 1,
           sourceLearningUnitId: unit.sourceLearningUnitId,
-          sourceActivityId: unit.sourceActivityIds[0],
-          sourceActivityId2: unit.sourceActivityIds[1],
+          sourceActivityId,
+          sourceActivityId2: unit.sourceActivityIds[activityIndex + 1],
         });
       } else if (lvl === '2م') {
         // كل قسم في السنة الثانية يتقدم مستقلاً في تسلسل التدرج البيداغوجي المرفق.
-        const programIndex = sessionNum - 1;
-        // احترام التدرج: لا نعيد البرنامج إلى بدايته تلقائياً بعد آخر مورد.
-        if (programIndex >= DAILY_LOGBOOK_PROGRAM_2AM.length) continue;
-        const unit = DAILY_LOGBOOK_PROGRAM_2AM[programIndex];
+        const progressiveSession = getProgressiveSession(DAILY_LOGBOOK_PROGRAM_2AM, sessionNum);
+        // يبقى المورد الحالي فعالاً بعدد حصص أنشطته، ثم ينتقل إلى المورد التالي.
+        if (!progressiveSession) continue;
+        const { unit, activity, activityIndex, resourceIndex, sourceActivityId } = progressiveSession;
         generated.push({
           id: `${dateStr}-${sess.section.replace(/\s+/g, '')}-${sess.time.replace(/\s+/g, '')}-${generated.length}`,
           dayName, dateStr, time: sess.time, section: sess.section, level: lvl,
@@ -131,22 +163,22 @@ export function generateLogbookEntries({
           mawrid: unit.mawrid,
           ta3alom: unit.ta3alom,
           moshkila: unit.moshkila,
-          activitiesList: [...unit.activities],
-          content: unit.activities.join('؛ '),
+          activitiesList: [activity],
+          content: activity,
           taqwim: unit.taqwim || '',
           note: '',
           lessonType: 'curriculum',
-          resourceIndex: programIndex + 1,
+          resourceIndex: resourceIndex + 1,
           sourceLearningUnitId: unit.sourceLearningUnitId,
-          sourceActivityId: unit.sourceActivityIds[0],
-          sourceActivityId2: unit.sourceActivityIds[1],
+          sourceActivityId,
+          sourceActivityId2: unit.sourceActivityIds[activityIndex + 1],
         });
       } else if (lvl === '3م') {
         // كل قسم في السنة الثالثة يتقدم مستقلاً وفق التدرج البيداغوجي المرفق.
-        const programIndex = sessionNum - 1;
-        // احترام التدرج: لا نعيد البرنامج إلى بدايته تلقائياً بعد آخر مورد.
-        if (programIndex >= DAILY_LOGBOOK_PROGRAM_3AM.length) continue;
-        const unit = DAILY_LOGBOOK_PROGRAM_3AM[programIndex];
+        const progressiveSession = getProgressiveSession(DAILY_LOGBOOK_PROGRAM_3AM, sessionNum);
+        // يبقى المورد الحالي فعالاً بعدد حصص أنشطته، ثم ينتقل إلى المورد التالي.
+        if (!progressiveSession) continue;
+        const { unit, activity, activityIndex, resourceIndex, sourceActivityId } = progressiveSession;
         generated.push({
           id: `${dateStr}-${sess.section.replace(/\s+/g, '')}-${sess.time.replace(/\s+/g, '')}-${generated.length}`,
           dayName, dateStr, time: sess.time, section: sess.section, level: lvl,
@@ -155,22 +187,22 @@ export function generateLogbookEntries({
           mawrid: unit.mawrid,
           ta3alom: unit.ta3alom,
           moshkila: unit.moshkila,
-          activitiesList: [...unit.activities],
-          content: unit.activities.join('؛ '),
+          activitiesList: [activity],
+          content: activity,
           taqwim: unit.taqwim || '',
           note: '',
           lessonType: 'curriculum',
-          resourceIndex: programIndex + 1,
+          resourceIndex: resourceIndex + 1,
           sourceLearningUnitId: unit.sourceLearningUnitId,
-          sourceActivityId: unit.sourceActivityIds[0],
-          sourceActivityId2: unit.sourceActivityIds[1],
+          sourceActivityId,
+          sourceActivityId2: unit.sourceActivityIds[activityIndex + 1],
         });
       } else if (lvl === '4م') {
         // كل قسم في السنة الرابعة يتقدم وفق التدرج البيداغوجي المرفق.
-        const programIndex = sessionNum - 1;
-        // احترام التدرج: لا نعيد البرنامج إلى بدايته تلقائياً بعد آخر مورد.
-        if (programIndex >= DAILY_LOGBOOK_PROGRAM_4AM.length) continue;
-        const unit = DAILY_LOGBOOK_PROGRAM_4AM[programIndex];
+        const progressiveSession = getProgressiveSession(DAILY_LOGBOOK_PROGRAM_4AM, sessionNum);
+        // يبقى المورد الحالي فعالاً بعدد حصص أنشطته، ثم ينتقل إلى المورد التالي.
+        if (!progressiveSession) continue;
+        const { unit, activity, activityIndex, resourceIndex, sourceActivityId } = progressiveSession;
         generated.push({
           id: `${dateStr}-${sess.section.replace(/\s+/g, '')}-${sess.time.replace(/\s+/g, '')}-${generated.length}`,
           dayName, dateStr, time: sess.time, section: sess.section, level: lvl,
@@ -179,15 +211,15 @@ export function generateLogbookEntries({
           mawrid: unit.mawrid,
           ta3alom: unit.ta3alom,
           moshkila: unit.moshkila,
-          activitiesList: [...unit.activities],
-          content: unit.activities.join('؛ '),
+          activitiesList: [activity],
+          content: activity,
           taqwim: unit.taqwim || '',
           note: '',
           lessonType: 'curriculum',
-          resourceIndex: programIndex + 1,
+          resourceIndex: resourceIndex + 1,
           sourceLearningUnitId: unit.sourceLearningUnitId,
-          sourceActivityId: unit.sourceActivityIds[0],
-          sourceActivityId2: unit.sourceActivityIds[1],
+          sourceActivityId,
+          sourceActivityId2: unit.sourceActivityIds[activityIndex + 1],
         });
       } else {
         generated.push({
