@@ -1,5 +1,6 @@
 import { LogEntry, TimetableGridRow, HolidayEntry } from '../components/DailyLogbook';
 import { DAILY_LOGBOOK_PROGRAM_1AM } from '../data/dailyLogbookProgram1am';
+import { DAILY_LOGBOOK_PROGRAM_2AM } from '../data/dailyLogbookProgram2am';
 
 const JS_DAY_NAMES = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
 
@@ -39,7 +40,7 @@ export function generateLogbookEntries({
 }): LogEntry[] {
   if (!startDate) return [];
 
-  // استعمال الزمن هو الذي يحدد الأيام والأقسام والتوقيت؛ محتوى حصص 1م يأتي حصراً من برنامج السنة الأولى.
+  // استعمال الزمن يحدد الأيام والأقسام والتوقيت؛ محتوى 1م و2م يأتي من برنامجيهما المستقلين.
   const days = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
   const timetableSchedule: Record<string, { time: string; section: string; level: '1م' | '2م' | '3م' | '4م' }[]> = {};
 
@@ -112,8 +113,30 @@ export function generateLogbookEntries({
           sourceActivityId: unit.sourceActivityIds[0],
           sourceActivityId2: unit.sourceActivityIds[1],
         });
+      } else if (lvl === '2م') {
+        // كل قسم في السنة الثانية يتقدم مستقلاً في تسلسل التدرج البيداغوجي المرفق.
+        const programIndex = (sessionNum - 1) % DAILY_LOGBOOK_PROGRAM_2AM.length;
+        const unit = DAILY_LOGBOOK_PROGRAM_2AM[programIndex];
+        generated.push({
+          id: `${dateStr}-${sess.section.replace(/\s+/g, '')}-${sess.time.replace(/\s+/g, '')}-${generated.length}`,
+          dayName, dateStr, time: sess.time, section: sess.section, level: lvl,
+          midan: unit.midan,
+          maqta: unit.maqta,
+          mawrid: unit.mawrid,
+          ta3alom: unit.ta3alom,
+          moshkila: unit.moshkila,
+          activitiesList: [...unit.activities],
+          content: unit.activities.join('؛ '),
+          taqwim: unit.taqwim || '',
+          note: '',
+          lessonType: 'curriculum',
+          resourceIndex: programIndex + 1,
+          sourceLearningUnitId: unit.sourceLearningUnitId,
+          sourceActivityId: unit.sourceActivityIds[0],
+          sourceActivityId2: unit.sourceActivityIds[1],
+        });
       } else {
-        // الإبقاء على سلوك المستويات الأخرى كما هو إلى حين توفير برامجها المستقلة.
+        // الإبقاء على سلوك المستويين الثالث والرابع كما هو إلى حين توفير برنامجيهما.
         generated.push({
           id: `${dateStr}-${sess.section.replace(/\s+/g, '')}-${sess.time.replace(/\s+/g, '')}-${generated.length}`,
           dayName, dateStr, time: sess.time, section: sess.section, level: lvl,
