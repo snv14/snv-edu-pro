@@ -1340,14 +1340,10 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
     const pages: LogEntry[][] = [];
     weeklyGroups.forEach((group) => {
       const weekRows = group.rows;
-      // كل أسبوع = صفحتان متتاليتان. إذا تجاوزت الحصص 24 صفاً نضيف صفحات لاحقة فقط عند الحاجة.
-      pages.push(weekRows.slice(0, ROWS_PER_PAGE));
-      if (weekRows.length <= ROWS_PER_PAGE * 2 - 1) {
-        pages.push(weekRows.slice(ROWS_PER_PAGE, ROWS_PER_PAGE * 2 - 1));
-      } else {
-        for (let i = ROWS_PER_PAGE * 2 - 1; i < weekRows.length; i += ROWS_PER_PAGE) {
-          pages.push(weekRows.slice(i, i + ROWS_PER_PAGE));
-        }
+      // تقسيم ذكي: صفحة واحدة إذا اتسعت الحصص، وصفحات إضافية فقط عند تجاوز سعة الصفحة.
+      // لا ننشئ صفحات فارغة، ونبقي حصص كل أسبوع متجاورة قدر الإمكان.
+      for (let i = 0; i < weekRows.length; i += ROWS_PER_PAGE) {
+        pages.push(weekRows.slice(i, i + ROWS_PER_PAGE));
       }
     });
     return pages;
@@ -2778,7 +2774,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                 {rows.length > 0 && (
                   <div className="text-[11px] text-center bg-white border border-emerald-200 rounded-lg py-2 font-bold text-[#064e3b] space-y-1">
                     <div>
-                      {rows.length} حصة • {paginatedPages.length} صفحة • A4 • كل أسبوع = صفحتان • 12 صفاً لكل صفحة • {orientation === 'landscape' ? 'أفقي' : 'عمودي'}
+                      {rows.length} حصة • {paginatedPages.length} صفحة • A4 • تقسيم ذكي حسب عدد الحصص • حتى 12 حصة في الصفحة • {orientation === 'landscape' ? 'أفقي' : 'عمودي'}
                     </div>
                     <div className="text-[10px] text-zinc-600 font-medium">
                       المستويات المسندة في الدفتر: {levelDistributionSummary}
@@ -2797,7 +2793,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
             <div className="flex items-center gap-2">
               <FileStack className="w-4 h-4 text-[#064e3b]" />
               <span>
-                معاينة الدفتر اليومي ({paginatedPages.length} صفحة) — A4 • كل أسبوع = صفحتان • 12 صفاً لكل صفحة • {orientation === 'landscape' ? 'أفقي' : 'عمودي'} •{' '}
+                معاينة الدفتر اليومي ({paginatedPages.length} صفحة) — A4 • تقسيم ذكي حسب عدد الحصص • حتى 12 حصة في الصفحة • {orientation === 'landscape' ? 'أفقي' : 'عمودي'} •{' '}
                 {paginatedPages.length > 0 ? formatPageNumberLabel(0, paginatedPages.length) : 'جاهز للتوليد'}
               </span>
             </div>
@@ -2830,7 +2826,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
 
               <div className="mt-3 flex flex-wrap gap-2 justify-center">
                 <span className="bg-zinc-900 text-white px-3 py-1 rounded-full text-[11px] font-bold">
-                  A4 • 12 صفاً لكل صفحة
+                  A4 • تقسيم ذكي حسب عدد الحصص
                 </span>
                 <span className="bg-white border border-zinc-300 px-3 py-1 rounded-full text-[11px] font-bold text-zinc-700">
                   وفق المنهاج والتدرج الوزاري الرسمي
