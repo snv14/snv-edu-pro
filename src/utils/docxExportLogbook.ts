@@ -227,6 +227,20 @@ export const generateLogbookDocx = async (
     }));
   });
 
+  // صفوف إضافية فارغة داخل جدول Word نفسه؛ تبقى خلاياها قابلة للنقر والكتابة والتعديل.
+  for (let blankRow = 0; blankRow < 3; blankRow++) {
+    rows.push(new TableRow({
+      cantSplit: true,
+      children: [
+        createCell("", false, "FFFFFF", 1, 1, 18, AlignmentType.CENTER, 14),
+        createCell("", false, "FFFFFF", 1, 1, 18, AlignmentType.CENTER, 13),
+        createCell("", false, "FFFFFF", 1, 1, 20, AlignmentType.CENTER, 13),
+        createCell("", false, "FFFFFF", 1, 1, 20, AlignmentType.RIGHT, 45),
+        createCell("", false, "FFFFFF", 1, 1, 18, AlignmentType.RIGHT, 15),
+      ],
+    }));
+  }
+
   // Front Page Content
   const frontPageChildren: any[] = [
     // Same red/green small header
