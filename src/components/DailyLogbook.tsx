@@ -693,11 +693,31 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       attendance: manualLessonStatus === 'teacher_absent' ? 'غياب الأستاذ' : manualLessonStatus === 'students_absent' ? 'غياب التلاميذ' : undefined,
       lessonType: manualLessonStatus === 'teacher_absent' || manualLessonStatus === 'students_absent' ? 'health' : undefined,
     };
-    setRows((current) => [...current, entry].sort((a, b) => a.dateStr.localeCompare(b.dateStr) || getTimeRank(a.time) - getTimeRank(b.time) || a.time.localeCompare(b.time)));
+    setRows((current) => {
+      const shouldUpdateExisting = manualLessonStatus !== 'normal';
+      const existingIndex = shouldUpdateExisting
+        ? current.findIndex((row) => row.dateStr === entry.dateStr && row.time === entry.time && row.section.trim() === entry.section.trim())
+        : -1;
+      if (existingIndex >= 0) {
+        const updated = [...current];
+        const existing = updated[existingIndex];
+        updated[existingIndex] = {
+          ...existing,
+          content: statusContent,
+          manualContent: statusContent,
+          attendance: entry.attendance,
+          note: [statusLabels[manualLessonStatus], manualLessonNote.trim()].filter(Boolean).join(' — '),
+        };
+        return updated.sort((a, b) => a.dateStr.localeCompare(b.dateStr) || getTimeRank(a.time) - getTimeRank(b.time) || a.time.localeCompare(b.time));
+      }
+      return [...current, entry].sort((a, b) => a.dateStr.localeCompare(b.dateStr) || getTimeRank(a.time) - getTimeRank(b.time) || a.time.localeCompare(b.time));
+    });
     setIsAddLessonModalOpen(false);
     setManualLessonContent('');
     setManualLessonNote('');
-    showToast('تمت إضافة الحصة/الحالة إلى الدفتر وحفظها تلقائياً.');
+    showToast(manualLessonStatus === 'normal'
+      ? 'تمت إضافة الحصة إلى الدفتر وحفظها تلقائياً.'
+      : 'تم تسجيل التغيير/الغياب. إذا وُجدت حصة مطابقة تم تحديثها بدلاً من تكرارها.');
   };
 
   const [isElementsModalOpen, setIsElementsModalOpen] = useState<boolean>(false);
