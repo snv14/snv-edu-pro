@@ -178,7 +178,7 @@ const AUTO_FILLED_TIMETABLE_ROWS: TimetableGridRow[] = [
   { id: 'r8', time: '16:00 - 17:00', cells: createEmptyDayCells() },
 ];
 
-const LOGBOOK_DATA_VERSION = '2026-10-15-1am-exact-modern-v7';
+const LOGBOOK_DATA_VERSION = '2026-10-18-program-1am-v8';
 const ROWS_PER_PAGE = 12;
 const getPageDimensions = (orientation: 'portrait' | 'landscape') => orientation === 'landscape' ? { w: 297, h: 210 } : { w: 210, h: 297 };
 const PRINT_MARGIN = '14mm';
@@ -626,7 +626,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
         const hasFresh1Am = (rList: any[]) => {
           const oneAmList = rList.filter((r: any) => r.level === '1م' && r.lessonType === 'curriculum');
           if (oneAmList.length === 0) return true;
-          return oneAmList.some((r: any) => r.sourceLearningUnitId === 'lu_1am_1_1_1');
+          return oneAmList.some((r: any) => r.sourceLearningUnitId === 'program_1am_unit_01');
         };
         if (
           parsed.logbookDataVersion === LOGBOOK_DATA_VERSION &&
@@ -724,7 +724,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
         const hasFresh1Am = (rList: any[]) => {
           const oneAmList = rList.filter((r: any) => r.level === '1م' && r.lessonType === 'curriculum');
           if (oneAmList.length === 0) return true;
-          return oneAmList.some((r: any) => r.sourceLearningUnitId === 'lu_1am_1_1_1');
+          return oneAmList.some((r: any) => r.sourceLearningUnitId === 'program_1am_unit_01');
         };
 
         let hasValidRows = false;
