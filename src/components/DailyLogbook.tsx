@@ -648,6 +648,58 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
   });
 
   // Modals & UI States
+  const [isAddLessonModalOpen, setIsAddLessonModalOpen] = useState(false);
+  const [manualLessonDate, setManualLessonDate] = useState(startDate || deriveDefaultSchoolEntryDate(config.schoolYear || '2026-2027'));
+  const [manualLessonTime, setManualLessonTime] = useState(ALL_PERIODS[0]);
+  const [manualLessonSection, setManualLessonSection] = useState('');
+  const [manualLessonStatus, setManualLessonStatus] = useState<'normal' | 'changed' | 'teacher_absent' | 'students_absent' | 'not_completed'>('normal');
+  const [manualLessonContent, setManualLessonContent] = useState('');
+  const [manualLessonNote, setManualLessonNote] = useState('');
+
+  const handleAddManualLesson = () => {
+    if (!manualLessonDate || !manualLessonSection.trim()) {
+      showToast('يرجى تحديد تاريخ الحصة والقسم.');
+      return;
+    }
+    if ((manualLessonStatus === 'normal' || manualLessonStatus === 'changed') && !manualLessonContent.trim()) {
+      showToast('يرجى إدخال محتوى الحصة.');
+      return;
+    }
+    const date = new Date(`${manualLessonDate}T12:00:00`);
+    const statusLabels: Record<typeof manualLessonStatus, string> = {
+      normal: 'حصة مضافة يدوياً',
+      changed: 'تغيير محتوى الحصة',
+      teacher_absent: 'غياب الأستاذ — الحصة غير منجزة',
+      students_absent: 'غياب التلاميذ',
+      not_completed: 'الحصة غير مكتملة — يُستكمل المحتوى لاحقاً',
+    };
+    const statusContent = manualLessonStatus === 'teacher_absent'
+      ? 'غياب الأستاذ — لم تُنجز الحصة'
+      : manualLessonStatus === 'students_absent'
+        ? 'غياب التلاميذ'
+        : manualLessonStatus === 'not_completed'
+          ? (manualLessonContent.trim() ? `المحتوى المبرمج: ${manualLessonContent.trim()}\nالحالة: لم يُستكمل ويُرحّل للمتابعة` : 'الحصة غير مكتملة — يُستكمل المحتوى لاحقاً')
+          : manualLessonContent.trim();
+    const entry: LogEntry = {
+      id: `manual-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      dayName: JS_DAY_NAMES[date.getDay()] || '',
+      dateStr: manualLessonDate,
+      time: manualLessonTime,
+      section: manualLessonSection.trim(),
+      level: detectLevelFromSection(manualLessonSection) || selectedLevel?.replace('am', 'م') || '1م',
+      content: statusContent,
+      manualContent: statusContent,
+      note: [statusLabels[manualLessonStatus], manualLessonNote.trim()].filter(Boolean).join(' — '),
+      attendance: manualLessonStatus === 'teacher_absent' ? 'غياب الأستاذ' : manualLessonStatus === 'students_absent' ? 'غياب التلاميذ' : undefined,
+      lessonType: manualLessonStatus === 'teacher_absent' || manualLessonStatus === 'students_absent' ? 'health' : undefined,
+    };
+    setRows((current) => [...current, entry].sort((a, b) => a.dateStr.localeCompare(b.dateStr) || getTimeRank(a.time) - getTimeRank(b.time) || a.time.localeCompare(b.time)));
+    setIsAddLessonModalOpen(false);
+    setManualLessonContent('');
+    setManualLessonNote('');
+    showToast('تمت إضافة الحصة/الحالة إلى الدفتر وحفظها تلقائياً.');
+  };
+
   const [isElementsModalOpen, setIsElementsModalOpen] = useState<boolean>(false);
   const [modalFilterLevel, setModalFilterLevel] = useState<string>('assigned');
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState<boolean>(false);
@@ -2069,6 +2121,59 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       className="min-h-screen bg-[#edf9f6] grid-paper-bg text-zinc-900 selection:bg-[#006233]/20"
       style={{ fontFamily: "'Tajawal', system-ui, sans-serif" }}
     >
+      {isAddLessonModalOpen && (
+        <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" role="dialog" aria-modal="true" aria-label="إضافة حصة أو تسجيل حالة">
+          <div className="w-full max-w-xl rounded-2xl bg-white shadow-2xl border border-zinc-200 overflow-hidden">
+            <div className="flex items-center justify-between gap-3 bg-[#064e3b] text-white px-5 py-4">
+              <div>
+                <h3 className="font-extrabold text-[16px]">إضافة حصة أو تسجيل تغيير</h3>
+                <p className="text-[11px] text-emerald-100 mt-1">يُحفظ التعديل في سجل الدفتر فقط، ولا يغيّر البرنامج المرجعي.</p>
+              </div>
+              <button type="button" onClick={() => setIsAddLessonModalOpen(false)} className="rounded-lg p-2 hover:bg-white/10" aria-label="إغلاق"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-[11px] font-bold text-zinc-700 mb-1">التاريخ</label>
+                <input type="date" value={manualLessonDate} onChange={(e) => setManualLessonDate(e.target.value)} className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-[12px]" />
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-zinc-700 mb-1">التوقيت</label>
+                <select value={manualLessonTime} onChange={(e) => setManualLessonTime(e.target.value)} className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-[12px]">
+                  {ALL_PERIODS.map((time) => <option key={time} value={time}>{time}</option>)}
+                </select>
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block text-[11px] font-bold text-zinc-700 mb-1">القسم</label>
+                <input value={manualLessonSection} onChange={(e) => setManualLessonSection(e.target.value)} placeholder="مثال: 2م1" className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-[12px]" />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block text-[11px] font-bold text-zinc-700 mb-1">نوع الإضافة / الحالة</label>
+                <select value={manualLessonStatus} onChange={(e) => setManualLessonStatus(e.target.value as typeof manualLessonStatus)} className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-[12px]">
+                  <option value="normal">حصة إضافية</option>
+                  <option value="changed">تغيّر محتوى الحصة</option>
+                  <option value="teacher_absent">غياب الأستاذ — لم تُنجز الحصة</option>
+                  <option value="students_absent">غياب التلاميذ</option>
+                  <option value="not_completed">لم يكتمل الدرس — متابعة لاحقاً</option>
+                </select>
+              </div>
+              {(manualLessonStatus === 'normal' || manualLessonStatus === 'changed' || manualLessonStatus === 'not_completed') && (
+                <div className="sm:col-span-2">
+                  <label className="block text-[11px] font-bold text-zinc-700 mb-1">{manualLessonStatus === 'not_completed' ? 'المحتوى المبرمج / الجزء المتبقي' : 'محتوى الحصة الفعلي'}</label>
+                  <textarea value={manualLessonContent} onChange={(e) => setManualLessonContent(e.target.value)} rows={4} placeholder="اكتب محتوى الحصة كما نُفّذ فعلياً..." className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-[12px] resize-y" />
+                </div>
+              )}
+              <div className="sm:col-span-2">
+                <label className="block text-[11px] font-bold text-zinc-700 mb-1">ملاحظة (اختياري)</label>
+                <textarea value={manualLessonNote} onChange={(e) => setManualLessonNote(e.target.value)} rows={2} placeholder="سبب التغيير، تاريخ التعويض، الجزء المتبقي..." className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-[12px] resize-y" />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-zinc-100 p-4">
+              <button type="button" onClick={() => setIsAddLessonModalOpen(false)} className="rounded-lg border border-zinc-300 px-4 py-2 text-[12px] font-bold text-zinc-700">إلغاء</button>
+              <button type="button" onClick={handleAddManualLesson} className="rounded-lg bg-[#064e3b] px-5 py-2 text-[12px] font-extrabold text-white hover:bg-[#042f24]">حفظ في الدفتر</button>
+            </div>
+          </div>
+        </div>
+      )}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap');
         @media print {
@@ -2738,6 +2843,9 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                     <FileStack className="w-3.5 h-3.5" />
                     <span>إجراءات الدفتر</span>
                   </div>
+                  <button type="button" onClick={() => { setManualLessonDate(startDate || deriveDefaultSchoolEntryDate(config.schoolYear || '2026-2027')); setIsAddLessonModalOpen(true); }} className="w-full bg-white hover:bg-emerald-50 text-[#064e3b] border border-emerald-300 rounded-lg py-2.5 text-[12px] font-extrabold flex items-center justify-center gap-2 shadow-sm transition cursor-pointer">
+                    <Plus className="w-4 h-4" /><span>أضف حصة / سجّل غياباً أو تغييراً</span>
+                  </button>
                   <div className="grid grid-cols-2 gap-2">
                     <button type="button" onClick={handleGenerateSmartLogbook} className="bg-[#064e3b] hover:bg-[#042f24] text-white rounded-lg py-2.5 text-[12px] font-extrabold flex items-center justify-center gap-2 shadow-sm transition cursor-pointer">
                       <Sparkles className="w-4 h-4" /><span>توليد الدفتر</span>
