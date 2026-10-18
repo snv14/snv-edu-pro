@@ -95,7 +95,9 @@ export function generateLogbookEntries({
 
       if (lvl === '1م') {
         // كل قسم يتقدم في تسلسل البرنامج مستقلاً؛ بعد إكمال الوحدات يبدأ التسلسل من أوله.
-        const programIndex = (sessionNum - 1) % DAILY_LOGBOOK_PROGRAM_1AM.length;
+        const programIndex = sessionNum - 1;
+        // احترام التدرج: لا نعيد البرنامج إلى بدايته تلقائياً بعد آخر مورد.
+        if (programIndex >= DAILY_LOGBOOK_PROGRAM_1AM.length) continue;
         const unit = DAILY_LOGBOOK_PROGRAM_1AM[programIndex];
         generated.push({
           id: `${dateStr}-${sess.section.replace(/\s+/g, '')}-${sess.time.replace(/\s+/g, '')}-${generated.length}`,
@@ -117,7 +119,9 @@ export function generateLogbookEntries({
         });
       } else if (lvl === '2م') {
         // كل قسم في السنة الثانية يتقدم مستقلاً في تسلسل التدرج البيداغوجي المرفق.
-        const programIndex = (sessionNum - 1) % DAILY_LOGBOOK_PROGRAM_2AM.length;
+        const programIndex = sessionNum - 1;
+        // احترام التدرج: لا نعيد البرنامج إلى بدايته تلقائياً بعد آخر مورد.
+        if (programIndex >= DAILY_LOGBOOK_PROGRAM_2AM.length) continue;
         const unit = DAILY_LOGBOOK_PROGRAM_2AM[programIndex];
         generated.push({
           id: `${dateStr}-${sess.section.replace(/\s+/g, '')}-${sess.time.replace(/\s+/g, '')}-${generated.length}`,
@@ -139,7 +143,9 @@ export function generateLogbookEntries({
         });
       } else if (lvl === '3م') {
         // كل قسم في السنة الثالثة يتقدم مستقلاً وفق التدرج البيداغوجي المرفق.
-        const programIndex = (sessionNum - 1) % DAILY_LOGBOOK_PROGRAM_3AM.length;
+        const programIndex = sessionNum - 1;
+        // احترام التدرج: لا نعيد البرنامج إلى بدايته تلقائياً بعد آخر مورد.
+        if (programIndex >= DAILY_LOGBOOK_PROGRAM_3AM.length) continue;
         const unit = DAILY_LOGBOOK_PROGRAM_3AM[programIndex];
         generated.push({
           id: `${dateStr}-${sess.section.replace(/\s+/g, '')}-${sess.time.replace(/\s+/g, '')}-${generated.length}`,
@@ -161,7 +167,9 @@ export function generateLogbookEntries({
         });
       } else if (lvl === '4م') {
         // كل قسم في السنة الرابعة يتقدم وفق التدرج البيداغوجي المرفق.
-        const programIndex = (sessionNum - 1) % DAILY_LOGBOOK_PROGRAM_4AM.length;
+        const programIndex = sessionNum - 1;
+        // احترام التدرج: لا نعيد البرنامج إلى بدايته تلقائياً بعد آخر مورد.
+        if (programIndex >= DAILY_LOGBOOK_PROGRAM_4AM.length) continue;
         const unit = DAILY_LOGBOOK_PROGRAM_4AM[programIndex];
         generated.push({
           id: `${dateStr}-${sess.section.replace(/\s+/g, '')}-${sess.time.replace(/\s+/g, '')}-${generated.length}`,
