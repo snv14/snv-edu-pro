@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { generatePreviewMatchDocx, generateLogbookDocx, generateTimetableDocx } from "../utils/docxExportLogbook";
+import { generateLogbookDocx, generateTimetableDocx } from "../utils/docxExportLogbook";
 import { generatePreviewMatchPdf } from "../utils/pdfExportLogbook";
 import {
   BookOpen,
