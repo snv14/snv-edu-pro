@@ -178,7 +178,7 @@ const AUTO_FILLED_TIMETABLE_ROWS: TimetableGridRow[] = [
   { id: 'r8', time: '16:00 - 17:00', cells: createEmptyDayCells() },
 ];
 
-const LOGBOOK_DATA_VERSION = '2026-10-18-program-1am-2am-3am-4am-v11';
+const LOGBOOK_DATA_VERSION = '2026-10-18-program-1am-2am-3am-4am-v12';
 const ROWS_PER_PAGE = 12;
 const getPageDimensions = (orientation: 'portrait' | 'landscape') => orientation === 'landscape' ? { w: 297, h: 210 } : { w: 210, h: 297 };
 const PRINT_MARGIN = '14mm';
@@ -1338,16 +1338,40 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
 
   const paginatedPages = useMemo(() => {
     const pages: LogEntry[][] = [];
+    // تقدير ارتفاع كل حصة اعتماداً على النص الذي سيلتف داخل الأعمدة.
+    // هذا يجعل التقسيم يتأثر بطول المحتوى، لا بعدد الصفوف وحده.
+    const pageHeightPx = pageDimensions.h * 3.7795;
+    const availableHeightPx = Math.max(360, pageHeightPx - (orientation === 'landscape' ? 330 : 390));
+    const estimateLines = (value: unknown, charsPerLine: number) => {
+      const text = String(value ?? '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+      if (!text) return 1;
+      return text.split('\n').reduce((sum, part) => sum + Math.max(1, Math.ceil(part.length / charsPerLine)), 0);
+    };
+    const estimateRowHeight = (row: LogEntry) => {
+      const content = buildHierarchicalContent(row);
+      const contentLines = estimateLines(content, orientation === 'landscape' ? 95 : 65);
+      const noteLines = estimateLines(row.note, orientation === 'landscape' ? 30 : 22);
+      const sectionLines = estimateLines(row.section, 12);
+      return Math.max(58, 26 + Math.max(contentLines, noteLines, sectionLines) * 17);
+    };
+
     weeklyGroups.forEach((group) => {
-      const weekRows = group.rows;
-      // تقسيم ذكي: صفحة واحدة إذا اتسعت الحصص، وصفحات إضافية فقط عند تجاوز سعة الصفحة.
-      // لا ننشئ صفحات فارغة، ونبقي حصص كل أسبوع متجاورة قدر الإمكان.
-      for (let i = 0; i < weekRows.length; i += ROWS_PER_PAGE) {
-        pages.push(weekRows.slice(i, i + ROWS_PER_PAGE));
-      }
+      let pageRows: LogEntry[] = [];
+      let usedHeight = 0;
+      group.rows.forEach((row) => {
+        const rowHeight = estimateRowHeight(row);
+        if (pageRows.length > 0 && (usedHeight + rowHeight > availableHeightPx || pageRows.length >= ROWS_PER_PAGE)) {
+          pages.push(pageRows);
+          pageRows = [];
+          usedHeight = 0;
+        }
+        pageRows.push(row);
+        usedHeight += rowHeight;
+      });
+      if (pageRows.length) pages.push(pageRows);
     });
     return pages;
-  }, [weeklyGroups]);
+  }, [weeklyGroups, pageDimensions.h, orientation]);
 
   const levelDistributionSummary = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -3376,24 +3400,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                                   </React.Fragment>
                                 );
                               })}
-                              {Array.from({ length: Math.max(0, ROWS_PER_PAGE - pageRows.length - (pageIdx % 2 === 1 ? 1 : 0)) }).map((_, emptyIdx) => (
-                                <tr key={`empty-p-${emptyIdx}`} className="bg-white">
-                                  <td className="border border-zinc-300 h-[32px]" />
-                                  <td className="border border-zinc-300" />
-                                  <td className="border border-zinc-300" />
-                                  <td className="border border-zinc-300" />
-                                  <td className="border border-zinc-300" />
-                                </tr>
-                              ))}
-                              {pageIdx % 2 === 1 && (
-                                <tr className="bg-emerald-50/30">
-                                  <td className="border border-emerald-200 h-[32px]" />
-                                  <td className="border border-emerald-200" />
-                                  <td className="border border-emerald-200" />
-                                  <td className="border border-emerald-200 text-center text-[9px] text-emerald-700 font-bold">خانة فارغة لإضافة حصة نهاية الأسبوع</td>
-                                  <td className="border border-emerald-200" />
-                                </tr>
-                              )}
+
                             </tbody>
                           </table>
                         </div>
