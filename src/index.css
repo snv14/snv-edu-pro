@@ -328,6 +328,14 @@ button,input,textarea,select{font-family:inherit;}
     page-break-before: always !important;
   }
 
+  /* A4 landscape printable area is 277mm × 190mm with 10mm margins.
+     The portrait dimensions above otherwise clip landscape exports. */
+  .print-orientation-landscape .annual-export-page {
+    width: 277mm !important;
+    min-height: 190mm !important;
+    max-width: 277mm !important;
+  }
+
   .annual-export-page table,
   .annual-export-page tr,
   .annual-export-page td,
