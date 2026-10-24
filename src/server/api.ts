@@ -232,13 +232,22 @@ apiApp.post('/api/gemini/smart-assistant', async (req, res) => {
       String(question).slice(0, 12000),
     ].join('\n\n');
 
-    // عند غياب المرفقات والبحث الويب، يسمح الممر النصي باستخدام مزود بديل.
-    if (attachmentInputs.length === 0 && !useWeb) {
+    // استخدم مزوداً نصياً بديلاً للأسئلة النصية إذا لم يتوفر Gemini.
+    // عندها لا يمكن تفعيل البحث الشبكي، ونوضح ذلك للواجهة.
+    if (attachmentInputs.length === 0 && (!useWeb || !apiKey)) {
       const generated = await generateTextWithGateway(context);
-      return res.json({ text: generated.text, provider: generated.provider, sources: [], webSearchQueries: [], usedWeb: false, usedAttachments: [] });
+      return res.json({
+        text: generated.text,
+        provider: generated.provider,
+        sources: [],
+        webSearchQueries: [],
+        usedWeb: false,
+        webUnavailable: Boolean(useWeb && !apiKey),
+        usedAttachments: [],
+      });
     }
 
-    if (!apiKey) return res.status(503).json({ error: 'لم يتم إعداد مفتاح Gemini على الخادم. أضف GEMINI_API_KEY أو GOOGLE_API_KEY في أسرار النشر.' });
+    if (!apiKey) return res.status(503).json({ error: 'تحليل الملفات والبحث الشبكي يتطلبان مفتاح Gemini. أضف GEMINI_API_KEY أو GOOGLE_API_KEY في أسرار النشر، أو أوقف البحث الشبكي للأسئلة النصية.' });
     const ai = new GoogleGenAI({ apiKey, httpOptions: { headers: { 'User-Agent': 'aistudio-build' } } });
     const uploadedFiles: any[] = [];
 
