@@ -529,5 +529,9 @@ export function generateLogbookEntries({
     currentSunday.setDate(currentSunday.getDate() + 7);
   }
 
-  return generated;
+  // A final lower-bound guard prevents restored/merged group dates from adding earlier lessons.
+  return generated.filter((row) => {
+    const firstDate = (String(row.dateStr || '').match(/\d{4}-\d{2}-\d{2}/g) || [row.dateStr || '']).sort()[0];
+    return firstDate >= startDate;
+  });
 }
