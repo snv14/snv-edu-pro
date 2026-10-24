@@ -35,14 +35,7 @@ import {
 } from 'lucide-react';
 import { LessonMemo, MemoConfig, Activity } from '../types';
 import { TeacherOfficialStamp } from './TeacherOfficialStamp';
-import { 
-  deriveDefaultSchoolEntryDate, 
-  deriveSchoolYearFromDate, 
-  getDefaultCalendarSettings, 
-  syncCalendarToDailyLogbook,
-  syncCalendarToAllLevels,
-  ANNUAL_STORAGE_KEY,
-} from '../utils/annualDistributionDateUtils';
+// دفتر مستقل: تاريخ البداية يُدار داخل الدفتر ولا يُزامَن مع التدرج السنوي.
 import { generateLogbookEntries } from '../utils/dailyLogbookGenerator';
 import { DailyLogSheetTemplate } from './DailyLogSheetTemplate';
 import { DAILY_LOGBOOK_PROGRAM_1AM } from '../data/dailyLogbookProgram1am';
@@ -252,6 +245,18 @@ export function getBaseSection(sec: string): string {
 
 function formatDateToIsoString(d: Date): string {
   return d.toISOString().split('T')[0];
+}
+
+/** تاريخ افتراضي محلي للدفتر؛ لا يقرأ إعدادات التدرج السنوي ولا يكتب إليها. */
+function getDefaultNotebookStartDate(schoolYear: string): string {
+  const match = String(schoolYear || '').match(/(20\d{2})/);
+  const year = match ? Number(match[1]) : new Date().getFullYear();
+  if (year === 2024) return '2024-09-22';
+  if (year === 2025) return '2025-09-21';
+  if (year === 2026) return '2026-09-21';
+  const date = new Date(year, 8, 20, 12, 0, 0);
+  while (date.getDay() !== 0) date.setDate(date.getDate() + 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
 const LOGBOOK_ARABIC_MONTHS = ['جانفي','فيفري','مارس','أفريل','ماي','جوان','جويلية','أوت','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
@@ -632,7 +637,8 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
   curriculumLessons,
 }) => {
   // State for Header Info (synced with config initially)
-  const CURRICULUM_DATABASE = useMemo(() => buildCurriculumDatabase(curriculumLessons), [curriculumLessons]);
+  // يعتمد الدفتر على ملفات برنامجه الداخلية فقط، ويتجاهل المذكرات القادمة من بقية المنصة.
+  const CURRICULUM_DATABASE = useMemo(() => buildCurriculumDatabase(), []);
 
   const [wilaya, setWilaya] = useState<string>(config.directorate || '');
   const [school, setSchool] = useState<string>(config.schoolName || '');
@@ -673,48 +679,17 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait');
   const pageDimensions = getPageDimensions(orientation);
   const [startDate, setStartDate] = useState<string>(() => {
-    let initialDate = '';
     try {
-      const annual = JSON.parse(localStorage.getItem(ANNUAL_STORAGE_KEY) || '{}');
-      if (annual.globalCalendarSettings?.startDate) {
-        initialDate = annual.globalCalendarSettings.startDate;
+      const item = localStorage.getItem('daftar_table_v2027');
+      if (item) {
+        const parsed = JSON.parse(item);
+        if (parsed.startDate) return parsed.startDate;
       }
     } catch {}
-
-    if (!initialDate) {
-      try {
-        const item = localStorage.getItem('daftar_table_v2027');
-        if (item) {
-          const parsed = JSON.parse(item);
-          if (parsed.startDate) initialDate = parsed.startDate;
-        }
-      } catch {}
-    }
-
-    return initialDate || deriveDefaultSchoolEntryDate(config.schoolYear) || formatDateToIsoString(new Date());
+    return getDefaultNotebookStartDate(config.schoolYear || '2026-2027') || formatDateToIsoString(new Date());
   });
 
-  // الاستماع لحدث تحديث الرزنامة من التدرج السنوي أو الإعدادات
-  useEffect(() => {
-    const handleCalendarUpdated = (e: Event) => {
-      const customEvent = e as CustomEvent<{ startDate?: string; settings?: any }>;
-      const updatedStart = customEvent.detail?.startDate;
-      if (updatedStart && updatedStart !== startDate) {
-        setStartDate(updatedStart);
-      }
-    };
-    window.addEventListener('school-calendar-updated', handleCalendarUpdated);
-    return () => window.removeEventListener('school-calendar-updated', handleCalendarUpdated);
-  }, [startDate]);
-
-  // عند تغيير السنة الدراسية لا نعيد كتابة تاريخ بداية الدفتر الذي اختاره الأستاذ.
-  // تاريخ البداية يُشتق افتراضياً مرة واحدة فقط عند عدم وجود إعداد محفوظ، ثم يبقى قابلاً للتعديل.
-  useEffect(() => {
-    if (!config.schoolYear || !startDate) return;
-    const settings = getDefaultCalendarSettings(config.schoolYear, startDate);
-    syncCalendarToDailyLogbook(startDate, settings);
-    syncCalendarToAllLevels(settings);
-  }, [config.schoolYear]); 
+  // تاريخ البداية مستقل عن التدرج السنوي؛ لا يستمع الدفتر إلى أحداث الرزنامة ولا يكتب إليها. 
 
   // Generated Daily Log Entries
   const [rows, setRows] = useState<LogEntry[]>(() => {
@@ -738,7 +713,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       }
     } catch {}
     return generateLogbookEntries({
-      startDate: startDate || deriveDefaultSchoolEntryDate(config.schoolYear || '2026-2027'),
+      startDate: startDate || getDefaultNotebookStartDate(config.schoolYear || '2026-2027'),
       gridRows: AUTO_FILLED_TIMETABLE_ROWS,
       period: 'سنة',
       holidays: [],
@@ -748,7 +723,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
 
   // Modals & UI States
   const [isAddLessonModalOpen, setIsAddLessonModalOpen] = useState(false);
-  const [manualLessonDate, setManualLessonDate] = useState(startDate || deriveDefaultSchoolEntryDate(config.schoolYear || '2026-2027'));
+  const [manualLessonDate, setManualLessonDate] = useState(startDate || getDefaultNotebookStartDate(config.schoolYear || '2026-2027'));
   const [manualLessonTime, setManualLessonTime] = useState(ALL_PERIODS[0]);
   const [manualLessonSection, setManualLessonSection] = useState('');
   const [manualLessonStatus, setManualLessonStatus] = useState<'normal' | 'changed' | 'teacher_absent' | 'students_absent' | 'not_completed'>('normal');
@@ -912,7 +887,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
 
         // إذا لم تكن هناك صفوف صالحة أو كانت النسخة قديمة أو محتوية على قاعدة بيانات سابقة، نحدث فورياً
         if (!hasValidRows) {
-          const effectiveStart = parsed.startDate || startDate || deriveDefaultSchoolEntryDate(config.schoolYear || '2026-2027');
+          const effectiveStart = parsed.startDate || startDate || getDefaultNotebookStartDate(config.schoolYear || '2026-2027');
           const isGridValid = parsed.gridRows && Array.isArray(parsed.gridRows) && parsed.gridRows.some((r: any) => Object.values(r.cells).some((c: any) => c && String(c).trim()));
           const effectiveGrid = isGridValid ? parsed.gridRows : AUTO_FILLED_TIMETABLE_ROWS;
           
@@ -956,7 +931,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
     }
 
     if (!localStorage.getItem('daftar_table_v2027')) {
-      const effectiveStart = startDate || deriveDefaultSchoolEntryDate(config.schoolYear || '2026-2027');
+      const effectiveStart = startDate || getDefaultNotebookStartDate(config.schoolYear || '2026-2027');
       const fresh = generateLogbookEntries({
         startDate: effectiveStart,
         gridRows: AUTO_FILLED_TIMETABLE_ROWS,
@@ -1201,7 +1176,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
 
   // توليد الدفتر اليومي من البرنامج المستقل الخاص بكل مستوى، مع احترام المدة المحددة
   const handleGenerateSmartLogbook = () => {
-    const effectiveStart = startDate || deriveDefaultSchoolEntryDate(config.schoolYear || '2026-2027');
+    const effectiveStart = startDate || getDefaultNotebookStartDate(config.schoolYear || '2026-2027');
     const isGridEmpty = gridRows.every(r => Object.values(r.cells).every((cell: any) => !cell || !cell.trim()));
     const effectiveGrid = isGridEmpty ? AUTO_FILLED_TIMETABLE_ROWS : gridRows;
 
@@ -1249,7 +1224,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
   const ensureRowsForExport = (): LogEntry[] => {
     if (rows.length > 0) return rows;
     showToast('جاري تجهيز حصص الدفتر تلقائياً للتصدير...');
-    const effectiveStart = startDate || deriveDefaultSchoolEntryDate(config.schoolYear || '2026-2027');
+    const effectiveStart = startDate || getDefaultNotebookStartDate(config.schoolYear || '2026-2027');
     const fresh = generateLogbookEntries({
       startDate: effectiveStart,
       gridRows,
@@ -3033,11 +3008,6 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                         const newStart = e.target.value;
                         setStartDate(newStart);
                         if (newStart) {
-                          const derivedYear = deriveSchoolYearFromDate(newStart);
-                          const newSettings = getDefaultCalendarSettings(derivedYear, newStart);
-                          syncCalendarToDailyLogbook(newStart, newSettings);
-                          syncCalendarToAllLevels(newSettings);
-
                           // أعد توليد الحصص فوراً من التاريخ الذي اختاره الأستاذ،
                           // ولا تترك الصفوف القديمة المرتبطة بتاريخ فتح الصفحة.
                           const isGridEmpty = gridRows.every((r) =>
@@ -3100,7 +3070,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                     <FileStack className="w-3.5 h-3.5" />
                     <span>إجراءات الدفتر</span>
                   </div>
-                  <button type="button" onClick={() => { setManualLessonDate(startDate || deriveDefaultSchoolEntryDate(config.schoolYear || '2026-2027')); setIsAddLessonModalOpen(true); }} className="w-full bg-white hover:bg-emerald-50 text-[#064e3b] border border-emerald-300 rounded-lg py-2.5 text-[12px] font-extrabold flex items-center justify-center gap-2 shadow-sm transition cursor-pointer">
+                  <button type="button" onClick={() => { setManualLessonDate(startDate || getDefaultNotebookStartDate(config.schoolYear || '2026-2027')); setIsAddLessonModalOpen(true); }} className="w-full bg-white hover:bg-emerald-50 text-[#064e3b] border border-emerald-300 rounded-lg py-2.5 text-[12px] font-extrabold flex items-center justify-center gap-2 shadow-sm transition cursor-pointer">
                     <Plus className="w-4 h-4" /><span>أضف حصة / سجّل غياباً أو تغييراً</span>
                   </button>
                   <div className="grid grid-cols-2 gap-2">
