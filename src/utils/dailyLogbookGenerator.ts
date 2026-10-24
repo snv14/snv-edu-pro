@@ -1,12 +1,8 @@
 import { LogEntry, TimetableGridRow, HolidayEntry } from '../components/DailyLogbook';
-import { 
-  OFFICIAL_1AM_DISTRIBUTION, 
-  OFFICIAL_2AM_DISTRIBUTION, 
-  OFFICIAL_3AM_DISTRIBUTION, 
-  OFFICIAL_4AM_DISTRIBUTION,
-  OfficialAnnualDistributionRow 
-} from '../data/officialAnnualDistributionData';
-import { ANNUAL_STORAGE_KEY } from './annualDistributionDateUtils';
+import { DAILY_LOGBOOK_PROGRAM_1AM, type DailyLogbookProgramItem } from '../data/dailyLogbookProgram1am';
+import { DAILY_LOGBOOK_PROGRAM_2AM } from '../data/dailyLogbookProgram2am';
+import { DAILY_LOGBOOK_PROGRAM_3AM } from '../data/dailyLogbookProgram3am';
+import { DAILY_LOGBOOK_PROGRAM_4AM } from '../data/dailyLogbookProgram4am';
 
 const JS_DAY_NAMES = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
 
@@ -75,53 +71,79 @@ export function getBaseSection(sec: string): string {
   return extractGroupInfo(sec).baseSection;
 }
 
-/**
- * جلب التدرج البيداغوجي السنوي المعتمد للمستوى (مع استرجاع النسخة المعدلة من localStorage إن وجدت)
- */
-export function getDistributionForLevel(level: '1م' | '2م' | '3م' | '4م'): OfficialAnnualDistributionRow[] {
-  const levelKeyMap: Record<string, string> = {
-    '1م': '1am',
-    '2م': '2am',
-    '3م': '3am',
-    '4م': '4am',
-  };
-  const engLevel = levelKeyMap[level] || '1am';
+type LogbookLevel = '1م' | '2م' | '3م' | '4م';
 
-  if (typeof window !== 'undefined' && window.localStorage) {
-    try {
-      const stored = localStorage.getItem(`${ANNUAL_STORAGE_KEY}_${engLevel}`);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
-        }
-      }
-    } catch {}
-  }
-
-  switch (level) {
-    case '1م':
-      return OFFICIAL_1AM_DISTRIBUTION;
-    case '2م':
-      return OFFICIAL_2AM_DISTRIBUTION;
-    case '3م':
-      return OFFICIAL_3AM_DISTRIBUTION;
-    case '4م':
-      return OFFICIAL_4AM_DISTRIBUTION;
-    default:
-      return OFFICIAL_1AM_DISTRIBUTION;
-  }
+interface ProgramLesson {
+  id: string;
+  midan: string;
+  maqta: string;
+  mawrid: string;
+  ta3alom: string;
+  moshkila?: string;
+  activities: string[];
+  session1: string;
+  session2: string;
+  taqwim?: string;
+  isIntroductory?: boolean;
+  isExam?: boolean;
+  sourceLearningUnitId: string;
 }
 
-/**
- * استخراج صفوف التدريس الفعلية (مع استثناء فترات العطل الخالصة)
- */
-function getTeachingRowsForLevel(level: '1م' | '2م' | '3م' | '4م'): OfficialAnnualDistributionRow[] {
-  const fullDist = getDistributionForLevel(level);
-  const teaching = fullDist.filter(
-    (row) => !row.isHoliday && row.mawrid && !row.mawrid.includes('عطلة')
-  );
-  return teaching.length > 0 ? teaching : fullDist;
+const LEVEL_PROGRAMS: Record<LogbookLevel, DailyLogbookProgramItem[]> = {
+  '1م': DAILY_LOGBOOK_PROGRAM_1AM,
+  '2م': DAILY_LOGBOOK_PROGRAM_2AM,
+  '3م': DAILY_LOGBOOK_PROGRAM_3AM,
+  '4م': DAILY_LOGBOOK_PROGRAM_4AM,
+};
+
+function getTeachingRowsForLevel(level: LogbookLevel): ProgramLesson[] {
+  const introContent = 'التعارف والصحة المدرسية: التعارف بين الأستاذ والتلاميذ، تقديم المادة، قواعد الأمن والنظافة، والمحافظة على الصحة المدرسية.';
+  const intro: ProgramLesson = {
+    id: `daily_logbook_intro_${level}`,
+    midan: 'التحضير للدخول المدرسي',
+    maqta: 'الافتتاح والتعارف',
+    mawrid: 'التعارف والصحة المدرسية',
+    ta3alom: introContent,
+    activities: [introContent],
+    session1: introContent,
+    session2: introContent,
+    taqwim: 'التعرف على التلاميذ، والتذكير بقواعد النظافة والأمن والانضباط داخل المؤسسة والمخبر.',
+    isIntroductory: true,
+    sourceLearningUnitId: `daily_logbook_intro_${level}`,
+  };
+
+  const curriculum: ProgramLesson[] = (LEVEL_PROGRAMS[level] || LEVEL_PROGRAMS['1م']).map((item) => {
+    const activities = (item.activities || []).filter((activity) => Boolean(activity && activity.trim()));
+    const fallback = item.ta3alom || item.mawrid || 'نشاط تعلمي';
+    return {
+      id: item.sourceLearningUnitId,
+      midan: item.midan,
+      maqta: item.maqta,
+      mawrid: item.mawrid,
+      ta3alom: item.ta3alom,
+      moshkila: item.moshkila,
+      activities,
+      session1: activities[0] || fallback,
+      session2: activities[1] || activities[0] || fallback,
+      taqwim: item.taqwim,
+      sourceLearningUnitId: item.sourceLearningUnitId,
+    };
+  });
+
+  const review: ProgramLesson = {
+    id: `daily_logbook_review_${level}`,
+    midan: 'الإدماج والتقويم',
+    maqta: 'مراجعة التعلمات',
+    mawrid: 'تقويم وإدماج الموارد',
+    ta3alom: 'تثبيت المكتسبات ومعالجة الصعوبات المسجلة أثناء التعلمات.',
+    activities: ['تمارين إدماجية، معالجة التعثرات، وتقويم المكتسبات.'],
+    session1: 'تمارين إدماجية، معالجة التعثرات، وتقويم المكتسبات.',
+    session2: 'تمارين دعم واستدراك وتقويم المكتسبات.',
+    taqwim: 'تقويم تشخيصي وتكويني لمعرفة مدى التحكم في التعلمات.',
+    sourceLearningUnitId: `daily_logbook_review_${level}`,
+  };
+
+  return [intro, ...curriculum, review];
 }
 
 /**
@@ -213,13 +235,13 @@ export function generateLogbookEntries({
 
   // تحديد عدد الأسابيع المستهدفة
   const targetWeeksCount =
-    period === 'أسبوع' ? 1 :
+    period === 'أسبوع' || period === 'أسبوع واحد' ? 1 :
     period === 'أسبوعين' ? 2 :
     period === 'شهر' ? 4 :
     period === 'فصل' || period === 'ثلاثي' ? 12 : 32;
 
   // جداول التدرج لكل مستوى
-  const teachingRowsByLevel: Record<'1م' | '2م' | '3م' | '4م', OfficialAnnualDistributionRow[]> = {
+  const teachingRowsByLevel: Record<LogbookLevel, ProgramLesson[]> = {
     '1م': getTeachingRowsForLevel('1م'),
     '2م': getTeachingRowsForLevel('2م'),
     '3م': getTeachingRowsForLevel('3م'),
@@ -278,7 +300,8 @@ export function generateLogbookEntries({
       const lvl = secSlots[0].level;
       const teachingRows = teachingRowsByLevel[lvl] || teachingRowsByLevel['1م'];
       const weekIdx = sectionWeekProgress[baseSec] || 0;
-      const currentRow = teachingRows[weekIdx % teachingRows.length];
+      const currentRow = teachingRows[Math.min(weekIdx, teachingRows.length - 1)];
+      const sectionEntriesBefore = currentWeekEntries.length;
 
       const groupSlots = secSlots.filter((s) => s.isGroup).sort((a, b) => a.groupNumber - b.groupNumber || a.timeMinutes - b.timeMinutes);
       const collectiveSlots = secSlots.filter((s) => !s.isGroup).sort((a, b) => a.timeMinutes - b.timeMinutes);
@@ -333,7 +356,7 @@ export function generateLogbookEntries({
             ta3alom: practicalContent,
             activitiesList: [practicalContent],
             content: practicalContent,
-            taqwim: currentRow.isExam ? 'تقويم تحصيلي وفصلّي رسمي' : 'تقويم تكويني ومتابعة الإنجاز المخبري والتجريبي',
+            taqwim: currentRow.taqwim || (currentRow.isExam ? 'تقويم تحصيلي وفصلّي رسمي' : 'تقويم تكويني ومتابعة الإنجاز المخبري والتجريبي'),
             note: `عمل مخبري (${groupNumbers.map((num) => `أفواج ${num}`).join(' + ')})`,
             lessonType: currentRow.isExam ? 'assessment' : (currentRow.isIntroductory ? 'introductory' : 'curriculum'),
             resourceIndex: weekIdx + 1,
@@ -407,8 +430,11 @@ export function generateLogbookEntries({
         });
       });
 
-      // تقديم مؤشر التدرج للقسم للأسبوع القادم بمقدار 1 فقط
-      sectionWeekProgress[baseSec] = (sectionWeekProgress[baseSec] || 0) + 1;
+      // لا نتقدم في البرنامج إلا إذا أُدرجت حصة فعلية لهذا القسم هذا الأسبوع.
+      // هذا يمنع تخطي التعارف أو أي مورد بسبب تاريخ البداية أو العطل.
+      if (currentWeekEntries.length > sectionEntriesBefore) {
+        sectionWeekProgress[baseSec] = weekIdx + 1;
+      }
     }
 
     if (currentWeekEntries.length > 0) {
