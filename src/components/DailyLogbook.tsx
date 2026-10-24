@@ -1747,7 +1747,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
         startDate: newHolidayStartDate,
         endDate: end,
         kind: newHolidayKind,
-        label: newHolidayLabel.trim() || kindLabels[newHolidayKind],
+        label: newHolidayLabel.trim() ? (newHolidayLabel.trim().startsWith(kindLabels[newHolidayKind]) ? newHolidayLabel.trim() : kindLabels[newHolidayKind] + ': ' + newHolidayLabel.trim()) : kindLabels[newHolidayKind],
       }].sort((a, b) => a.startDate.localeCompare(b.startDate))
     );
     setNewHolidayStartDate('');
