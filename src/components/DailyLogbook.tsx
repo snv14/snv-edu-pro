@@ -2381,6 +2381,12 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
             display: block !important;
           }
           .print-page, [data-preview-export-page="true"] {
+            display: block !important;
+            visibility: visible !important;
+            box-sizing: border-box !important;
+            flex: none !important;
+            position: relative !important;
+            color: #111827 !important;
             box-shadow: none !important;
             margin: 0 auto 0 auto !important;
             border: 1px solid #cbd5e1 !important;
@@ -2392,6 +2398,20 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
             width: ${orientation === 'landscape' ? '290mm' : '204mm'} !important;
             height: ${orientation === 'landscape' ? '204mm' : '290mm'} !important;
             min-height: ${orientation === 'landscape' ? '204mm' : '290mm'} !important;
+          }
+          /* Keep the introductory first page visible and intact in print output. */
+          .notebook-intro-page {
+            display: flex !important;
+            visibility: visible !important;
+            flex-direction: column !important;
+            background: #ffffff !important;
+            page-break-before: auto !important;
+            break-before: auto !important;
+          }
+          .notebook-intro-page * {
+            visibility: visible !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
           .print-page:last-child, [data-preview-export-page="true"]:last-child {
             page-break-after: auto !important;
