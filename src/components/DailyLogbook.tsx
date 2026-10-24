@@ -1455,7 +1455,51 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
         setIsPreviewModalOpen(true);
       }
 
-      const expectedPageCount = paginatedPages.length + 2; // صفحة التقديم + الغلاف + صفحات المحتوى
+      // احسب عدد الصفحات من الصفوف التي ستُصدَّر فعلاً. قد تكون rows/paginatedPages
+      // في هذه الدالة أقدم من activeRows إذا جرى تجهيز الدفتر للتصدير للتو.
+      const exportWeekGroups = new Map<string, LogEntry[]>();
+      [...activeRows]
+        .sort((a, b) => a.dateStr.localeCompare(b.dateStr) || a.time.localeCompare(b.time))
+        .forEach((row) => {
+          const key = getSchoolWeekKey(row.dateStr);
+          const current = exportWeekGroups.get(key) || [];
+          current.push(row);
+          exportWeekGroups.set(key, current);
+        });
+      const exportPageHeightPx = pageDimensions.h * 3.7795;
+      const exportAvailableHeightPx = Math.max(360, exportPageHeightPx - (orientation === 'landscape' ? 330 : 390));
+      const estimateExportLines = (value: unknown, charsPerLine: number) => {
+        const text = String(value ?? '').replace(/<[^>]*>/g, '').replace(/\\s+/g, ' ').trim();
+        if (!text) return 1;
+        return text.split('\\n').reduce((sum, part) => sum + Math.max(1, Math.ceil(part.length / charsPerLine)), 0);
+      };
+      const estimateExportRowHeight = (row: LogEntry) => {
+        const content = buildHierarchicalContent(row);
+        const contentLines = estimateExportLines(content, orientation === 'landscape' ? 95 : 65);
+        const noteLines = estimateExportLines(row.note, orientation === 'landscape' ? 30 : 22);
+        const sectionLines = estimateExportLines(row.section, 12);
+        return Math.max(58, 26 + Math.max(contentLines, noteLines, sectionLines) * 17);
+      };
+      let expectedContentPageCount = 0;
+      exportWeekGroups.forEach((weekRows) => {
+        let pageRowCount = 0;
+        let usedHeight = 0;
+        weekRows.forEach((row) => {
+          const rowHeight = estimateExportRowHeight(row);
+          if (
+            pageRowCount > 0 &&
+            (usedHeight + rowHeight > exportAvailableHeightPx || pageRowCount >= ROWS_PER_PAGE)
+          ) {
+            expectedContentPageCount += 1;
+            pageRowCount = 0;
+            usedHeight = 0;
+          }
+          pageRowCount += 1;
+          usedHeight += rowHeight;
+        });
+        if (pageRowCount > 0) expectedContentPageCount += 1;
+      });
+      const expectedPageCount = expectedContentPageCount + 2; // صفحة التقديم + الغلاف + صفحات المحتوى
       let pages: HTMLElement[] = [];
       // Wait for React to render every page. Never silently export a partial notebook.
       for (let i = 0; i < 100; i++) {
