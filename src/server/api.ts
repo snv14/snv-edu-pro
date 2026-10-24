@@ -8,6 +8,7 @@ import { buildGeminiSystemPrompt } from '../services/geminiPrompts';
 import { generateTextWithGateway, getAIProviderStatus } from './aiGateway';
 import { sourcePriorityOf } from '../services/aiSourcePriority';
 
+dotenv.config({ path: '.env.local' });
 dotenv.config();
 
 export const apiApp = express();
