@@ -1469,9 +1469,9 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       const exportPageHeightPx = pageDimensions.h * 3.7795;
       const exportAvailableHeightPx = Math.max(360, exportPageHeightPx - (orientation === 'landscape' ? 330 : 390));
       const estimateExportLines = (value: unknown, charsPerLine: number) => {
-        const text = String(value ?? '').replace(/<[^>]*>/g, '').replace(/\\s+/g, ' ').trim();
+        const text = String(value ?? '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
         if (!text) return 1;
-        return text.split('\\n').reduce((sum, part) => sum + Math.max(1, Math.ceil(part.length / charsPerLine)), 0);
+        return text.split('\n').reduce((sum, part) => sum + Math.max(1, Math.ceil(part.length / charsPerLine)), 0);
       };
       const estimateExportRowHeight = (row: LogEntry) => {
         const content = buildHierarchicalContent(row);
