@@ -1486,11 +1486,29 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
   };
 
   // طباعة جدول استعمال الزمن مباشرة
-  const handlePrintTimetable = () => {
-    setIsTimetableModalOpen(true);
-    setTimeout(() => {
+  const handlePrintTimetable = async () => {
+    try {
+      setIsTimetableModalOpen(true);
+      let printable: HTMLElement | null = null;
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        printable = document.getElementById('official-printable-timetable');
+        const rect = printable?.getBoundingClientRect();
+        if (printable && rect && rect.width > 0 && rect.height > 0 && printable.querySelector('table')) break;
+      }
+      const rect = printable?.getBoundingClientRect();
+      if (!printable || !rect || rect.width <= 0 || rect.height <= 0 || !printable.querySelector('table')) {
+        throw new Error('لم يكتمل عرض جدول استعمال الزمن للطباعة');
+      }
+      if (document.fonts?.ready) await document.fonts.ready;
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+      );
       window.print();
-    }, 400);
+    } catch (error) {
+      console.error(error);
+      showToast('تعذر تجهيز طباعة استعمال الزمن');
+    }
   };
 
   // تصدير Word مطابق تماماً لصفحات المعاينة
