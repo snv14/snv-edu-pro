@@ -293,9 +293,10 @@ export function generateLogbookEntries({
       d.setDate(currentSunday.getDate() + dIdx);
       const dateStr = formatDateToIsoString(d);
       const dayName = days[dIdx];
-      const event = holidays.find((h) => dateStr >= h.startDate && dateStr <= (h.endDate || h.startDate));
-      const isHoliday = Boolean(event && (!event.kind || event.kind === 'holiday'));
-      const assessmentKind = event && event.kind && event.kind !== 'holiday' ? event.kind : undefined;
+      const dateEvents = holidays.filter((h) => dateStr >= h.startDate && dateStr <= (h.endDate || h.startDate));
+      const isHoliday = isDateInHoliday(dateStr);
+      const event = isHoliday ? undefined : dateEvents.find((h) => h.kind && h.kind !== 'holiday');
+      const assessmentKind = event?.kind && event.kind !== 'holiday' ? event.kind : undefined;
       const assessmentLabel = assessmentKind
         ? (event?.label || (assessmentKind === 'assignment' ? 'فرض' : assessmentKind === 'test' ? 'اختبار' : 'امتحان'))
         : undefined;
