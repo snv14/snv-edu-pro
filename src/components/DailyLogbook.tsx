@@ -2234,12 +2234,12 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
               <div className="w-full max-w-3xl mx-auto">
                 <div className="text-[13px] font-bold text-[#a34f6b] mb-3 flex items-center gap-2">
                   <div className="w-1.5 h-1.5 bg-[#D21034] rounded-full" />
-                  جدول العطل
+                  جدول العطل والفروض والاختبارات
                 </div>
                 <table className="w-full border-collapse border border-zinc-200">
                   <thead>
                     <tr>
-                      <th className="border border-zinc-200 px-2 py-2 text-center bg-[#fff0f5] font-bold text-[#991b1b] text-[11px] w-[50%]">العطلة</th>
+                      <th className="border border-zinc-200 px-2 py-2 text-center bg-[#fff0f5] font-bold text-[#991b1b] text-[11px] w-[50%]">النوع / المناسبة</th>
                       <th className="border border-zinc-200 px-2 py-2 text-center bg-[#f9faf6] font-bold text-zinc-700 text-[11px] w-[25%]">من</th>
                       <th className="border border-zinc-200 px-2 py-2 text-center bg-[#f9faf6] font-bold text-zinc-700 text-[11px] w-[25%]">إلى</th>
                     </tr>
@@ -2248,8 +2248,8 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                     {holidays.map((h, idx) => (
                       <tr key={h.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-[#f9faf6]'}>
                         <td className="border border-zinc-200 px-2 py-1.5 text-center font-bold text-[11px] text-zinc-900">{h.label}</td>
-                        <td className="border border-zinc-200 px-2 py-1.5 text-center font-mono font-medium text-[10px] text-zinc-700" dir="ltr">{h.start}</td>
-                        <td className="border border-zinc-200 px-2 py-1.5 text-center font-mono font-medium text-[10px] text-zinc-700" dir="ltr">{h.end}</td>
+                        <td className="border border-zinc-200 px-2 py-1.5 text-center font-mono font-medium text-[10px] text-zinc-700" dir="ltr">{h.startDate}</td>
+                        <td className="border border-zinc-200 px-2 py-1.5 text-center font-mono font-medium text-[10px] text-zinc-700" dir="ltr">{h.endDate || h.startDate}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -2967,11 +2967,11 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
             <div className="rounded-xl border border-zinc-200 overflow-hidden">
               <div className="bg-zinc-50 px-4 py-2.5 flex items-center gap-2 text-[13px] font-bold border-b border-zinc-200">
                 <Calendar className="w-4 h-4 text-zinc-700" />
-                <span>العطل الرسمية + الجمعة</span>
+                <span>العطل والفروض والاختبارات + الجمعة</span>
               </div>
               <div className="p-3 space-y-2 max-h-[190px] overflow-auto">
                 <div className="text-[11px] bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-2.5 py-1.5">
-                  الجمعة عطلة تلقائية + العطل أدناه محجوبة من التوليد
+                  الجمعة مستثناة تلقائياً؛ العطل توقف الحصص، والفروض والاختبارات تُسجل دون تقديم التدرج
                 </div>
                 {holidays.map((h, idx) => (
                   <div
@@ -3009,12 +3009,23 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                     title="تاريخ النهاية (اختياري)"
                   />
                 </div>
-                <div className="flex gap-2">
+                <div className="grid grid-cols-[120px_1fr_auto] gap-2">
+                  <select
+                    value={newHolidayKind}
+                    onChange={(e) => setNewHolidayKind(e.target.value as NonNullable<HolidayEntry['kind']>)}
+                    className="border border-zinc-200 rounded-lg px-2 py-1.5 text-[12px] bg-white outline-none"
+                    aria-label="نوع الموعد"
+                  >
+                    <option value="holiday">عطلة</option>
+                    <option value="assignment">فرض</option>
+                    <option value="test">اختبار</option>
+                    <option value="exam">امتحان</option>
+                  </select>
                   <input
                     value={newHolidayLabel}
                     onChange={(e) => setNewHolidayLabel(e.target.value)}
-                    placeholder="المناسبة"
-                    className="flex-1 border border-zinc-200 rounded-lg px-2 py-1.5 text-[12px] bg-white outline-none"
+                    placeholder="المناسبة (اختياري)"
+                    className="min-w-0 border border-zinc-200 rounded-lg px-2 py-1.5 text-[12px] bg-white outline-none"
                   />
                   <button
                     type="button"
