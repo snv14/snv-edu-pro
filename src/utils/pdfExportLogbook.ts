@@ -23,9 +23,14 @@ const preparePageForExport = (source: HTMLElement, orientation: LogbookOrientati
   page.style.margin = "0";
   page.style.transform = "none";
   page.style.backgroundColor = "#ffffff";
-  page.style.width = orientation === "landscape" ? "297mm" : "210mm";
-  page.style.height = orientation === "landscape" ? "210mm" : "297mm";
-  page.style.minHeight = page.style.height;
+  // Preserve each page's authored preview dimensions before scaling it onto A4.
+  // The introductory page has its own flex layout; forcing a new width/height here
+  // can change its internal layout and crop its content in the exported PDF.
+  const sourceWidth = source.style.width || (orientation === "landscape" ? "290mm" : "204mm");
+  const sourceHeight = source.style.height || (orientation === "landscape" ? "204mm" : "290mm");
+  page.style.width = sourceWidth;
+  page.style.height = sourceHeight;
+  page.style.minHeight = sourceHeight;
   page.style.maxWidth = "none";
   page.style.setProperty("-webkit-print-color-adjust", "exact");
   page.style.setProperty("print-color-adjust", "exact");
