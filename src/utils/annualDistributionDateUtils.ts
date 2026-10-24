@@ -263,62 +263,12 @@ export function recalculateDistributionRows(
 /**
  * مزامنة تاريخ الدخول والعطل مع دفتر النصوص في التخزين المحلي
  */
-export function syncCalendarToDailyLogbook(startDate: string, settings: SchoolCalendarSettings): boolean {
-  try {
-    const raw = localStorage.getItem('daftar_table_v2027');
-    const logbook = raw ? JSON.parse(raw) : {};
-    
-    logbook.startDate = startDate;
-    
-    // حساب تواريخ العطل لإدراجها في قائمة عطل الدفتر
-    const startSunday = alignToSunday(startDate);
-    const autumnRange = computeWeekRange(startSunday, settings.holidays.autumnWeek - 1);
-    const winter1Range = computeWeekRange(startSunday, settings.holidays.winterWeeks[0] - 1);
-    const winter2Range = computeWeekRange(startSunday, settings.holidays.winterWeeks[1] - 1);
-    const spring1Range = computeWeekRange(startSunday, settings.holidays.springWeeks[0] - 1);
-    const spring2Range = computeWeekRange(startSunday, settings.holidays.springWeeks[1] - 1);
-
-    const generatedHolidays = [
-      {
-        id: 'holiday-autumn',
-        startDate: autumnRange.isoStart,
-        endDate: autumnRange.isoEnd,
-        label: settings.holidays.autumnLabel,
-      },
-      {
-        id: 'holiday-winter',
-        startDate: winter1Range.isoStart,
-        endDate: winter2Range.isoEnd,
-        label: settings.holidays.winterLabel,
-      },
-      {
-        id: 'holiday-spring',
-        startDate: spring1Range.isoStart,
-        endDate: spring2Range.isoEnd,
-        label: settings.holidays.springLabel,
-      },
-    ];
-
-    // دمج العطل دون تكرار
-    const existingHolidays = Array.isArray(logbook.holidays) ? logbook.holidays : [];
-    const nonOfficialHolidays = existingHolidays.filter(
-      (h: any) => !/عطلة الخريف|عطلة الشتاء|عطلة الربيع/.test(h.label || '')
-    );
-
-    logbook.holidays = [...generatedHolidays, ...nonOfficialHolidays];
-    localStorage.setItem('daftar_table_v2027', JSON.stringify(logbook));
-
-    // إشعار كافة المكونات في الصفحة بتحديث الرزنامة فورياً
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('school-calendar-updated', {
-        detail: { startDate, settings }
-      }));
-    }
-    return true;
-  } catch (err) {
-    console.error('فشل مزامنة الرزنامة مع دفتر النصوص:', err);
-    return false;
-  }
+/**
+ * توافق خلفي فقط: دفتر النصوص مستقل عن التدرج السنوي.
+ * لا تغيّر هذه الدالة بيانات الدفتر أو رزنامته، حتى لو استدعتها أجزاء قديمة من المنصة.
+ */
+export function syncCalendarToDailyLogbook(_startDate: string, _settings: SchoolCalendarSettings): boolean {
+  return true;
 }
 
 /**
