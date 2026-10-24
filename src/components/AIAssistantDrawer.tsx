@@ -237,6 +237,9 @@ const [expertMode, setExpertMode] = useState(true);
         expertMode,
       });
       let reply = liveReply?.text || '';
+      if (reply && liveReply?.webUnavailable) {
+        reply += '\n\nتنبيه: لم يتوفر بحث الويب لعدم إعداد Gemini؛ أُجيب عن السؤال النصي بمزود بديل.';
+      }
       if (reply) {
         saveLabBlock(makeLabBlock(query, reply, liveReply?.sources || []));
         const aiMsg: Message = {
