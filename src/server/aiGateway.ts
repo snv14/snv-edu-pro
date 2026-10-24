@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
+dotenv.config({ path: '.env.local' });
 dotenv.config();
 
 export type ServerAIProvider = 'gemini' | 'openai' | 'anthropic' | 'huggingface';
