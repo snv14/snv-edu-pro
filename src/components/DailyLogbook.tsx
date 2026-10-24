@@ -178,7 +178,7 @@ const AUTO_FILLED_TIMETABLE_ROWS: TimetableGridRow[] = [
   { id: 'r8', time: '16:30 - 17:30', cells: createEmptyDayCells() },
 ];
 
-const LOGBOOK_DATA_VERSION = '2026-10-24-sheet-template-v19';
+const LOGBOOK_DATA_VERSION = '2026-10-24-sheet-template-v20';
 const ROWS_PER_PAGE = 10;
 const getPageDimensions = (orientation: 'portrait' | 'landscape') => orientation === 'landscape' ? { w: 297, h: 210 } : { w: 210, h: 297 };
 const PRINT_MARGIN = '14mm';
