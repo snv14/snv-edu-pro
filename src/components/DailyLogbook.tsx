@@ -191,7 +191,7 @@ function getLogbookSortDate(dateStr: string): string {
 }
 
 function filterLogbookRowsFromDate(rows: LogEntry[], startDate: string): LogEntry[] {
-  const startDateOnly = String(startDate || '').match(/\\d{4}-\\d{2}-\\d{2}/)?.[0] || startDate;
+  const startDateOnly = String(startDate || '').match(/\d{4}-\d{2}-\d{2}/)?.[0] || startDate;
   if (!startDateOnly) return rows;
   return rows.filter((row) => getLogbookSortDate(row.dateStr || '') >= startDateOnly);
 }
