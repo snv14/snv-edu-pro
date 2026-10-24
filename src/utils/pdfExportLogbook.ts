@@ -1,6 +1,5 @@
-import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
-import { sanitizeOklchForHtml2Canvas } from "./html2canvasSanitizer";
+import { safeHtml2Canvas, sanitizeOklchForHtml2Canvas } from "./html2canvasSanitizer";
 
 export type LogbookOrientation = "portrait" | "landscape";
 
@@ -23,12 +22,11 @@ const preparePageForExport = (source: HTMLElement, orientation: LogbookOrientati
   page.style.borderRadius = "0";
   page.style.margin = "0";
   page.style.transform = "none";
-  page.style.backgroundColor = "transparent";
+  page.style.backgroundColor = "#ffffff";
   page.style.width = orientation === "landscape" ? "297mm" : "210mm";
   page.style.height = orientation === "landscape" ? "210mm" : "297mm";
   page.style.minHeight = page.style.height;
   page.style.maxWidth = "none";
-  // التصدير يلتقط نفس CSS الفعلي للمعاينة؛ لا نعيد رسم الخلفيات أو شبكة الخلايا.
   page.style.setProperty("-webkit-print-color-adjust", "exact");
   page.style.setProperty("print-color-adjust", "exact");
   page.style.setProperty("box-sizing", "border-box");
@@ -43,8 +41,8 @@ const preparePageForExport = (source: HTMLElement, orientation: LogbookOrientati
   host.style.width = targetWidth;
   host.style.height = targetHeight;
   host.style.overflow = "hidden";
-  host.style.background = "transparent";
-  host.style.zIndex = "-9999";
+  host.style.background = "#ffffff";
+  host.style.zIndex = "999999";
   host.style.pointerEvents = "none";
   host.style.opacity = "1";
   host.setAttribute("aria-hidden", "true");
@@ -59,7 +57,8 @@ const preparePageForExport = (source: HTMLElement, orientation: LogbookOrientati
 
 export const generatePreviewMatchPdf = async (
   pageElements: HTMLElement[],
-  orientation: LogbookOrientation = "portrait"
+  orientation: LogbookOrientation = "portrait",
+  onProgress?: (current: number, total: number) => void
 ): Promise<void> => {
   if (!pageElements.length) throw new Error("لا توجد صفحات للمعاينة");
   if (document.fonts?.ready) await document.fonts.ready;
@@ -77,17 +76,19 @@ export const generatePreviewMatchPdf = async (
   const pageHeight = orientation === "landscape" ? 210 : 297;
 
   for (let index = 0; index < pageElements.length; index += 1) {
+    if (onProgress) {
+      onProgress(index + 1, pageElements.length);
+    }
     const element = pageElements[index];
     const prepared = preparePageForExport(element, orientation);
     try {
-      // لا نستخدم scrollIntoView أو focus أثناء التصدير حتى لا تتحرك المعاينة.
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
-      const canvas = await html2canvas(prepared.page, {
+      const canvas = await safeHtml2Canvas(prepared.page, {
         scale: 1.5,
         useCORS: true,
         allowTaint: false,
-        backgroundColor: null,
+        backgroundColor: "#ffffff",
         logging: false,
         imageTimeout: 10000,
         scrollX: 0,
@@ -101,10 +102,8 @@ export const generatePreviewMatchPdf = async (
 
       if (index > 0) pdf.addPage();
 
-    const imageData = canvas.toDataURL("image/png");
+      const imageData = canvas.toDataURL("image/png");
 
-    // كل عنصر تصدير هو صفحة A4 فعلية؛ نملأ صفحة PDF كاملة حتى لا تظهر
-    // هوامش إضافية أو يتم تصغير الصفحة بسبب فرق بسيط في أبعاد الـcanvas.
       pdf.addImage(
         imageData,
         "PNG",
@@ -115,6 +114,10 @@ export const generatePreviewMatchPdf = async (
         undefined,
         "FAST"
       );
+
+      // Clean up canvas memory immediately
+      canvas.width = 1;
+      canvas.height = 1;
     } finally {
       prepared.cleanup();
     }

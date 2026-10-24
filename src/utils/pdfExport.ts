@@ -1,6 +1,5 @@
-import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
-import { sanitizeOklchForHtml2Canvas } from './html2canvasSanitizer';
+import { safeHtml2Canvas, sanitizeOklchForHtml2Canvas } from './html2canvasSanitizer';
 import type { MemoConfig } from '../types';
 
 const waitForImages = async (root: HTMLElement): Promise<void> => {
@@ -270,7 +269,7 @@ export const generateMemoPdf = async (
       await waitForImages(prepared.page);
       await nextFrame();
 
-      const canvas = await html2canvas(prepared.page, {
+      const canvas = await safeHtml2Canvas(prepared.page, {
         scale: Math.min(1.6, Math.max(1.2, window.devicePixelRatio || 1.4)),
         useCORS: true,
         allowTaint: false,

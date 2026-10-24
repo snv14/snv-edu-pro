@@ -1,6 +1,5 @@
-import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
-import { sanitizeOklchForHtml2Canvas } from "./html2canvasSanitizer";
+import { safeHtml2Canvas, sanitizeOklchForHtml2Canvas } from "./html2canvasSanitizer";
 
 export type DistributionOrientation = "portrait" | "landscape";
 
@@ -75,7 +74,7 @@ export const generateDistributionPdf = async (
         requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
       );
 
-      const canvas = await html2canvas(page, {
+      const canvas = await safeHtml2Canvas(page, {
         scale: 2,
         useCORS: true,
         allowTaint: false,

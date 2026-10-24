@@ -4,10 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --port=3000 --host=0.0.0.0",
+    "dev": "tsx server.ts",
     "build": "vite build",
     "preview": "vite preview",
-    "start": "node --import tsx/esm server.ts",
+    "start": "node server.ts",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "refresh:ai-knowledge": "node scripts/refresh-ai-knowledge.mjs"

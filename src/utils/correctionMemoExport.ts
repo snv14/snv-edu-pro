@@ -1,7 +1,6 @@
 import { Document, Packer, Paragraph, TextRun, AlignmentType, PageOrientation } from 'docx';
-import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
-import { sanitizeOklchForHtml2Canvas } from './html2canvasSanitizer';
+import { safeHtml2Canvas, sanitizeOklchForHtml2Canvas } from './html2canvasSanitizer';
 import { MemoConfig } from '../types';
 
 const safe = (s: string) => (s || 'مذكرة_تصحيح').replace(/[^\u0600-\u06FFa-zA-Z0-9_-]+/g, '_').slice(0, 80);
@@ -9,7 +8,7 @@ const safe = (s: string) => (s || 'مذكرة_تصحيح').replace(/[^\u0600-\u0
 export async function exportCorrectionMemoToDocx(args: {
   title: string; text: string; config?: MemoConfig; level?: string;
 }) {
-  const lines = args.text.split(/\r?\n/);
+  const lines = (args.text || '').split(/\r?\n/);
   const children = [
     new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'الجمهورية الجزائرية الديمقراطية الشعبية', bold: true, font: 'Tajawal', size: 28 })] }),
     new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'وزارة التربية الوطنية', bold: true, font: 'Tajawal', size: 24 })] }),
@@ -27,7 +26,7 @@ export async function exportCorrectionMemoToDocx(args: {
 }
 
 export async function exportCorrectionMemoToPdf(element: HTMLElement, title: string) {
-  const canvas = await html2canvas(element, { scale: 2, useCORS: true, backgroundColor: '#fff', onclone: sanitizeOklchForHtml2Canvas });
+  const canvas = await safeHtml2Canvas(element, { scale: 2, useCORS: true, backgroundColor: '#fff', onclone: sanitizeOklchForHtml2Canvas });
   const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
   const pageW = 210, pageH = 297;
   const pxPerMm = canvas.width / pageW;

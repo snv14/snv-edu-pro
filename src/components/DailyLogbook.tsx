@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { generateLogbookDocx, generateTimetableDocx } from "../utils/docxExportLogbook";
 import { generatePreviewMatchPdf } from "../utils/pdfExportLogbook";
+import { safeHtml2Canvas } from "../utils/html2canvasSanitizer";
 import {
   BookOpen,
   Calendar,
@@ -40,8 +41,14 @@ import {
   getDefaultCalendarSettings, 
   syncCalendarToDailyLogbook,
   syncCalendarToAllLevels,
+  ANNUAL_STORAGE_KEY,
 } from '../utils/annualDistributionDateUtils';
 import { generateLogbookEntries } from '../utils/dailyLogbookGenerator';
+import { DailyLogSheetTemplate } from './DailyLogSheetTemplate';
+import { DAILY_LOGBOOK_PROGRAM_1AM } from '../data/dailyLogbookProgram1am';
+import { DAILY_LOGBOOK_PROGRAM_2AM } from '../data/dailyLogbookProgram2am';
+import { DAILY_LOGBOOK_PROGRAM_3AM } from '../data/dailyLogbookProgram3am';
+import { DAILY_LOGBOOK_PROGRAM_4AM } from '../data/dailyLogbookProgram4am';
 
 interface DailyLogbookProps {
   selectedLevel?: '1am' | '2am' | '3am' | '4am';
@@ -166,20 +173,20 @@ const EMPTY_TIMETABLE_ROWS: TimetableGridRow[] = Array.from({ length: 8 }, (_, i
   cells: createEmptyDayCells(),
 }));
 
-// Default rows used by the automatic timetable-fill action.
+// Default rows used by the automatic timetable-fill action (15-hour standard Algerian middle school science schedule: 5 classes × 3h = 15h)
 const AUTO_FILLED_TIMETABLE_ROWS: TimetableGridRow[] = [
-  { id: 'r1', time: '08:00 - 09:00', cells: { الأحد: '1م1', الإثنين: '1م2', الثلاثاء: '1م1', الأربعاء: '1م2', الخميس: '' } },
-  { id: 'r2', time: '09:00 - 10:00', cells: { الأحد: '1م2', الإثنين: '1م1', الثلاثاء: '1م2', الأربعاء: '1م1', الخميس: '' } },
-  { id: 'r3', time: '10:00 - 11:00', cells: createEmptyDayCells() },
-  { id: 'r4', time: '11:00 - 12:00', cells: createEmptyDayCells() },
+  { id: 'r1', time: '08:00 - 09:00', cells: { الأحد: '1م1', الإثنين: '1م1 ف1', الثلاثاء: '1م2 ف1', الأربعاء: '1م3 ف1', الخميس: '1م4 ف1' } },
+  { id: 'r2', time: '09:00 - 10:00', cells: { الأحد: '1م2', الإثنين: '1م1 ف2', الثلاثاء: '1م2 ف2', الأربعاء: '1م3 ف2', الخميس: '1م4 ف2' } },
+  { id: 'r3', time: '10:00 - 11:00', cells: { الأحد: '1م5 ف1', الإثنين: '1م3', الثلاثاء: '1م4', الأربعاء: '1م5', الخميس: '' } },
+  { id: 'r4', time: '11:00 - 12:00', cells: { الأحد: '1م5 ف2', الإثنين: '', الثلاثاء: '', الأربعاء: '', الخميس: '' } },
   { id: 'r5', time: '13:30 - 14:30', cells: createEmptyDayCells() },
   { id: 'r6', time: '14:30 - 15:30', cells: createEmptyDayCells() },
   { id: 'r7', time: '15:30 - 16:30', cells: createEmptyDayCells() },
   { id: 'r8', time: '16:30 - 17:30', cells: createEmptyDayCells() },
 ];
 
-const LOGBOOK_DATA_VERSION = '2026-10-18-progressive-activities-v13';
-const ROWS_PER_PAGE = 12;
+const LOGBOOK_DATA_VERSION = '2026-10-24-sheet-template-v18';
+const ROWS_PER_PAGE = 10;
 const getPageDimensions = (orientation: 'portrait' | 'landscape') => orientation === 'landscape' ? { w: 297, h: 210 } : { w: 210, h: 297 };
 const PRINT_MARGIN = '14mm';
 const PAGE_INNER_PADDING = '12px';
@@ -219,7 +226,7 @@ export function detectLevelFromSection(sec: string): '1م' | '2م' | '3م' | '4�
  * استخراج بيانات الفوج والقسم الأساسي:
  * يتعامل مع مختلف صياغات الأساتذة: (ف1)، (فوج 1)، ف1، فوج 1، grp 1، إلخ.
  */
-export function extractGroupInfo(sec: string): { baseSection: string; groupNum?: string; rawGroup?: string } {
+export function extractGroupInfo(sec: string): { baseSection: string; groupNum?: string; rawGroup?: string; isGroup?: boolean } {
   const clean = (sec || '').trim();
   if (!clean) return { baseSection: 'قسم غير محدد' };
   const match = clean.match(/(?:[-—/–\s]*\(?(?:فوج|فـ|ف|grp|group|g)\s*([1234])\)?\s*)/i);
@@ -229,9 +236,14 @@ export function extractGroupInfo(sec: string): { baseSection: string; groupNum?:
       baseSection: base || clean,
       groupNum: match[1],
       rawGroup: `ف${match[1]}`,
+      isGroup: true,
     };
   }
-  return { baseSection: clean };
+  const isGenericGroup = /\b(?:فوج|فـ|ف)\b/i.test(clean);
+  return {
+    baseSection: clean,
+    isGroup: isGenericGroup,
+  };
 }
 
 export function getBaseSection(sec: string): string {
@@ -245,16 +257,31 @@ function formatDateToIsoString(d: Date): string {
 const LOGBOOK_ARABIC_MONTHS = ['جانفي','فيفري','مارس','أفريل','ماي','جوان','جويلية','أوت','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
 
 function formatLogbookDateLabel(dateStr: string): string {
-  const match = String(dateStr || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!dateStr) return '';
+  if (dateStr.includes('/')) {
+    return dateStr
+      .split('/')
+      .map((part) => {
+        const trimmed = part.trim();
+        const match = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})(.*)$/);
+        if (!match) return trimmed;
+        const monthIndex = Number(match[2]) - 1;
+        const monthName =
+          monthIndex >= 0 && monthIndex < 12 ? LOGBOOK_ARABIC_MONTHS[monthIndex] : match[2];
+        return `${match[3]} ${monthName} ${match[1]}${match[4] || ''}`;
+      })
+      .join(' / ');
+  }
+  const match = String(dateStr || '').match(/^(\d{4})-(\d{2})-(\d{2})(.*)$/);
   if (!match) return dateStr || '';
   const monthIndex = Number(match[2]) - 1;
   if (monthIndex < 0 || monthIndex > 11) return dateStr;
-  return `${match[3]} ${LOGBOOK_ARABIC_MONTHS[monthIndex]} ${match[1]}`;
+  return `${match[3]} ${LOGBOOK_ARABIC_MONTHS[monthIndex]} ${match[1]}${match[4] || ''}`;
 }
 
 /**
  * دمج الحصص التابعة لنفس القسم (مثل: فوج 1 وفوج 2 لنفس القسم) في خانة واحدة
- * يدمج التوقيت معاً (08:00 - 09:00 ف1 / 09:00 - 10:00 ف2) والمحتوى واحد
+ * يدمج التوقيت معاً والتاريخ معاً والقسم والمحتوى في حصة واحدة
  */
 export function mergeConsecutiveGroupEntries(entries: LogEntry[]): LogEntry[] {
   const result: LogEntry[] = [];
@@ -268,14 +295,22 @@ export function mergeConsecutiveGroupEntries(entries: LogEntry[]): LogEntry[] {
     const baseA = getBaseSection(a.section);
     const infoA = extractGroupInfo(a.section);
 
-    // البحث عن حصة أخرى لنفس التاريخ ونفس القسم والمستوى
+    // إذا كانت الحصة فوجاً، نبحث عن حصة الفوج الشريك لنفس القسم في نفس الأسبوع
     let partnerIdx = -1;
-    for (let j = i + 1; j < entries.length; j++) {
-      if (visited.has(j)) continue;
-      const b = entries[j];
-      if (b.dateStr === a.dateStr && b.level === a.level && getBaseSection(b.section) === baseA) {
-        partnerIdx = j;
-        break;
+    if (infoA.isGroup || a.section.includes('ف')) {
+      for (let j = i + 1; j < entries.length; j++) {
+        if (visited.has(j)) continue;
+        const b = entries[j];
+        const infoB = extractGroupInfo(b.section);
+        if (
+          (infoB.isGroup || b.section.includes('ف')) &&
+          b.level === a.level &&
+          getBaseSection(b.section) === baseA &&
+          getSchoolWeekKey(b.dateStr) === getSchoolWeekKey(a.dateStr)
+        ) {
+          partnerIdx = j;
+          break;
+        }
       }
     }
 
@@ -286,26 +321,29 @@ export function mergeConsecutiveGroupEntries(entries: LogEntry[]): LogEntry[] {
 
       const grpA = infoA.groupNum || '1';
       const grpB = infoB.groupNum || '2';
-      const isGroupSplit = !!infoA.groupNum || !!infoB.groupNum || a.section.includes('ف') || b.section.includes('ف');
 
-      // توقيت الحصتين يكتب كما هو
+      const sameDay = a.dateStr === b.dateStr;
+      const combinedDay = sameDay ? (a.dayName || 'الأحد') : `${a.dayName || ''} / ${b.dayName || ''}`;
+      const combinedDate = sameDay
+        ? a.dateStr
+        : `${a.dateStr} (ف${grpA}) / ${b.dateStr} (ف${grpB})`;
+
       let combinedTime = a.time;
-      if (a.time !== b.time) {
-        if (isGroupSplit && !a.time.includes('ف') && !b.time.includes('ف')) {
-          combinedTime = `${a.time} (ف${grpA}) / ${b.time} (ف${grpB})`;
-        } else {
-          combinedTime = `${a.time} / ${b.time}`;
-        }
+      if (a.time !== b.time || !sameDay) {
+        const timeA = a.time.includes('ف') ? a.time : `${a.time} (ف${grpA})`;
+        const timeB = b.time.includes('ف') ? b.time : `${b.time} (ف${grpB})`;
+        combinedTime = `${timeA} / ${timeB}`;
+      } else {
+        combinedTime = `${a.time} (ف${grpA} + ف${grpB})`;
       }
 
-      const combinedSection = isGroupSplit
-        ? `${baseA} (فوج 1 + فوج 2)`
-        : baseA;
-
-      const combinedNote = [a.note, b.note].filter(Boolean).join(' | ');
+      const combinedSection = `${baseA} (فوج 1 + فوج 2)`;
+      const combinedNote = `عمل مخبري (أفواج 1 + 2)`;
 
       result.push({
         ...a,
+        dayName: combinedDay,
+        dateStr: combinedDate,
         time: combinedTime,
         section: combinedSection,
         note: combinedNote,
@@ -421,7 +459,7 @@ const normalizeDailyLogbookRows = (
   savedRows: LogEntry[],
   _db?: any
 ): LogEntry[] => {
-  return savedRows;
+  return mergeConsecutiveGroupEntries(savedRows);
 };
 
 interface DailyLogbookAudit {
@@ -526,7 +564,33 @@ const auditGeneratedDailyLogbook = (
 };
 
 
+export function buildCurriculumDatabase(
+  _curriculumLessons?: LessonMemo[]
+): Record<'1م' | '2م' | '3م' | '4م', CurriculumResourceItem[]> {
+  // تم إلغاء ربط الدفتر اليومي بالمذكرات: يعتمد الدفتر اليومي حصراً على المنهاج والتدرج السنوي الوزاري الرسمي
+  return {
+    '1م': DAILY_LOGBOOK_PROGRAM_1AM.map((p) => ({
+      ...p,
+      level: '1م',
+    })),
+    '2م': DAILY_LOGBOOK_PROGRAM_2AM.map((p) => ({
+      ...p,
+      level: '2م',
+    })),
+    '3م': DAILY_LOGBOOK_PROGRAM_3AM.map((p) => ({
+      ...p,
+      level: '3م',
+    })),
+    '4م': DAILY_LOGBOOK_PROGRAM_4AM.map((p) => ({
+      ...p,
+      level: '4م',
+    })),
+  };
+}
+
 export const DailyLogbook: React.FC<DailyLogbookProps> = ({
+  selectedLevel,
+  setSelectedLevel: _setSelectedLevel,
   config,
   setConfig,
   showToast,
@@ -1272,10 +1336,9 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       const el = document.getElementById('official-printable-timetable');
       if (!el) throw new Error('تعذر العثور على وثيقة استعمال الزمن');
 
-      const html2canvas = (await import('html2canvas')).default;
       const { jsPDF } = await import('jspdf');
 
-      const canvas = await html2canvas(el, {
+      const canvas = await safeHtml2Canvas(el, {
         scale: 2,
         useCORS: true,
         backgroundColor: '#ffffff',
@@ -1320,9 +1383,6 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
         assignedLevels,
         orientation
       );
-      if (!(blob instanceof Blob) || blob.size === 0) {
-        throw new Error('ملف Word الناتج فارغ أو غير صالح.');
-      }
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -1333,9 +1393,8 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       setTimeout(() => window.URL.revokeObjectURL(url), 1000);
       showToast('✅ تم تصدير الدفتر كملف Word قابل للتعديل بنجاح');
     } catch (error) {
-      console.error('Daily logbook Word export failed:', error);
-      const detail = error instanceof Error ? error.message : 'خطأ غير معروف';
-      showToast(`تعذر تصدير Word: ${detail}`);
+      console.error(error);
+      showToast('تعذر تصدير Word');
     }
   };
 
@@ -1353,10 +1412,12 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
         setPreviewZoom(100);
         setIsPreviewModalOpen(true);
       }
-      for (let i = 0; i < 15; i++) {
-        await new Promise(resolve => setTimeout(resolve, 150));
-        const pages = document.querySelectorAll<HTMLElement>('[data-preview-export-page="true"]');
-        if (pages.length > 0) break;
+      const targetCount = paginatedPages.length + 2;
+      for (let i = 0; i < 30; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 120));
+        const modalContainer = document.querySelector('.print-preview-root .preview-scroll');
+        const pages = modalContainer?.querySelectorAll<HTMLElement>('[data-preview-export-page="true"]') || [];
+        if (pages.length >= targetCount) break;
       }
       if (document.fonts?.ready) await document.fonts.ready;
       window.print();
@@ -1374,27 +1435,47 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
         showToast('يرجى التأكد من برمجة حصة واحدة على الأقل في استعمال الزمن لتصدير PDF');
         return;
       }
-      showToast('جاري تحضير ملف PDF للدفتر اليومي...');
+      showToast('جاري تحضير كافة صفحات الدفتر اليومي للتصدير...');
       if (!isPreviewModalOpen || previewMode !== 'all') {
         setPreviewMode('all');
         setIsPreviewModalOpen(true);
       }
-      let pages: HTMLElement[] = [];
-      for (let i = 0; i < 20; i++) {
-        await new Promise(resolve => setTimeout(resolve, 150));
-        pages = Array.from(document.querySelectorAll<HTMLElement>('[data-logbook-content-page="true"]'));
-        if (pages.length > 0) break;
-      }
-      if (!pages.length) throw new Error('تعذر العثور على صفحات الحصص للتصدير');
-      if (document.fonts?.ready) await document.fonts.ready;
-      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
-      await generatePreviewMatchPdf(pages, orientation);
-      showToast('✅ تم تصدير PDF للدفتر اليومي بنجاح');
+      const targetCount = paginatedPages.length + 2;
+      let pages: HTMLElement[] = [];
+      for (let i = 0; i < 35; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 120));
+        const modalContainer = document.querySelector('.print-preview-root .preview-scroll');
+        if (modalContainer) {
+          const contentPages = Array.from(modalContainer.querySelectorAll<HTMLElement>('[data-preview-export-page="true"]'));
+          if (contentPages.length >= targetCount) {
+            pages = contentPages;
+            break;
+          }
+          if (contentPages.length > 0) {
+            pages = contentPages;
+          }
+        }
+      }
+      if (!pages.length || pages.length < paginatedPages.length) {
+        const modalContainer = document.querySelector('.print-preview-root .preview-scroll');
+        const fallback = modalContainer?.querySelectorAll<HTMLElement>('[data-preview-export-page="true"]') ||
+          document.querySelectorAll<HTMLElement>('[data-preview-export-page="true"]');
+        if (fallback.length > pages.length) {
+          pages = Array.from(fallback);
+        }
+      }
+      if (!pages.length) throw new Error('تعذر العثور على صفحات الدفتر للتصدير');
+      if (document.fonts?.ready) await document.fonts.ready;
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+      await generatePreviewMatchPdf(pages, orientation, (current, total) => {
+        showToast(`جاري تصدير الصفحة ${current} من ${total}...`);
+      });
+      showToast(`✅ تم تصدير جميع صفحات الدفتر اليومي (${pages.length} صفحة) كملف PDF بنجاح`);
     } catch (error) {
-      console.error('Daily logbook PDF export failed:', error);
-      const detail = error instanceof Error ? error.message : 'خطأ غير معروف';
-      showToast(`تعذر تصدير PDF للدفتر اليومي: ${detail}`);
+      console.error(error);
+      showToast('تعذر تصدير PDF للدفتر اليومي');
     }
   };
 
@@ -2220,21 +2301,71 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
           background-size: 8px 8px;
         }
         @media print {
-  @page { size: A4 ${orientation}; margin: 0 !important; }
-  body { margin: 0 !important; padding: 0 !important; background: #fff !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-  body > * { visibility: hidden !important; }
-  .print-preview-root, .print-preview-root * { visibility: visible !important; }
-  .print-preview-root { position: static !important; inset: auto !important; width: 100% !important; height: auto !important; background: #fff !important; overflow: visible !important; display: block !important; }
-  .print-preview-root .preview-controls { display: none !important; }
-  .print-preview-root .preview-scroll { overflow: visible !important; padding: 0 !important; background: #fff !important; display: block !important; }
-  .print-preview-root .preview-scroll > div { transform: none !important; width: auto !important; gap: 0 !important; }
-  .print-preview-root .print-page { box-shadow:none !important; margin:0 !important; border:0 !important; width: 210mm !important; height: 297mm !important; min-height: 297mm !important; max-width:none !important; page-break-after: always !important; break-after: page !important; overflow:hidden !important; }
-  .print-preview-root .print-page:last-child { page-break-after: auto !important; break-after: auto !important; }
-  .print-preview-root.print-orientation-landscape .print-page { width: 297mm !important; height: 210mm !important; min-height: 210mm !important; }
-  .no-print { display:none !important; }
-  .logbook-table { border-collapse: collapse !important; }
-  .writing-grid-cell, .logbook-grid-cell { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-}
+          @page { size: A4 ${orientation}; margin: 4mm !important; }
+          html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #fff !important;
+            height: auto !important;
+            min-height: 0 !important;
+            overflow: visible !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          #root, #root > div, .app-shell, main {
+            height: auto !important;
+            min-height: 0 !important;
+            overflow: visible !important;
+            display: block !important;
+            position: static !important;
+          }
+          .print-preview-root {
+            position: static !important;
+            inset: auto !important;
+            width: 100% !important;
+            height: auto !important;
+            min-height: 0 !important;
+            background: #fff !important;
+            overflow: visible !important;
+            display: block !important;
+          }
+          .preview-controls, .no-print, header, aside, nav {
+            display: none !important;
+          }
+          .preview-scroll {
+            overflow: visible !important;
+            padding: 0 !important;
+            background: #fff !important;
+            display: block !important;
+            height: auto !important;
+            max-height: none !important;
+          }
+          .preview-scroll > div {
+            transform: none !important;
+            width: 100% !important;
+            gap: 0 !important;
+            display: block !important;
+          }
+          .print-page, [data-preview-export-page="true"] {
+            box-shadow: none !important;
+            margin: 0 auto 0 auto !important;
+            border: 1px solid #cbd5e1 !important;
+            page-break-after: always !important;
+            break-after: page !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            overflow: hidden !important;
+            width: ${orientation === 'landscape' ? '290mm' : '204mm'} !important;
+            height: ${orientation === 'landscape' ? '204mm' : '290mm'} !important;
+            min-height: ${orientation === 'landscape' ? '204mm' : '290mm'} !important;
+          }
+          .print-page:last-child, [data-preview-export-page="true"]:last-child {
+            page-break-after: auto !important;
+            break-after: auto !important;
+          }
+          .logbook-table { border-collapse: collapse !important; }
+          .writing-grid-cell, .logbook-grid-cell { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+        }
         .cover-page { background-color: #fffdf7; background-image: radial-gradient(circle at 15% 10%, rgba(6,78,59,.08), transparent 28%), radial-gradient(circle at 85% 20%, rgba(210,16,52,.06), transparent 25%); }
         .logbook-table { border-collapse: collapse !important; }
         .logbook-table th, .logbook-table td { border: 1.5px solid #64748b !important; }
@@ -2493,7 +2624,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                               >
                                 {MORNING_PERIODS.map((t) => (
                                   <option key={t} value={t}>
-                                    {t}
+                                    {t.replace(/\s*-\s*/, ' ➔ ')}
                                   </option>
                                 ))}
                               </select>
@@ -2598,7 +2729,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                               >
                                 {AFTERNOON_PERIODS.map((t) => (
                                   <option key={t} value={t}>
-                                    {t}
+                                    {t.replace(/\s*-\s*/, ' ➔ ')}
                                   </option>
                                 ))}
                               </select>
@@ -2647,6 +2778,13 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                     <ListFilter className="w-3.5 h-3.5" />
                     نماذج إسناد سريعة:
                   </span>
+                  <button
+                    type="button"
+                    onClick={handleAutoFillGrid}
+                    className="bg-emerald-700 hover:bg-emerald-800 text-white font-black px-2.5 py-0.5 rounded-full text-[10px] transition cursor-pointer shadow-xs flex items-center gap-1"
+                  >
+                    <span>⭐ نموذج 15 ساعة (جماعي + أفواج)</span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => handleQuickAssignPreset(['1م', '4م'])}
@@ -3034,166 +3172,24 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
           {/* Render Pages */}
           <div className="space-y-8">
             {renderCoverFirstPage()}
-            {paginatedPages.map((pageRows, pageIdx) => {
-              const tableBodyRows: React.ReactNode[] = [];
-              let prevDateStr = '';
-              let prevWasMorning = false;
-              let prevWeekKey = '';
-
-              pageRows.forEach((r, rowIdx) => {
-                const globalRowIndex = rows.findIndex((item) => item.id === r.id);
-                const previousRow = findPreviousComparableCurriculumRow(rows, globalRowIndex, r);
-                const displayContent = buildHierarchicalContent(r, previousRow);
-                const weekChanged =
-                  rowIdx > 0 &&
-                  getSchoolWeekKey(r.dateStr) !== getSchoolWeekKey(pageRows[rowIdx - 1].dateStr);
-
-                if (weekChanged) {
-                  tableBodyRows.push(
-                    <tr key={`week-divider-${r.id}`} className="bg-white">
-                      <td colSpan={5} className="border-0 h-[8px]" />
-                    </tr>
-                  );
-                }
-
-                tableBodyRows.push(
-                  <tr key={r.id} className="bg-white">
-                    <td className="logbook-grid-cell border border-zinc-300 px-2 py-2 text-center font-mono text-[10px] text-zinc-800 w-[92px]">
-                      {formatLogbookDateLabel(r.dateStr)}
-                    </td>
-                    <td className="logbook-grid-cell border border-zinc-300 px-2 py-2 text-center font-mono text-[10px] text-zinc-800 w-[88px]" dir="ltr">
-                      {r.time}
-                    </td>
-                    <td className="logbook-grid-cell border border-zinc-300 px-2 py-2 text-center font-bold text-zinc-900 w-[78px]">
-                      {r.section}
-                    </td>
-                    <td
-                      className="logbook-grid-cell border border-zinc-300 px-3 py-2 text-zinc-900 leading-relaxed text-right whitespace-pre-line align-top"
-                      style={{ minHeight: NOTEBOOK_CONTENT_MIN_HEIGHT, height: NOTEBOOK_CONTENT_MIN_HEIGHT }}
-                      dangerouslySetInnerHTML={{ __html: displayContent }}
-                    />
-                    <td className="logbook-grid-cell border border-zinc-300 px-2 py-2 text-zinc-900 align-top min-h-[58px]">
-                      {r.note || ''}
-                    </td>
-                  </tr>
-                );
-              });
-
-              const emptyRowsCount = Math.max(0, ROWS_PER_PAGE - pageRows.length);
-              for (let emptyIdx = 0; emptyIdx < emptyRowsCount; emptyIdx++) {
-                tableBodyRows.push(
-                  <tr key={`empty-p-${emptyIdx}`} className="bg-white">
-                    <td className="border border-zinc-300 h-[36px]" />
-                    <td className="border border-zinc-300" />
-                    <td className="border border-zinc-300" />
-                    <td className="border border-zinc-300" />
-                    <td className="border border-zinc-300" />
-                  </tr>
-                );
-              }
-
-              return (
-                <div
-                  key={pageIdx}
-                  data-preview-export-page="true"
-                  className="print-page grid-paper-bg shadow-[0_16px_45px_rgba(20,110,100,0.12)] rounded-[8px] border border-[#d8eee9] overflow-hidden mx-auto mb-8 bg-[#fffdf8]"
-                  style={{
-                    width: `${pageDimensions.w}mm`,
-                    height: `${pageDimensions.h}mm`,
-                    minHeight: `${pageDimensions.h}mm`,
-                    maxWidth: 'none',
-                  }}
-                >
-                  <div style={{ padding: PAGE_INNER_PADDING }} className="h-full flex flex-col justify-between">
-                    <div>
-                      <div className="border-b border-zinc-200">
-                        <div className="h-1 flex">
-                          <div className="flex-1 bg-[#006233]" />
-                          <div className="flex-1 bg-[#D21034]" />
-                        </div>
-                        <div className="px-5 py-3 flex justify-between items-start gap-4">
-                          <div className="text-[11px] leading-5">
-                            <div className="font-bold flex items-center gap-1 text-zinc-900">
-                              <span className="text-[#006233]">الجمهورية الجزائرية الديمقراطية الشعبية</span>
-                            </div>
-                            <div className="text-zinc-700">وزارة التربية الوطنية</div>
-                            <div className="text-zinc-600">{config.directorate}</div>
-                            <div className="text-zinc-600">المؤسسة: {config.schoolName}</div>
-                          </div>
-                          <div className="text-center text-[10px] space-y-1 bg-zinc-50 border border-zinc-200 px-4 py-2 rounded-lg">
-                            <div className="flex flex-col items-center gap-1">
-                              <span>
-                                الأستاذ: <b>{config.teacherName}</b>
-                              </span>
-                              <span>
-                                المادة: <b>العلوم الطبيعية</b>
-                              </span>
-                              <span>
-                                السنة: <b>{config.schoolYear || ''}</b>
-                              </span>
-                            </div>
-                            <div className="mt-1 text-[10px] text-zinc-500 font-medium">
-                              المستويات المسندة: <b>{assignedLevels.join('، ')}</b>
-                            </div>
-                          </div>
-                          <div className="text-left shrink-0 space-y-1">
-                            <div className="text-[15px] font-extrabold text-zinc-900">الدفتر اليومي</div>
-                            <div className="text-[11px] font-bold text-[#064e3b]">التعليم المتوسط</div>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="p-0 flex-1 mt-1">
-                        <table className="logbook-table w-full border-collapse text-[11px] leading-5 table-fixed">
-                          <thead>
-                            <tr className="bg-[#159a8c] text-white">
-                              <th className="border border-[#0e766c] px-2 py-2 font-bold w-[92px]">التاريخ</th>
-                              <th className="border border-[#0a3d2e] px-2 py-2 font-bold w-[88px]">الوقت</th>
-                              <th className="border border-[#0a3d2e] px-2 py-2 font-bold w-[78px]">القسم</th>
-                              <th className="border border-[#0a3d2e] px-3 py-2 font-bold text-right">سير الحصة</th>
-                              <th className="border border-[#0a3d2e] px-2 py-2 font-bold">الملاحظات</th>
-                            </tr>
-                          </thead>
-                          <tbody>{tableBodyRows}</tbody>
-                        </table>
-                      </div>
-                    </div>
-
-                    <div className="mt-auto">
-                      <div className="px-4 py-3 border-t border-zinc-200 grid grid-cols-4 gap-4 text-[11px] bg-white">
-                        <div className="text-center">
-                          <div className="font-bold text-zinc-900">توقيع الأستاذ(ة)</div>
-                          <div className="mt-6 border-t border-dashed border-zinc-400 h-10" />
-                        </div>
-                        <div className="text-center">
-                          <div className="font-bold text-zinc-900">ختم الأستاذ(ة)</div>
-                          <div className="mt-2 flex justify-center">
-                            <TeacherOfficialStamp config={config} size="sm" />
-                          </div>
-                        </div>
-                        <div className="text-center">
-                          <div className="font-bold text-zinc-900">توقيع المدير</div>
-                          <div className="mt-6 border-t border-dashed border-zinc-400 h-10" />
-                        </div>
-                        <div className="text-center">
-                          <div className="font-bold text-zinc-900">توقيع المفتش</div>
-                          <div className="mt-6 border-t border-dashed border-zinc-400 h-10" />
-                        </div>
-                      </div>
-                      <div className="px-4 pb-2 flex justify-center items-center border-t border-zinc-100 pt-2">
-                        <span className="bg-zinc-900 text-white px-4 py-1 rounded-full font-bold text-[11px]">
-                           صفحة {pageIdx + 2} من {paginatedPages.length}
-                        </span>
-                      </div>
-                      <div className="h-1 flex -mx-[1px]">
-                        <div className="flex-1 bg-[#006233]" />
-                        <div className="flex-1 bg-[#D21034]" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+            {paginatedPages.map((pageRows, pageIdx) => (
+              <DailyLogSheetTemplate
+                key={`page-${pageIdx}`}
+                pageRows={pageRows}
+                allRows={rows}
+                pageIndex={pageIdx}
+                totalPages={paginatedPages.length}
+                config={config}
+                assignedLevels={assignedLevels}
+                startDate={startDate}
+                pageDimensions={pageDimensions}
+                buildHierarchicalContent={buildHierarchicalContent}
+                findPreviousComparableCurriculumRow={findPreviousComparableCurriculumRow}
+                getSchoolWeekKey={getSchoolWeekKey}
+                getSchoolWeekNumber={getSchoolWeekNumber}
+                formatLogbookDateLabel={formatLogbookDateLabel}
+              />
+            ))}
           </div>
         </main>
       </div>
@@ -3313,7 +3309,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                 })}
 
               <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-3.5 text-[11px] leading-relaxed text-zinc-600">
-                <b>آلية الربط البيداغوجي الذكي:</b> عند إدراج قسم في جدول التوقيت (مثل 1م1 أو 4م2)، يستخرج النظام المستوى التعليمي، ويسحب المورد التالي بالترتيب الرسمي من التدرج الرسمي لمذكرات علوم الطبيعة والحياة.
+                <b>آلية التوليد البيداغوجي الذكي:</b> عند إدراج قسم في جدول التوقيت (مثل 1م1 أو 4م2)، يستخرج النظام المستوى التعليمي، ويسحب المورد التالي بالترتيب الرسمي وفق التدرج السنوي الرسمي للتعلمات لمادة علوم الطبيعة والحياة (الدفتر مستقل عن المذكرات).
                 <b> السنوات التي لا تدرسها لن تظهر في دفترك اليومي إطلاقاً</b>، مما يحقق الدقة والتنظيم التام.
               </div>
             </div>
@@ -3441,140 +3437,22 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                 {renderNotebookIntroPage(true)}
                 {React.cloneElement(renderCoverFirstPage(), { 'data-preview-export-page': 'true' })}
                 {previewPagesToDisplay.map((pageRows, pageIdx) => (
-                  <div
-                    key={pageIdx}
-                    data-preview-export-page="true" data-logbook-content-page="true" className="print-page logbook-content-page shadow-[0_25px_80px_rgba(0,0,0,0.5),0_0_0_1px_rgba(0,0,0,0.1)] rounded-[2px] overflow-hidden shrink-0 bg-white"
-                    style={{ width: `${pageDimensions.w}mm`, height: `${pageDimensions.h}mm`, minHeight: `${pageDimensions.h}mm`, maxWidth: "none" }}
-                  >
-                    <div style={{ padding: PAGE_INNER_PADDING }} className="h-full flex flex-col justify-between">
-                      {/* Header */}
-                      <div>
-                        <div className="border-b border-zinc-200">
-                          <div className="h-1 flex">
-                            <div className="flex-1 bg-[#006233]" />
-                            <div className="flex-1 bg-[#D21034]" />
-                          </div>
-                          <div className="px-5 py-3 flex justify-between items-start gap-4">
-                            <div className="text-[11px] leading-5">
-                              <div className="font-bold flex items-center gap-1 text-zinc-900">
-                                <span>🇩🇿</span> الجمهورية الجزائرية الديمقراطية الشعبية
-                              </div>
-                              <div className="text-zinc-700 font-medium">وزارة التربية الوطنية</div>
-                              <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-[10px] text-zinc-800">
-                                <span>
-                                  مديرية: <b>{wilaya}</b>
-                                </span>
-                                <span>
-                                  متوسطة: <b>{school}</b>
-                                </span>
-                                <span>
-                                  الأستاذ: <b>{teacher}</b>
-                                </span>
-                                <span>
-                                  المادة: <b>العلوم الطبيعية</b>
-                                </span>
-                                <span>
-                                  السنة: <b>{config.schoolYear || ''}</b>
-                                </span>
-                              </div>
-                              <div className="mt-1 text-[10px] text-zinc-500 font-medium">
-                                المستويات المسندة: <b>{assignedLevels.join('، ')}</b> • المدة: {period} • البداية:{' '}
-                                {startDate}
-                              </div>
-                            </div>
-
-                            <div className="text-left shrink-0 space-y-1">
-                              <div className="text-[15px] font-extrabold text-zinc-900">الدفتر اليومي</div>
-                              <div className="text-[11px] font-bold text-[#064e3b]">التعليم المتوسط</div>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Table */}
-                        <div className="p-0 flex-1 mt-1">
-                          <table className="w-full border-collapse text-[11px] leading-5 table-fixed">
-                            <thead>
-                              <tr className="bg-[#064e3b] text-white">
-                                <th className="border border-[#0a3d2e] px-2 py-2 font-bold w-[92px]">التاريخ</th>
-                                <th className="border border-[#0a3d2e] px-2 py-2 font-bold w-[88px]">الوقت</th>
-                                <th className="border border-[#0a3d2e] px-2 py-2 font-bold w-[78px]">القسم</th>
-                                <th className="border border-[#0a3d2e] px-3 py-2 font-bold text-right">سير الحصة</th>
-                                <th className="border border-[#0a3d2e] px-2 py-2 font-bold">الملاحظات</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {pageRows.map((r, rowIdx) => {
-                                const globalRowIndex = rows.findIndex((item) => item.id === r.id);
-                                const previousRow = findPreviousComparableCurriculumRow(rows, globalRowIndex, r);
-                                const previewContent = buildHierarchicalContent(r, previousRow);
-                                const isNewWeek =
-                                  rowIdx > 0 &&
-                                  getSchoolWeekKey(r.dateStr) !== getSchoolWeekKey(pageRows[rowIdx - 1].dateStr);
-                                return (
-                                  <React.Fragment key={r.id}>
-                                    {isNewWeek && (
-                                      <tr className="bg-emerald-50">
-                                        <td colSpan={5} className="border border-emerald-200 px-3 py-1.5 text-right text-[10px] font-extrabold text-emerald-800">
-                                          بداية أسبوع مستقل — الأسبوع {getSchoolWeekNumber(r.dateStr, startDate)}
-                                        </td>
-                                      </tr>
-                                    )}
-                                    <tr className="bg-white">
-                                      <td className="border border-zinc-300 px-2 py-2 text-center font-mono text-[10px] text-zinc-900" dir="ltr">{r.dateStr}</td>
-                                      <td className="border border-zinc-300 px-2 py-2 text-center font-mono text-[10px] text-zinc-900" dir="ltr">{r.time}</td>
-                                      <td className="border border-zinc-300 px-2 py-2 text-center font-bold text-zinc-900">{r.section}</td>
-                                      <td
-                                        className="border border-zinc-300 px-3 py-2 text-zinc-900 leading-relaxed whitespace-pre-line text-right align-top"
-                                        style={{ minHeight: NOTEBOOK_CONTENT_MIN_HEIGHT, height: NOTEBOOK_CONTENT_MIN_HEIGHT }}
-                                        dangerouslySetInnerHTML={{ __html: previewContent }}
-                                      />
-                                      <td className="border border-zinc-300 px-2 py-2 text-zinc-900 align-top">{r.note || ''}</td>
-                                    </tr>
-                                  </React.Fragment>
-                                );
-                              })}
-
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-
-                      {/* Official Footer */}
-                      <div className="mt-auto relative pb-12">
-                        <div className="px-4 py-3 border-t border-zinc-200 grid grid-cols-4 gap-4 text-[11px] bg-white">
-                          <div className="text-center">
-                            <div className="font-bold text-zinc-900">توقيع الأستاذ(ة)</div>
-                            <div className="mt-6 border-t border-dashed border-zinc-400 h-10" />
-                          </div>
-                          <div className="text-center">
-                            <div className="font-bold text-zinc-900">ختم الأستاذ(ة)</div>
-                            <div className="absolute left-3 bottom-3 flex justify-start">
-                              <TeacherOfficialStamp config={config} size="md" />
-                            </div>
-                          </div>
-                          <div className="text-center">
-                            <div className="font-bold text-zinc-900">توقيع المدير</div>
-                            <div className="mt-6 border-t border-dashed border-zinc-400 h-10" />
-                          </div>
-                          <div className="text-center">
-                            <div className="font-bold text-zinc-900">توقيع المفتش</div>
-                            <div className="mt-6 border-t border-dashed border-zinc-400 h-10" />
-                          </div>
-                        </div>
-
-                        <div className="px-4 pb-2 flex justify-center items-center border-t border-zinc-100 pt-2">
-                          <span className="bg-zinc-900 text-white px-4 py-1 rounded-full font-bold text-[11px]">
-                            {formatPageNumberLabel(previewMode === 'single' ? 1 : pageIdx + 1, paginatedPages.length)}
-                          </span>
-                        </div>
-
-                        <div className="h-1 flex -mx-[1px]">
-                          <div className="flex-1 bg-[#006233]" />
-                          <div className="flex-1 bg-[#D21034]" />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                  <DailyLogSheetTemplate
+                    key={`preview-page-${pageIdx}`}
+                    pageRows={pageRows}
+                    allRows={rows}
+                    pageIndex={previewMode === 'single' ? 0 : pageIdx}
+                    totalPages={paginatedPages.length}
+                    config={config}
+                    assignedLevels={assignedLevels}
+                    startDate={startDate}
+                    pageDimensions={pageDimensions}
+                    buildHierarchicalContent={buildHierarchicalContent}
+                    findPreviousComparableCurriculumRow={findPreviousComparableCurriculumRow}
+                    getSchoolWeekKey={getSchoolWeekKey}
+                    getSchoolWeekNumber={getSchoolWeekNumber}
+                    formatLogbookDateLabel={formatLogbookDateLabel}
+                  />
                 ))}
               </div>
             )}
@@ -3716,7 +3594,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                       <th className="border border-emerald-800 px-3 py-2 w-[120px]">اليوم \ التوقيت</th>
                       {gridRows.map((r) => (
                         <th key={r.id} className="border border-emerald-800 px-2 py-2 font-mono">
-                          {r.time}
+                          {(r.time || '').replace(/\s*-\s*/, ' ➔ ')}
                         </th>
                       ))}
                     </tr>

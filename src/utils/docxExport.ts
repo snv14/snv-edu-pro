@@ -93,11 +93,11 @@ const THEMES: Record<string, { hex: string, bg: string, text: string, bgSoft: st
   '4am': { hex: 'c2185b', bg: 'fce4ec', text: 'c2185b', bgSoft: 'fff5f8' },
 };
 
-const createParagraph = (text: string, bold = false, color = "000000", size = 22, alignment: any = AlignmentType.RIGHT) => {
+const createParagraph = (text?: any, bold = false, color = "000000", size = 22, alignment: any = AlignmentType.RIGHT) => {
+  const safeText = text === undefined || text === null ? '' : String(text);
   return new Paragraph({
-    
     alignment: alignment,
-    children: text.split('\n').map((line, i, arr) => [
+    children: safeText.split('\n').map((line, i, arr) => [
       new TextRun({
         text: line,
         bold: bold,
@@ -111,7 +111,7 @@ const createParagraph = (text: string, bold = false, color = "000000", size = 22
   });
 };
 
-const createCell = (text: string, bold = false, color = "000000", bgColor?: string, columnSpan?: number, rowSpan?: number, size = 22, alignment: any = AlignmentType.RIGHT) => {
+const createCell = (text?: any, bold = false, color = "000000", bgColor?: string, columnSpan?: number, rowSpan?: number, size = 22, alignment: any = AlignmentType.RIGHT) => {
   return new TableCell({
     columnSpan,
     rowSpan,
@@ -151,7 +151,7 @@ const renderTables = (tables?: { headers: string[], rows: string[][] }[]) => {
 };
 
 export const generateDocx = async (lesson: LessonMemo, config: MemoConfig, activeActivities: boolean[], isMergedFormat: boolean): Promise<Blob> => {
-  const theme = THEMES[config.level];
+  const theme = THEMES[config.level] || THEMES['4am'];
   
   const levelLabel =
     config.level === '4am'
@@ -348,7 +348,7 @@ export const generateDocx = async (lesson: LessonMemo, config: MemoConfig, activ
             new TableRow({
               children: [
                 new TableCell({ width: { size: 20, type: WidthType.PERCENTAGE }, shading: { fill: theme.bg, type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("مركبة الكفاءة", true, theme.text)] }),
-                new TableCell({ width: { size: 80, type: WidthType.PERCENTAGE }, children: [createParagraph(lesson.markaba, true, "333333")] }),
+                new TableCell({ width: { size: 80, type: WidthType.PERCENTAGE }, children: [createParagraph(lesson.markaba || '—', true, "333333")] }),
               ]
             }),
           ]
@@ -383,8 +383,8 @@ export const generateDocx = async (lesson: LessonMemo, config: MemoConfig, activ
                   margins: { top: 150, bottom: 150, left: 150, right: 150 },
                   children: [
                     createParagraph("الموارد المعرفية والمصطلحات", true, theme.hex),
-                    createParagraph(lesson.marifa, false, "333333"),
-                    createParagraph(`المصطلحات: ${lesson.mostalahat}`, true, "666666", 20)
+                    createParagraph(lesson.marifa || '', false, "333333"),
+                    createParagraph(lesson.mostalahat ? `المصطلحات: ${lesson.mostalahat}` : '', true, "666666", 20)
                   ]
                 }),
               ]
@@ -412,7 +412,7 @@ export const generateDocx = async (lesson: LessonMemo, config: MemoConfig, activ
                   shading: { fill: "F9FAFB", type: ShadingType.CLEAR, color: "auto" },
                   margins: { top: 150, bottom: 150, left: 150, right: 150 },
                   children: [
-                    createParagraph(`الوسائل: ${lesson.wasail}`, true, "333333")
+                    createParagraph(`الوسائل: ${lesson.wasail || 'الكتاب المدرسي، وثائق ودعامات تعليمية'}`, true, "333333")
                   ]
                 }),
                 new TableCell({

@@ -11,14 +11,9 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-// These values are required to identify the Firebase Web App and its project.
-const missingFirebaseConfig = [
-  ['VITE_FIREBASE_API_KEY', firebaseConfig.apiKey],
-  ['VITE_FIREBASE_PROJECT_ID', firebaseConfig.projectId],
-  ['VITE_FIREBASE_APP_ID', firebaseConfig.appId],
-] as const;
-
-export const isFirebaseConfigValid = missingFirebaseConfig.every(([, value]) => Boolean(value));
+export const isFirebaseConfigValid = Boolean(
+  firebaseConfig.apiKey && firebaseConfig.projectId && firebaseConfig.appId,
+);
 
 let appInstance: FirebaseApp | null = null;
 let dbInstance: Firestore | null = null;
@@ -34,12 +29,7 @@ if (isFirebaseConfigValid) {
     console.warn('Firebase initialization warning:', error);
   }
 } else {
-  const missing = missingFirebaseConfig
-    .filter(([, value]) => !value)
-    .map(([name]) => name);
-  console.warn(
-    `Firebase is disabled because required environment variables are missing: ${missing.join(', ')}. Add them to .env.local (or your hosting environment) and restart/rebuild the app.`,
-  );
+  console.warn('Firebase is disabled: complete the VITE_FIREBASE_* variables in .env.local.');
 }
 
 export const app = appInstance;

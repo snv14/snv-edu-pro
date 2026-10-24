@@ -1,23 +1,13 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import { defineConfig, type Plugin } from 'vite';
+import { defineConfig } from 'vite';
 import dotenv from 'dotenv';
-import { apiApp } from './src/server/api';
 
 dotenv.config();
 
-function geminiDevApiPlugin(): Plugin {
-  return {
-    name: 'gemini-dev-api',
-    configureServer(server) {
-      server.middlewares.use(apiApp);
-    },
-  };
-}
-
 export default defineConfig(() => ({
-  plugins: [react(), tailwindcss(), geminiDevApiPlugin()],
+  plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, '.'),

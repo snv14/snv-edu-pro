@@ -19,6 +19,7 @@ import {
 } from "docx";
 import { MemoConfig } from "../types";
 import { LogEntry, getBaseSection } from "../components/DailyLogbook";
+import { safeHtml2Canvas } from "./html2canvasSanitizer";
 
 const createParagraph = (text: string, bold = false, color = "000000", size = 20, alignment: any = AlignmentType.CENTER) => {
   return new Paragraph({
@@ -183,11 +184,11 @@ export const generateLogbookDocx = async (
   rows.push(new TableRow({
     tableHeader: true,
     children: [
-      createCell("التاريخ", true, theme.header, 1, 1, 22, AlignmentType.CENTER, 14),
-      createCell("الوقت", true, theme.header, 1, 1, 22, AlignmentType.CENTER, 13),
-      createCell("القسم", true, theme.header, 1, 1, 22, AlignmentType.CENTER, 13),
-      createCell("سير الحصة", true, theme.header, 1, 1, 22, AlignmentType.CENTER, 45),
-      createCell("الملاحظات", true, theme.header, 1, 1, 22, AlignmentType.CENTER, 15),
+      createCell("التاريخ واليوم", true, theme.header, 1, 1, 20, AlignmentType.CENTER, 16),
+      createCell("التوقيت", true, theme.header, 1, 1, 20, AlignmentType.CENTER, 15),
+      createCell("القسم", true, theme.header, 1, 1, 20, AlignmentType.CENTER, 13),
+      createCell("المحتوى الدرس", true, theme.header, 1, 1, 20, AlignmentType.CENTER, 41),
+      createCell("الملاحظات", true, theme.header, 1, 1, 20, AlignmentType.CENTER, 15),
     ]
   }));
 
@@ -203,10 +204,10 @@ export const generateLogbookDocx = async (
       for (let weekSpaceIdx = 0; weekSpaceIdx < 2; weekSpaceIdx++) {
         rows.push(new TableRow({
           children: [
-            createCell("", false, "FFFFFF", 1, 1, 18, AlignmentType.CENTER, 14),
+            createCell("", false, "FFFFFF", 1, 1, 18, AlignmentType.CENTER, 16),
+            createCell("", false, "FFFFFF", 1, 1, 18, AlignmentType.CENTER, 15),
             createCell("", false, "FFFFFF", 1, 1, 18, AlignmentType.CENTER, 13),
-            createCell("", false, "FFFFFF", 1, 1, 18, AlignmentType.CENTER, 13),
-            createCell("", false, "FFFFFF", 1, 1, 18, AlignmentType.RIGHT, 45),
+            createCell("", false, "FFFFFF", 1, 1, 18, AlignmentType.RIGHT, 41),
             createCell("", false, "FFFFFF", 1, 1, 18, AlignmentType.CENTER, 15)
           ]
         }));
@@ -215,13 +216,29 @@ export const generateLogbookDocx = async (
 
     previousWeekKey = currentWeekKey;
     const bgColor = index % 2 === 0 ? "FFFFFF" : theme.soft;
+    const timeWithArrow = (log.time || '').replace(/\s*[-–—→←➔]\s*/g, ' ➔ ').replace(/\s*➔\s*/g, ' ➔ ');
+    const fullContent = getExportLessonContent(log, findPreviousComparableCurriculumLog(logs, index, log));
     rows.push(new TableRow({
       cantSplit: true,
       children: [
-        createCell(log.dateStr, false, bgColor, 1, 1, 18, AlignmentType.CENTER, 14),
-        createCell(log.time, false, bgColor, 1, 1, 18, AlignmentType.CENTER, 13),
-        createCell(log.section, true, bgColor, 1, 1, 20, AlignmentType.CENTER, 13),
-        createCell(getExportLessonContent(log, findPreviousComparableCurriculumLog(logs, index, log)), false, bgColor, 1, 1, 20, AlignmentType.RIGHT, 45),
+        createCell(
+          (log.dateStr || '').includes('/')
+            ? (log.dateStr || '')
+                .split('/')
+                .map((dp, i) => `${((log.dayName || '').split('/')[i] || (log.dayName || '')).trim()} ${dp.trim()}`)
+                .join('\n')
+            : `${log.dayName || ''}\n${log.dateStr || ''}`.trim(),
+          false,
+          bgColor,
+          1,
+          1,
+          18,
+          AlignmentType.CENTER,
+          16
+        ),
+        createCell(timeWithArrow, false, bgColor, 1, 1, 18, AlignmentType.CENTER, 15),
+        createCell(log.section || '', true, bgColor, 1, 1, 18, AlignmentType.CENTER, 13),
+        createCell(fullContent, false, bgColor, 1, 1, 18, AlignmentType.RIGHT, 41),
         createCell(log.note || '', false, bgColor, 1, 1, 18, AlignmentType.RIGHT, 15),
       ]
     }));
@@ -232,10 +249,10 @@ export const generateLogbookDocx = async (
     rows.push(new TableRow({
       cantSplit: true,
       children: [
-        createCell("", false, "FFFFFF", 1, 1, 18, AlignmentType.CENTER, 14),
+        createCell("", false, "FFFFFF", 1, 1, 18, AlignmentType.CENTER, 16),
+        createCell("", false, "FFFFFF", 1, 1, 18, AlignmentType.CENTER, 15),
         createCell("", false, "FFFFFF", 1, 1, 18, AlignmentType.CENTER, 13),
-        createCell("", false, "FFFFFF", 1, 1, 20, AlignmentType.CENTER, 13),
-        createCell("", false, "FFFFFF", 1, 1, 20, AlignmentType.RIGHT, 45),
+        createCell("", false, "FFFFFF", 1, 1, 18, AlignmentType.RIGHT, 41),
         createCell("", false, "FFFFFF", 1, 1, 18, AlignmentType.RIGHT, 15),
       ],
     }));
@@ -577,7 +594,6 @@ export const generatePreviewMatchDocx = async (
 ): Promise<Blob> => {
   if (!pageElements.length) throw new Error("لا توجد صفحات للمعاينة");
 
-  const html2canvas = (await import("html2canvas")).default;
   if (document.fonts?.ready) await document.fonts.ready;
 
   const pageWidthPx = orientation === 'landscape' ? 1123 : 794;
@@ -588,7 +604,7 @@ export const generatePreviewMatchDocx = async (
     const prepared = preparePageForExport(element);
     try {
       if (document.fonts?.ready) await document.fonts.ready;
-      const canvas = await html2canvas(prepared.page, {
+      const canvas = await safeHtml2Canvas(prepared.page, {
         scale: 2,
         useCORS: true,
         allowTaint: false,

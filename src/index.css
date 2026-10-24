@@ -150,10 +150,10 @@ button,input,textarea,select{font-family:inherit;}
 
   .print-preview-root [data-preview-export-page="true"] {
     display: flex !important;
-    width: 190mm !important;
-    height: 277mm !important;
-    min-height: 277mm !important;
-    max-width: 190mm !important;
+    width: 204mm !important;
+    height: 290mm !important;
+    min-height: 290mm !important;
+    max-width: 204mm !important;
     margin: 0 auto !important;
     box-shadow: none !important;
     border-radius: 0 !important;
@@ -164,11 +164,16 @@ button,input,textarea,select{font-family:inherit;}
     page-break-inside: avoid !important;
   }
 
+  .print-preview-root [data-preview-export-page="true"]:last-child {
+    break-after: auto !important;
+    page-break-after: auto !important;
+  }
+
   .print-preview-root.print-orientation-landscape [data-preview-export-page="true"] {
-    width: 277mm !important;
-    height: 190mm !important;
-    min-height: 190mm !important;
-    max-width: 277mm !important;
+    width: 290mm !important;
+    height: 204mm !important;
+    min-height: 204mm !important;
+    max-width: 290mm !important;
   }
 
   .print-preview-root .notebook-intro-page {
