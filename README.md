@@ -22,21 +22,34 @@ npm run dev
 
 ## متغيرات البيئة
 
-ضع القيم الفعلية في `.env.local` فقط، ولا تضعها في Git:
+انسخ `.env.example` إلى `.env.local` محليًا، ثم املأ القيم الفعلية. في بيئة النشر، أضف المتغيرات نفسها من لوحة إعدادات البيئة الخاصة بخدمة الاستضافة، ثم أعد البناء/النشر. لا تضع القيم الحقيقية في GitHub أو في ملفات المصدر.
 
 ```dotenv
-VITE_FIREBASE_API_KEY=
-VITE_FIREBASE_AUTH_DOMAIN=
-VITE_FIREBASE_PROJECT_ID=
-VITE_FIREBASE_DATABASE_ID=
-VITE_FIREBASE_STORAGE_BUCKET=
-VITE_FIREBASE_MESSAGING_SENDER_ID=
-VITE_FIREBASE_APP_ID=
+# Gemini (server-side)
 GEMINI_API_KEY=
 GEMINI_MODEL=gemini-3.8-flash
+
+# Firebase Web App configuration
+VITE_FIREBASE_API_KEY=
+VITE_FIREBASE_APP_ID=
+VITE_FIREBASE_AUTH_DOMAIN=
+VITE_FIREBASE_DATABASE_ID=
+VITE_FIREBASE_MESSAGING_SENDER_ID=
+VITE_FIREBASE_PROJECT_ID=
+VITE_FIREBASE_STORAGE_BUCKET=
 ```
 
-`VITE_FIREBASE_DATABASE_ID` اختياري، ويُستخدم فقط عند استعمال قاعدة Firestore مسماة. أما `GEMINI_API_KEY` فهو متغير خادمي ولا يجب تسميته `VITE_GEMINI_API_KEY` إذا كان الهدف إبقاء المفتاح خارج حزمة المتصفح.
+### من أين تحصل على القيم؟
+
+- **Firebase:** من Firebase Console، افتح المشروع الصحيح ثم إعدادات المشروع (Project settings) ثم تطبيق الويب (Web app)، وانسخ قيم الإعدادات كما هي. لا تخمّن `projectId` أو `appId` أو `apiKey` أو بقية القيم.
+- **`VITE_FIREBASE_AUTH_DOMAIN`:** الاسم الكامل هو `VITE_FIREBASE_AUTH_DOMAIN`، وليس `VITE_FIREBASE_AUTH_D`.
+- **`VITE_FIREBASE_DATABASE_ID`:** هذا المتغير اختياري؛ اتركه فارغًا عند استخدام قاعدة Firestore الافتراضية. الاسم الكامل ينتهي بـ `DATABASE_ID`.
+- **Gemini:** أنشئ/استخدم مفتاح Gemini API وضعه في `GEMINI_API_KEY` على الخادم أو في إعدادات البيئة لدى الاستضافة. لا تسمّه `VITE_GEMINI_API_KEY` لأن متغيرات `VITE_*` تُضمّن في كود المتصفح.
+- **`GEMINI_MODEL`:** القيمة الافتراضية هي `gemini-3.8-flash`. غيّرها فقط إلى معرّف نموذج متاح لمفتاح API الخاص بك.
+
+مهم: لا يحتوي المستودع على القيم الفعلية لمشروع Firebase أو مفتاح Gemini، لذلك يجب إدخالها من حساباتك. إذا كانت متغيرات Firebase غير مكتملة، فقد يعمل التطبيق محليًا لكن تُعطّل وظائف Firebase السحابية. إذا لم يوجد `GEMINI_API_KEY` فلن تعمل وظائف Gemini التي تحتاج إلى المفتاح.
+
+`VITE_FIREBASE_DATABASE_ID` اختياري ويُستخدم فقط عند استعمال قاعدة Firestore مسماة. أما `GEMINI_API_KEY` فهو متغير خادمي، ولا يجب تسميته `VITE_GEMINI_API_KEY` إذا كان الهدف إبقاء المفتاح خارج حزمة المتصفح.
 
 ## أوامر المشروع
 
@@ -89,4 +102,4 @@ firebase deploy --only firestore:rules
 افتح Issue من صفحة المستودع:
 https://github.com/Snv05/mizaniyati5/issues
 
-**آخر تحديث:** 24 سبتمبر 2026
+**آخر تحديث:** 24 أكتوبر 2026
