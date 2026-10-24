@@ -479,9 +479,9 @@ const estimateLogbookExportPageCount = (
   const pageHeightPx = getPageDimensions(orientation).h * 3.7795;
   const availableHeightPx = Math.max(360, pageHeightPx - (orientation === 'landscape' ? 330 : 390));
   const estimateLines = (value: unknown, charsPerLine: number) => {
-    const text = String(value ?? '').replace(/<[^>]*>/g, '').replace(/\\s+/g, ' ').trim();
+    const text = String(value ?? '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
     if (!text) return 1;
-    return text.split('\\n').reduce((sum, part) => sum + Math.max(1, Math.ceil(part.length / charsPerLine)), 0);
+    return text.split('\n').reduce((sum, part) => sum + Math.max(1, Math.ceil(part.length / charsPerLine)), 0);
   };
   const estimateRowHeight = (row: LogEntry) => {
     const content = buildHierarchicalContent(row);
