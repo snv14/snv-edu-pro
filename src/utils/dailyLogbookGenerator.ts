@@ -248,7 +248,11 @@ export function generateLogbookEntries({
   if (allScheduledSlots.length === 0) return [];
 
   const isDateInHoliday = (dateStr: string): boolean =>
-    holidays.some((h) => dateStr >= h.startDate && dateStr <= (h.endDate || h.startDate));
+    holidays.some((h) =>
+      (!h.kind || h.kind === 'holiday') &&
+      dateStr >= h.startDate &&
+      dateStr <= (h.endDate || h.startDate)
+    );
 
   // تحديد عدد الأسابيع المستهدفة
   const targetWeeksCount =
@@ -282,7 +286,7 @@ export function generateLogbookEntries({
   while (weeksGenerated < targetWeeksCount && maxLoopIterations > 0) {
     maxLoopIterations--;
 
-    const weekDaysMap: Record<string, { dateStr: string; isHoliday: boolean; isBeforeStart: boolean; assessmentLabel?: string }> = {};
+    const weekDaysMap: Record<string, { dateStr: string; isHoliday: boolean; isBeforeStart: boolean; assessmentLabel?: string; assessmentKind?: 'assignment' | 'test' | 'exam' }> = {};
     let allHolidayCount = 0;
     for (let dIdx = 0; dIdx < 5; dIdx++) {
       const d = new Date(currentSunday);
@@ -291,12 +295,13 @@ export function generateLogbookEntries({
       const dayName = days[dIdx];
       const event = holidays.find((h) => dateStr >= h.startDate && dateStr <= (h.endDate || h.startDate));
       const isHoliday = Boolean(event && (!event.kind || event.kind === 'holiday'));
-      const assessmentLabel = event && event.kind && event.kind !== 'holiday'
-        ? (event.label || (event.kind === 'assignment' ? 'فرض' : event.kind === 'test' ? 'اختبار' : 'امتحان'))
+      const assessmentKind = event && event.kind && event.kind !== 'holiday' ? event.kind : undefined;
+      const assessmentLabel = assessmentKind
+        ? (event?.label || (assessmentKind === 'assignment' ? 'فرض' : assessmentKind === 'test' ? 'اختبار' : 'امتحان'))
         : undefined;
       const isBeforeStart = dateStr < startDate;
       if (isHoliday) allHolidayCount++;
-      weekDaysMap[dayName] = { dateStr, isHoliday, isBeforeStart, assessmentLabel };
+      weekDaysMap[dayName] = { dateStr, isHoliday, isBeforeStart, assessmentLabel, assessmentKind };
     }
 
     const hasAssessmentThisWeek = Object.values(weekDaysMap).some((day) => Boolean(day.assessmentLabel));
@@ -315,6 +320,7 @@ export function generateLogbookEntries({
       section: string;
       note: string;
       assessmentLabel?: string;
+      assessmentKind?: 'assignment' | 'test' | 'exam';
     };
 
     for (const baseSec of uniqueBaseSections) {
@@ -386,7 +392,7 @@ export function generateLogbookEntries({
           teachingGroups.push(slot);
           return;
         }
-        const key = dayInfo.dateStr + '|' + dayInfo.assessmentLabel;
+        const key = dayInfo.dateStr + '|' + dayInfo.assessmentKind + '|' + dayInfo.assessmentLabel;
         const grouped = assessmentGroups.get(key) || [];
         grouped.push(slot);
         assessmentGroups.set(key, grouped);
@@ -405,6 +411,7 @@ export function generateLogbookEntries({
           section: baseSec + ' (' + nums.map((num) => 'فوج ' + num).join(' + ') + ')',
           note: dayInfo.assessmentLabel + ' • فترة تقييم',
           assessmentLabel: dayInfo.assessmentLabel,
+          assessmentKind: dayInfo.assessmentKind,
         });
       });
 
@@ -420,6 +427,7 @@ export function generateLogbookEntries({
           section: baseSec,
           note: dayInfo.assessmentLabel ? dayInfo.assessmentLabel + ' • فترة تقييم' : 'حصة جماعية (القسم كاملاً)',
           assessmentLabel: dayInfo.assessmentLabel,
+          assessmentKind: dayInfo.assessmentKind,
         });
       });
 
@@ -445,6 +453,7 @@ export function generateLogbookEntries({
             activitiesList: [assessmentText],
             note: session.note + ' • لا يتقدم التدرج',
             lessonType: 'assessment',
+            sourceLearningUnitId: 'calendar-' + (session.assessmentKind || 'assessment') + '-' + session.sortDate,
           });
           return;
         }
