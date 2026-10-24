@@ -634,7 +634,6 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
   config,
   setConfig,
   showToast,
-  curriculumLessons,
 }) => {
   // State for Header Info (synced with config initially)
   // يعتمد الدفتر على ملفات برنامجه الداخلية فقط، ويتجاهل المذكرات القادمة من بقية المنصة.
