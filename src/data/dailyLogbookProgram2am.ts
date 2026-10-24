@@ -17,138 +17,138 @@ export const DAILY_LOGBOOK_PROGRAM_2AM: DailyLogbookProgramItem[] = [
     ta3alom:'تعلم مورد: عناصر الوسط الحي', moshkila:'ما هي المكونات والعناصر المشكلة للوسط الحي؟',
     activities:['النشاط 01: إحصاء عناصر الوسط الحي'],
     taqwim:'إليك العناصر التالية: تربة، فراشة، صخرة، رمل، حشائش، إنسان. صنف هذه العناصر إلى عناصر حية وعناصر لاحيوية. ما هو المعيار الذي اعتمدت عليه في تصنيفها؟',
-    sourceLearningUnitId:'program_2am_unit_01', sourceActivityIds:['program_2am_act_01']
+    activityPeriods:[1],sourceLearningUnitId:'program_2am_unit_01', sourceActivityIds:['program_2am_act_01']
   },
   {
     level:'2am', midan:MIDAN, maqta:M1, mawrid:'المورد التعلمي 1-2: أنواع الأوساط الحية',
     ta3alom:'تعلم مورد: أنواع الأوساط الحية', moshkila:'ما هي أنواع الأوساط الحية وكيف يمكن التمييز بينها؟',
     activities:['النشاط 01: معاينة أوساط حية مختلفة'],
     taqwim:'اعتماداً على المكونات الحية واللاحيوية والعوامل المناخية (الحرارة، الإضاءة، الرطوبة)، صنف الأوساط الغابية والمائية والصحراوية، وبين خصائص الوحدة الحياتية والمدى الحيوي الجغرافي لكل وسط.',
-    sourceLearningUnitId:'program_2am_unit_02', sourceActivityIds:['program_2am_act_02']
+    activityPeriods:[1],sourceLearningUnitId:'program_2am_unit_02', sourceActivityIds:['program_2am_act_02']
   },
   {
     level:'2am', midan:MIDAN, maqta:M1, mawrid:'المورد التعلمي 02: العلاقات القائمة بين العناصر الحية في الوسط الحي',
     ta3alom:'تعلم مورد 1-1: التفاعلات بين العناصر الحية في الوسط الحي', moshkila:'ما هي العلاقات القائمة بين الكائنات الحية في وسطها؟',
     activities:['النشاط 01: إحصاء العلاقات بين الكائنات الحية'],
     taqwim:'التعرف على العلاقة التي تربط بين الكائنات الحية في الصور مع إبراز نوعها: اليسروع وأوراق البلوط، طائر القرقف الأزرق الذي يتغذى على يرقات اليسروع، وصقر السقاوة الذي يفترس طائر القرقف.',
-    sourceLearningUnitId:'program_2am_unit_03', sourceActivityIds:['program_2am_act_03']
+    activityPeriods:[1],sourceLearningUnitId:'program_2am_unit_03', sourceActivityIds:['program_2am_act_03']
   },
   {
     level:'2am', midan:MIDAN, maqta:M1, mawrid:'المورد التعلمي 02: العلاقات القائمة بين العناصر الحية في الوسط الحي',
     ta3alom:'تعلم مورد 1-2: تنظيم العلاقات الغذائية في الوسط الحي', moshkila:'كيف تنتظم العلاقات الغذائية في الوسط الحي وما هدفها؟',
     activities:['النشاط 01: تحليل سلسلة غذائية'],
     taqwim:'أكمل المخطط التلخيصي لتنظيم مجتمع النحل من حيث الأدوار والمهام الأساسية لكل فئة: الملكة (وضع البيض)، العاملات (جمع الرحيق، تغذية أفراد الخلية، تنظيف وبناء الخلية)، والذكور (تلقيح الملكة).',
-    sourceLearningUnitId:'program_2am_unit_04', sourceActivityIds:['program_2am_act_04']
+    activityPeriods:[1],sourceLearningUnitId:'program_2am_unit_04', sourceActivityIds:['program_2am_act_04']
   },
   {
     level:'2am', midan:MIDAN, maqta:M1, mawrid:'المورد التعلمي 03: تأثير العوامل الفيزيوكيميائية على توزع الكائنات الحية ونشاطها',
     ta3alom:'تعلم مورد: تأثير الحرارة والإضاءة', moshkila:'ما هو تأثير العوامل المناخية (الحرارة والإضاءة) على توزع الكائنات الحية ونشاطها؟',
     activities:['النشاط 01: دراسة تأثير الحرارة والإضاءة على توزع ونشاط الكائنات الحية'],
     taqwim:'دراسة نتائج تجربة زرع البذور في اليوم نفسه تحت درجات حرارة مختلفة (5°م، 25°م، 40°م)، وتفسير التأثير المباشر لدرجة الحرارة على إنتاش البذور وشدة الوظائف الحيوية للكائنات الحية.',
-    sourceLearningUnitId:'program_2am_unit_05', sourceActivityIds:['program_2am_act_05']
+    activityPeriods:[1],sourceLearningUnitId:'program_2am_unit_05', sourceActivityIds:['program_2am_act_05']
   },
   {
     level:'2am', midan:MIDAN, maqta:M1, mawrid:'المورد التعلمي 04: النظام البيئي وشروط توازنه',
     ta3alom:'تعلم مورد: النظام البيئي وتوازنه', moshkila:'ما المقصود بالنظام البيئي وما هي شروط توازنه ودور الإنسان في استقراره؟',
     activities:['النشاط 01: التنظيم الوظيفي لنظام بيئي'],
     taqwim:'حل الوضعية التقويمية المتعلقة بغزو الطحالب لسطح المستنقع، وتفسير سبب موت العوالق النباتية وزوال الأسماك وهجرة طائر مالك الحزين، مع تحديد العامل اللاحيوي المؤثر في استقرار النظام البيئي.',
-    sourceLearningUnitId:'program_2am_unit_06', sourceActivityIds:['program_2am_act_06']
+    activityPeriods:[1],sourceLearningUnitId:'program_2am_unit_06', sourceActivityIds:['program_2am_act_06']
   },
   {
     level:'2am', midan:MIDAN, maqta:M1, mawrid:'المورد التعلمي 05: تأثير الإنسان على النظام البيئي',
     ta3alom:'تعلم مورد: تأثير الأنشطة البشرية على النظام البيئي', moshkila:'كيف تؤثر الأنشطة البشرية على النظام البيئي وما التدخلات الواجب اتباعها للحفاظ على توازنه؟',
     activities:['النشاط 01: إبراز تأثيرات الإنسان السلبية والإيجابية على النظام البيئي'],
     taqwim:'حل وضعية صب النفايات الكيميائية للمصنع في النهر: حدد كيف حدث تسمم سمك الشبوط عبر السلسلة الغذائية وتراكم المواد السامة، وبين أثر التلوث المائي على صحة الإنسان، واقترح حلولاً للتخلص من التلوث والحفاظ على البيئة.',
-    sourceLearningUnitId:'program_2am_unit_07', sourceActivityIds:['program_2am_act_07']
+    activityPeriods:[1],sourceLearningUnitId:'program_2am_unit_07', sourceActivityIds:['program_2am_act_07']
   },
   {
     level:'2am', midan:MIDAN, maqta:M2, mawrid:'المورد التعلمي 2-1: مظاهر تكيف النباتات مع أوساطها',
     ta3alom:'تعلم مورد: تحورات المجموع الجذري والخضري', moshkila:'ما هي الخصوصيات البنيوية للأجهزة الإعاشية التي تسمح للنباتات بالتكيف مع أوساطها؟',
     activities:['النشاط 01: تحورات المجموع الجذري','النشاط 02: تحورات المجموع الخضري'],
     taqwim:'فسر سبب عدم وجود أشجار البلوط في الصحراء. حدد التحورات المورفولوجية التي سمحت بتكيف أشجار النخيل ونبات التين الشوكي مع البيئة الصحراوية والهدف منها (تقليل النتح والتخزين).',
-    sourceLearningUnitId:'program_2am_unit_08', sourceActivityIds:['program_2am_act_08','program_2am_act_09']
+    activityPeriods:[1,1],sourceLearningUnitId:'program_2am_unit_08', sourceActivityIds:['program_2am_act_08','program_2am_act_09']
   },
   {
     level:'2am', midan:MIDAN, maqta:M2, mawrid:'المورد التعلمي 2-2: أنماط التنفس عند الحيوانات وتأقلمها مع الوسط',
     ta3alom:'تعلم مورد: أنماط التنفس والأجهزة التنفسية', moshkila:'ما هي أنماط التنفس والأجهزة المتخصصة التي تمكن الحيوانات من التأقلم مع أوساطها؟',
     activities:['النشاط 01: تحديد أنماط التنفس عند كائنات حيوانية مختلفة','النشاط 02: الخصوصيات البنيوية للأجهزة التنفسية'],
     taqwim:'حدد نمط التنفس والعضو التنفسي المسؤول عند الحيوانات التالية: الجراد، العقارب، الأفاعي، الفنك، وطائر البوم.',
-    sourceLearningUnitId:'program_2am_unit_09', sourceActivityIds:['program_2am_act_10','program_2am_act_11']
+    activityPeriods:[1,1],sourceLearningUnitId:'program_2am_unit_09', sourceActivityIds:['program_2am_act_10','program_2am_act_11']
   },
   {
     level:'2am', midan:MIDAN, maqta:M2, mawrid:'المورد التعلمي 2-3: أنماط التنقل عند الحيوانات',
     ta3alom:'تعلم مورد: أنماط التنقل وأعضاؤه', moshkila:'ما هي أنماط وأعضاء التنقل التي تتناسب مع أوساط عيش الحيوانات؟',
     activities:['النشاط 01: تحديد أنماط التنقل والخصوصيات البنيوية المساعدة على ذلك'],
     taqwim:'هل تحدث الحركة عند قطع الأوتار؟ علل إجابتك مبيناً دور الأوتار والعضلات في حركة الأعضاء.',
-    sourceLearningUnitId:'program_2am_unit_10', sourceActivityIds:['program_2am_act_12']
+    activityPeriods:[1],sourceLearningUnitId:'program_2am_unit_10', sourceActivityIds:['program_2am_act_12']
   },
   {
     level:'2am', midan:MIDAN, maqta:M2, mawrid:'المورد التعلمي 2-4: هجرة الجراد',
     ta3alom:'تعلم مورد: أنماط تنقل الجراد وخصائصه', moshkila:'ما هي أنماط تنقل الجراد والخصوصيات البنيوية المساعدة على هجرته؟',
     activities:['النشاط 01: أنماط تنقل الجراد','النشاط 02: الخصائص البنيوية المميزة لشكل الجراد'],
     taqwim:'قارن بين الخصائص البنيوية والشكلية للجراد في حياته الماكثة (المنفردة) وحالته المهاجرة (في أسراب)، وفسر أسباب تغير استراتيجية التنقل والغزو.',
-    sourceLearningUnitId:'program_2am_unit_11', sourceActivityIds:['program_2am_act_13','program_2am_act_14']
+    activityPeriods:[1,1],sourceLearningUnitId:'program_2am_unit_11', sourceActivityIds:['program_2am_act_13','program_2am_act_14']
   },
   {
     level:'2am', midan:MIDAN, maqta:M2, mawrid:'المورد التعلمي 03: تأثير الإنسان على التوزع الطبيعي للحيوانات',
     ta3alom:'تعلم مورد: أثر الإنسان والتلوث على توزع الحيوانات', moshkila:'كيف يؤثر الإنسان والتلوث على التوزع الطبيعي للحيوانات؟',
     activities:['النشاط 01: آثار التلوث على توزع الثروة الحيوانية المائية'],
     taqwim:'تحليل جدول توزيع الكائنات الحية المائية حسب كمية الأكسجين المنحل ونسبة التلوث في مناطق النهر المختلفة، وتفسير تغير التوزع الحيواني بسبب أفعال الإنسان السلبية.',
-    sourceLearningUnitId:'program_2am_unit_12', sourceActivityIds:['program_2am_act_15']
+    activityPeriods:[1],sourceLearningUnitId:'program_2am_unit_12', sourceActivityIds:['program_2am_act_15']
   },
   {
     level:'2am', midan:MIDAN, maqta:M3, mawrid:'المورد التعلمي 3-1: أنماط التكاثر عند الحيوانات',
     ta3alom:'تعلم مورد 1-1: استراتيجيات التكاثر الجنسي عند الحيوانات', moshkila:'ما هي استراتيجيات التكاثر الجنسي التي تلجأ إليها الحيوانات لضمان استمرارها وإعمار الأوساط؟',
     activities:['النشاط 01: العلاقة بين التكاثر وإعمار الأوساط'],
     taqwim:'قارن بين استراتيجيات التكاثر عند الضفدع (إنتاج أعداد هائلة من البيوض دون رعاية) والأرنب والفيل (أعداد قليلة مع الحماية والرعاية الأبوية)، واستنتج مفهومي استراتيجيات الكم والنوع.',
-    sourceLearningUnitId:'program_2am_unit_13', sourceActivityIds:['program_2am_act_16']
+    activityPeriods:[1],sourceLearningUnitId:'program_2am_unit_13', sourceActivityIds:['program_2am_act_16']
   },
   {
     level:'2am', midan:MIDAN, maqta:M3, mawrid:'المورد التعلمي 3-1: أنماط التكاثر عند الحيوانات',
     ta3alom:'تعلم مورد 1-2: أنماط الإلقاح عند الحيوانات', moshkila:'ما هي أنماط الإلقاح ومكان حدوثه لدى الكائنات الحيوانية المختلفة؟',
     activities:['النشاط 01: أنماط الإلقاح ومكان حدوثه'],
     taqwim:'حدد مستوى ونمط الإلقاح (داخلي أو خارجي) عند القطة والضفدع والأسماك والدجاج.',
-    sourceLearningUnitId:'program_2am_unit_14', sourceActivityIds:['program_2am_act_17']
+    activityPeriods:[1],sourceLearningUnitId:'program_2am_unit_14', sourceActivityIds:['program_2am_act_17']
   },
   {
     level:'2am', midan:MIDAN, maqta:M3, mawrid:'المورد التعلمي 3-2: وسائل غزو وإعمار الأوساط من طرف النباتات',
     ta3alom:'تعلم مورد: وسائل انتشار النباتات والتكاثر الخضري', activities:['النشاط 01: نواتج التكاثر الجنسي عند النباتات (البذور والأبواغ)','النشاط 02: عوامل انتشار نواتج التكاثر الجنسي عند النباتات','النشاط 03: التكاثر الخضري عند النباتات'],
     taqwim:'اربط الصفات البنيوية للبذور والأبواغ (الهلباء، ثمار الكيكب المزودة بأجنحة غشائية، وبذور الأرقطيون المزودة بخطاطيف) بعوامل انتشارها (الرياح، الماء، الحيوانات). قارن بين التكاثر الجنسي والتكاثر الخضري عند النباتات، وبين دور الدرنات والأبصال في احتلال الأوساط.',
-    sourceLearningUnitId:'program_2am_unit_15', sourceActivityIds:['program_2am_act_18','program_2am_act_19','program_2am_act_20']
+    activityPeriods:[1,1,1],sourceLearningUnitId:'program_2am_unit_15', sourceActivityIds:['program_2am_act_18','program_2am_act_19','program_2am_act_20']
   },
   {
     level:'2am', midan:MIDAN, maqta:M3, mawrid:'المورد التعلمي 3-3: أشكال غزو الحيوانات للأوساط',
     ta3alom:'تعلم مورد: احتلال الحيوانات لأوساط جديدة', moshkila:'كيف تحتل الحيوانات أوساطاً جديدة؟',
     activities:['النشاط 01: شكل احتلال الأوساط من طرف المحار','النشاط 02: شكل احتلال الأوساط من طرف النحل'],
     taqwim:'الشرح العلمي لظاهرة تطراق النحل ومغادرة الخلية الأصلية لتشكيل خلية جديدة، وكيفية انتشار يرقات المحار عبر المياه لتوسيع انتشارها.',
-    sourceLearningUnitId:'program_2am_unit_16', sourceActivityIds:['program_2am_act_21','program_2am_act_22']
+    activityPeriods:[1,1],sourceLearningUnitId:'program_2am_unit_16', sourceActivityIds:['program_2am_act_21','program_2am_act_22']
   },
   {
     level:'2am', midan:MIDAN, maqta:M4, mawrid:'المورد التعلمي 4-1: المعنى العلمي للنوع',
     ta3alom:'تعلم مورد: معايير تحديد النوع', moshkila:'ما هو المعيار العلمي المعتمد لتحديد مفهوم النوع؟',
     activities:['النشاط 01: معيار التشابه المورفولوجي','النشاط 02: معيار التكاثر وإنتاج أفراد خصبة جنسياً'],
     taqwim:'ما هي المعايير الأساسية لانتماء الكائنات الحية لنفس النوع؟ علل عدم اعتبار البغل الناتج عن تلاقح الحمار والفرس نوعاً مستقلاً رغم التشابه المورفولوجي لعدم قدرته على إنتاج أفراد خصبة جنسياً.',
-    sourceLearningUnitId:'program_2am_unit_17', sourceActivityIds:['program_2am_act_23','program_2am_act_24']
+    activityPeriods:[1,1],sourceLearningUnitId:'program_2am_unit_17', sourceActivityIds:['program_2am_act_23','program_2am_act_24']
   },
   {
     level:'2am', midan:MIDAN, maqta:M4, mawrid:'المورد التعلمي 4-2: معايير تصنيف الكائنات الحية',
     ta3alom:'تعلم مورد: تصنيف الحيوانات والنباتات', moshkila:'كيف تستعمل المعايير الأساسية لترتيب الكائنات الحية في مجموعاتها الكبيرة والفرعية؟',
     activities:['النشاط 01: معايير تصنيف الحيوانات (الفقاريات واللافقاريات)','النشاط 02: معايير تصنيف النباتات (الزهرية واللازهرية)'],
     taqwim:'أنجز المخطط التلخيصي الشامل لتصنيف الكائنات الحية وتوزعها داخل المملكتين الحيوانية والنباتية بناءً على الصفات التشريحية والمورفولوجية الأساسية (العمود الفقري، غطاء الجلد، الأطراف، وجود الأزهار والبذور).',
-    sourceLearningUnitId:'program_2am_unit_18', sourceActivityIds:['program_2am_act_25','program_2am_act_26']
+    activityPeriods:[1,1],sourceLearningUnitId:'program_2am_unit_18', sourceActivityIds:['program_2am_act_25','program_2am_act_26']
   },
   {
     level:'2am', midan:MIDAN, maqta:M5, mawrid:'المورد التعلمي 5-1: تعريف المستحثات وشروط الاستحاثة',
     ta3alom:'تعلم مورد: تعريف المستحثات وشروط تشكلها', moshkila:'ماذا تمثل المستحثات وما هي أشكالها وشروط تشكلها؟',
     activities:['النشاط 01: تعريف المستحثات وأشكالها','النشاط 02: شروط ظاهرة الاستحاثة'],
     taqwim:'قدم تعريفاً علمياً متكاملاً للمستحثة واذكر أشكالها الحفرية المكتشفة. اذكر الشروط الضرورية لترسيب وتكون المستحثة عبر الصخور الرسوبية (الدفن السريع ووجود أجزاء صلبة).',
-    sourceLearningUnitId:'program_2am_unit_19', sourceActivityIds:['program_2am_act_27','program_2am_act_28']
+    activityPeriods:[1,1],sourceLearningUnitId:'program_2am_unit_19', sourceActivityIds:['program_2am_act_27','program_2am_act_28']
   },
   {
     level:'2am', midan:MIDAN, maqta:M5, mawrid:'المورد التعلمي 5-2: أهمية المستحثات في تحديد خصائص الأوساط القديمة',
     ta3alom:'تعلم مورد: الاستدلال بالمستحثات على الأوساط والمناخات القديمة', moshkila:'كيف تمكننا دراسة المستحثات من تصور الأوساط القديمة والمناخات السائدة فيها؟',
     activities:['النشاط 01: إعادة بناء وسط عيش قديم اعتماداً على المستحثات'],
     taqwim:'إنجاز المخطط ص 138 من الكتاب المدرسي، وبيان العلاقة بين توزع المستحثات وتصور تغيرات البيئات والمناخات القديمة عبر الأزمنة الجيولوجية المتعاقبة.',
-    sourceLearningUnitId:'program_2am_unit_20', sourceActivityIds:['program_2am_act_29']
+    activityPeriods:[1],sourceLearningUnitId:'program_2am_unit_20', sourceActivityIds:['program_2am_act_29']
   }
 ];
