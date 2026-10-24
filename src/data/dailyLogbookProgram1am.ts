@@ -67,7 +67,7 @@ export const DAILY_LOGBOOK_PROGRAM_1AM: DailyLogbookProgramItem[] = [
   {
     level:'1am', midan:MIDAN1, maqta:SEG1, mawrid:'المورد التعلمي 03: الرواتب الغذائية والتوازن الغذائي',
     ta3alom:'تعلم مورد 3-2: التوازن الغذائي', moshkila:'ما هي مخاطر نقص أو زيادة التغذية على صحة الإنسان؟',
-    activities:['النشاط 01: دراسة عواقب سوء التغذية (أمراض: السلعة الدرقية، الأسقربوط، الكواشيوركور، الكساح، والسمنة)'],
+    activities:['النشاط 01: دراسة عواقب سوء التغذية (أمراض: تضخم الغدة الدرقية، الأسقربوط، الكواشيوركور، الكساح، والسمنة)'],
     taqwim:'تقويم المورد: تقديم نصائح وقواعد التغذية السليمة وشرح مخاطر السلوكيات الغذائية غير السوية.',
     activityPeriods:[1],sourceLearningUnitId:'program_1am_unit_05', sourceActivityIds:['program_1am_act_07']
   },
@@ -96,9 +96,9 @@ export const DAILY_LOGBOOK_PROGRAM_1AM: DailyLogbookProgramItem[] = [
   {
     level:'1am', midan:MIDAN2, maqta:SEG2, mawrid:'المورد التعلمي 03: أهمية التحكم في شروط التركيب الضوئي',
     ta3alom:'تعلم مورد: أهمية التحكم في شروط التركيب الضوئي', moshkila:'كيف يمكن إنتاج حاصلات زراعية في غير مواسمها وما هي تأثيرات الإنسان الإيجابية والسلبية على النبات؟',
-    activities:['النشاط 01: أهمية التحكم في شروط التركيب الضوئي عبر استغلال البيوت البلاستيكية (ضبط الحرارة، الرطوبة، الإضاءة، ونسبة CO₂)'],
+    activities:['النشاط 01: أهمية التحكم في شروط التركيب الضوئي عبر استغلال البيوت البلاستيكية (ضبط الحرارة، الرطوبة، الإضاءة، ونسبة CO₂)', 'النشاط 02: سلوكات الإنسان تجاه النبات الأخضر (الإيجابية والسلبية: العناية بالنبات، قطع الأشجار، الرعي العشوائي والزحف العمراني)'],
     taqwim:'تقويم المورد: تفسير توفر الخضر والفواكه (كالطماطم) خلال كل فصول السنة.',
-    activityPeriods:[1],sourceLearningUnitId:'program_1am_unit_09', sourceActivityIds:['program_1am_act_12']
+    activityPeriods:[1,1],sourceLearningUnitId:'program_1am_unit_09', sourceActivityIds:['program_1am_act_12','program_1am_act_46']
   },
   {
     level:'1am', midan:MIDAN2, maqta:SEG2, mawrid:'المورد التعلمي 04: انتقال النسغ وظاهرة النتح',
@@ -236,9 +236,10 @@ export const DAILY_LOGBOOK_PROGRAM_1AM: DailyLogbookProgramItem[] = [
     ta3alom:'تعلم مورد: الجهاز التكاثري الزهري', moshkila:'ما هي مكونات الزهرة وما هي الأعضاء المسؤولة عن التكاثر الزهري؟',
     activities:[
       'النشاط 01: تشريح ودراسة مكونات الزهرة (الكأس، التويج، الأسدية، والمدقة)',
-      'النشاط 02: إبراز المناسل ودورها (الأسدية لإنتاج حبوب الطلع، والمدقة التي تحتوي المبيض والبيوض)'
+      'النشاط 02: إبراز المناسل ودورها (الأسدية لإنتاج حبوب الطلع، والمدقة التي تحتوي المبيض والبيوض)',
+      'النشاط 03: تصنيف الأزهار حسب الجنس (خنثى، مذكرة، ومؤنثة)'
     ],
-    activityPeriods:[1,1],sourceLearningUnitId:'program_1am_unit_24', sourceActivityIds:['program_1am_act_40','program_1am_act_41']
+    activityPeriods:[1,1,1],sourceLearningUnitId:'program_1am_unit_24', sourceActivityIds:['program_1am_act_40','program_1am_act_41','program_1am_act_47']
   },
   {
     level:'1am', midan:MIDAN2, maqta:SEG8, mawrid:'المورد التعلمي 02: مميزات التكاثر الجنسي عند النباتات ذات الأزهار',
