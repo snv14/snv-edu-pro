@@ -11,8 +11,8 @@
 ## التشغيل
 
 ```bash
-git clone https://github.com/Snv05/mizaniyati5.git
-cd mizaniyati5
+git clone https://github.com/snv14/snv-edu-pro.git
+cd snv-edu-pro
 npm install
 cp .env.example .env.local
 npm run dev
@@ -22,21 +22,21 @@ npm run dev
 
 ## متغيرات البيئة
 
-ضع القيم الفعلية في `.env.local` فقط، ولا تضعها في Git:
+أنشئ ملف `.env.local` من النموذج الآمن:
 
-```dotenv
-VITE_FIREBASE_API_KEY=
-VITE_FIREBASE_AUTH_DOMAIN=
-VITE_FIREBASE_PROJECT_ID=
-VITE_FIREBASE_DATABASE_ID=
-VITE_FIREBASE_STORAGE_BUCKET=
-VITE_FIREBASE_MESSAGING_SENDER_ID=
-VITE_FIREBASE_APP_ID=
-GEMINI_API_KEY=
-GEMINI_MODEL=gemini-3.8-flash
+```bash
+cp .env.example .env.local
 ```
 
-`VITE_FIREBASE_DATABASE_ID` اختياري، ويُستخدم فقط عند استعمال قاعدة Firestore مسماة. أما `GEMINI_API_KEY` فهو متغير خادمي ولا يجب تسميته `VITE_GEMINI_API_KEY` إذا كان الهدف إبقاء المفتاح خارج حزمة المتصفح.
+يحمّل الخادم `.env.local` أولاً ثم `.env`. متغيرات منصة الاستضافة الموجودة في بيئة العملية لها الأولوية. لا ترفع ملفات البيئة إلى Git.
+
+- `GEMINI_API_KEY` مفتاح خادمي لميزات الذكاء الاصطناعي. لا تسمّه `VITE_GEMINI_API_KEY` ولا تضعه في حزمة المتصفح. يمكن استعمال `GOOGLE_API_KEY` كاسم بديل.
+- `GEMINI_MODEL` يختار نموذج Gemini؛ القيمة الافتراضية في الخادم هي `gemini-3.8-flash`.
+- مفاتيح `OPENAI_API_KEY` و`ANTHROPIC_API_KEY` و`HF_TOKEN` اختيارية لمزودي الذكاء الاصطناعي البدلاء. اضبط `AI_PROVIDER` و`AI_PROVIDER_FALLBACKS` عند الحاجة.
+- قيم `VITE_FIREBASE_*` إعدادات عميل Firebase التي تُضمّن في تطبيق المتصفح، وليست أسراراً. `VITE_FIREBASE_DATABASE_ID` اختياري ويُستخدم فقط مع قاعدة Firestore مسماة. تعتمد حماية البيانات على تسجيل الدخول وقواعد Firestore.
+- `PORT` و`DISABLE_HMR` إعدادات تشغيل محلية اختيارية.
+
+املأ القيم التي تحتاجها فقط في `.env.local`؛ لا تضع مفاتيح حقيقية في `.env.example` أو ملفات Git.
 
 ## أوامر المشروع
 
