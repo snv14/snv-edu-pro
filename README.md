@@ -11,8 +11,8 @@
 ## التشغيل
 
 ```bash
-git clone https://github.com/Snv05/mizaniyati5.git
-cd mizaniyati5
+git clone https://github.com/snv14/snv-edu-pro.git
+cd snv-edu-pro
 npm install
 cp .env.example .env.local
 npm run dev
@@ -22,21 +22,32 @@ npm run dev
 
 ## متغيرات البيئة
 
-ضع القيم الفعلية في `.env.local` فقط، ولا تضعها في Git:
+انسخ `.env.example` إلى `.env.local` محليًا، ثم املأ القيم الفعلية. في بيئة النشر، أضف المتغيرات نفسها من لوحة إعدادات البيئة الخاصة بخدمة الاستضافة، ثم أعد البناء/النشر. لا تضع القيم الحقيقية في GitHub أو في ملفات المصدر.
 
 ```dotenv
-VITE_FIREBASE_API_KEY=
-VITE_FIREBASE_AUTH_DOMAIN=
-VITE_FIREBASE_PROJECT_ID=
-VITE_FIREBASE_DATABASE_ID=
-VITE_FIREBASE_STORAGE_BUCKET=
-VITE_FIREBASE_MESSAGING_SENDER_ID=
-VITE_FIREBASE_APP_ID=
+# Gemini — server-side only
 GEMINI_API_KEY=
 GEMINI_MODEL=gemini-3.8-flash
+
+# Firebase Web App configuration
+VITE_FIREBASE_API_KEY=
+VITE_FIREBASE_APP_ID=
+VITE_FIREBASE_AUTH_DOMAIN=
+VITE_FIREBASE_DATABASE_ID=
+VITE_FIREBASE_MESSAGING_SENDER_ID=
+VITE_FIREBASE_PROJECT_ID=
+VITE_FIREBASE_STORAGE_BUCKET=
 ```
 
-`VITE_FIREBASE_DATABASE_ID` اختياري، ويُستخدم فقط عند استعمال قاعدة Firestore مسماة. أما `GEMINI_API_KEY` فهو متغير خادمي ولا يجب تسميته `VITE_GEMINI_API_KEY` إذا كان الهدف إبقاء المفتاح خارج حزمة المتصفح.
+### من أين تحصل على القيم؟
+
+- **Firebase:** من Firebase Console، افتح المشروع الصحيح ثم إعدادات المشروع (Project settings) ثم تطبيق الويب (Web app)، وانسخ قيم الإعدادات كما هي. لا تخمّن `projectId` أو `appId` أو `apiKey` أو بقية القيم.
+- **`VITE_FIREBASE_AUTH_DOMAIN`:** الاسم الكامل هو `VITE_FIREBASE_AUTH_DOMAIN`، وليس `VITE_FIREBASE_AUTH_D`.
+- **`VITE_FIREBASE_DATABASE_ID`:** هذا المتغير اختياري؛ اتركه فارغًا عند استخدام قاعدة Firestore الافتراضية. الاسم الكامل ينتهي بـ `DATABASE_ID`.
+- **Gemini:** ضع مفتاح Gemini API في `GEMINI_API_KEY` على الخادم أو في إعدادات البيئة لدى الاستضافة. لا تسمّه `VITE_GEMINI_API_KEY` لأن متغيرات `VITE_*` تُضمّن في كود المتصفح.
+- **`GEMINI_MODEL`:** القيمة الافتراضية في القالب هي `gemini-3.8-flash`. إذا رفض مزود Gemini هذا المعرّف لحسابك، استخدم معرّف نموذج متاحًا في إعدادات API لديك.
+
+المستودع لا يحتوي على قيم Firebase الفعلية أو مفتاح Gemini؛ يجب إدخالها من حساباتك. إذا كانت متغيرات Firebase غير مكتملة، فقد يعمل التطبيق محليًا لكن تُعطّل وظائف Firebase السحابية. وإذا لم يوجد `GEMINI_API_KEY` فلن تعمل وظائف Gemini التي تحتاج إلى المفتاح.
 
 ## أوامر المشروع
 
@@ -56,8 +67,7 @@ npm run clean    # حذف مخرجات البناء
 users/{userId}/data/{docId}
 ```
 
-والمستندات المستخدمة هي:
-
+المستندات المستخدمة هي:
 - `config` ويحتوي على `config`
 - `annualDist` ويحتوي على `items`
 - `curriculum` ويحتوي على `lessons`
@@ -71,22 +81,16 @@ firebase login
 firebase deploy --only firestore:rules
 ```
 
-يجب التأكد من ربط Firebase بالمشروع الصحيح قبل النشر. لا يتم تشغيل اختبارات Firestore غير الموجودة في المستودع، لذلك لا يحتوي `package.json` على أمر اختبار وهمي.
+تأكد من ربط Firebase بالمشروع الصحيح قبل النشر. يجب اختبار قواعد Firestore في بيئة مناسبة قبل اعتمادها.
 
 ## الأمان
 
 - ملفات `.env.local` مستثناة من Git.
-- لا تعتمد تهيئة Firebase على ملف إعدادات سري متتبع.
-- يجب تدوير أي مفتاح Firebase ظهر في تاريخ Git سابقًا.
+- لا تضع مفاتيح Gemini السرية في ملفات المصدر أو متغيرات `VITE_*`.
+- يجب تدوير أي مفتاح ظهر في تاريخ Git سابقًا.
 - مفاتيح Firebase الخاصة بالعميل ليست بديلًا عن قواعد Firestore؛ الحماية الفعلية تعتمد على Authentication وFirestore Rules.
-
-## الترخيص
-
-راجع ملف `LICENSE` إن كان موجودًا في المستودع.
 
 ## الدعم
 
 افتح Issue من صفحة المستودع:
-https://github.com/Snv05/mizaniyati5/issues
-
-**آخر تحديث:** 24 سبتمبر 2026
+https://github.com/snv14/snv-edu-pro/issues
