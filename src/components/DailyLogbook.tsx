@@ -179,23 +179,30 @@ const AUTO_FILLED_TIMETABLE_ROWS: TimetableGridRow[] = [
   { id: 'r8', time: '16:30 - 17:30', cells: createEmptyDayCells() },
 ];
 
-const LOGBOOK_DATA_VERSION = '2026-10-24-sheet-template-v20';
+const LOGBOOK_DATA_VERSION = '2026-10-24-sheet-template-v21';
 const ROWS_PER_PAGE = 10;
 const getPageDimensions = (orientation: 'portrait' | 'landscape') => orientation === 'landscape' ? { w: 297, h: 210 } : { w: 210, h: 297 };
 const PRINT_MARGIN = '14mm';
 const PAGE_INNER_PADDING = '12px';
 const NOTEBOOK_CONTENT_MIN_HEIGHT = '58px';
 
+function getLogbookSortDate(dateStr: string): string {
+  return (String(dateStr || '').match(/\\d{4}-\\d{2}-\\d{2}/g) || [String(dateStr || '')]).sort()[0];
+}
+
 function getSchoolWeekKey(dateStr: string): string {
-  const d = new Date(`${dateStr}T12:00:00`);
+  const date = String(dateStr || '').match(/\\d{4}-\\d{2}-\\d{2}/)?.[0] || dateStr;
+  const d = new Date(date + 'T12:00:00');
   if (Number.isNaN(d.getTime())) return dateStr;
   d.setDate(d.getDate() - d.getDay());
   return formatDateToIsoString(d);
 }
 
 function getSchoolWeekNumber(dateStr: string, startDate: string): number {
-  const start = new Date(startDate + 'T12:00:00');
-  const current = new Date(dateStr + 'T12:00:00');
+  const startDateOnly = String(startDate || '').match(/\\d{4}-\\d{2}-\\d{2}/)?.[0] || startDate;
+  const dateOnly = String(dateStr || '').match(/\\d{4}-\\d{2}-\\d{2}/)?.[0] || dateStr;
+  const start = new Date(startDateOnly + 'T12:00:00');
+  const current = new Date(dateOnly + 'T12:00:00');
   if (Number.isNaN(start.getTime()) || Number.isNaN(current.getTime())) return 1;
   start.setDate(start.getDate() - start.getDay());
   const diff = Math.floor((current.getTime() - start.getTime()) / 86400000);
@@ -497,7 +504,7 @@ const mergeGeneratedWithPreservedRows = (
   });
 
   return Array.from(merged.values()).sort((a, b) =>
-    (a.dateStr || '').localeCompare(b.dateStr || '') ||
+    getLogbookSortDate(a.dateStr || '').localeCompare(getLogbookSortDate(b.dateStr || '')) ||
     (a.time || '').localeCompare(b.time || '') ||
     (a.section || '').localeCompare(b.section || '')
   );
@@ -1535,7 +1542,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
 
   const weeklyGroups = useMemo(() => {
     const groups = new Map<string, LogEntry[]>();
-    [...rows].sort((a, b) => a.dateStr.localeCompare(b.dateStr) || a.time.localeCompare(b.time)).forEach((row) => {
+    [...rows].sort((a, b) => getLogbookSortDate(a.dateStr).localeCompare(getLogbookSortDate(b.dateStr)) || a.time.localeCompare(b.time)).forEach((row) => {
       const key = getSchoolWeekKey(row.dateStr);
       const current = groups.get(key) || [];
       current.push(row);
