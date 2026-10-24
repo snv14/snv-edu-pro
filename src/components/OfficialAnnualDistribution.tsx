@@ -418,7 +418,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
+      setTimeout(() => window.URL.revokeObjectURL(url), 1000);
       showToast("تم تصدير التدرج السنوي بنجاح (Word)");
     } catch (error) {
       console.error(error);
