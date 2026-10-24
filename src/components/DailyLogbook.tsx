@@ -130,6 +130,7 @@ export interface HolidayEntry {
   startDate: string;
   endDate?: string;
   label: string;
+  kind?: 'holiday' | 'assignment' | 'test' | 'exam';
 }
 
 export interface LogEntry {
@@ -672,6 +673,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
   const [newHolidayStartDate, setNewHolidayStartDate] = useState<string>('');
   const [newHolidayEndDate, setNewHolidayEndDate] = useState<string>('');
   const [newHolidayLabel, setNewHolidayLabel] = useState<string>('');
+  const [newHolidayKind, setNewHolidayKind] = useState<NonNullable<HolidayEntry['kind']>>('holiday');
 
   // Generation controls
   const [period, setPeriod] = useState<string>('شهر');
@@ -1715,7 +1717,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
 
   const handleAddHoliday = () => {
     if (!newHolidayStartDate) {
-      displayUserAlert('يرجى تحديد تاريخ بداية العطلة');
+      displayUserAlert('يرجى تحديد تاريخ البداية');
       return;
     }
     const end = newHolidayEndDate || newHolidayStartDate;
@@ -1723,18 +1725,26 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       displayUserAlert('تاريخ النهاية يجب أن يكون بعد تاريخ البداية');
       return;
     }
+    const kindLabels: Record<NonNullable<HolidayEntry['kind']>, string> = {
+      holiday: 'عطلة رسمية',
+      assignment: 'فرض',
+      test: 'اختبار',
+      exam: 'امتحان',
+    };
     setHolidays((prev) =>
       [...prev, {
         id: Math.random().toString(36).slice(2, 7),
         startDate: newHolidayStartDate,
         endDate: end,
-        label: newHolidayLabel || 'عطلة رسمية'
+        kind: newHolidayKind,
+        label: newHolidayLabel.trim() || kindLabels[newHolidayKind],
       }].sort((a, b) => a.startDate.localeCompare(b.startDate))
     );
     setNewHolidayStartDate('');
     setNewHolidayEndDate('');
     setNewHolidayLabel('');
-    showToast('تمت إضافة فترة العطلة بنجاح');
+    setNewHolidayKind('holiday');
+    showToast(newHolidayKind === 'holiday' ? 'تمت إضافة فترة العطلة' : 'تمت إضافة موعد التقييم وسيُستثنى من تقدم التدرج');
   };
 
   const handleOpenPreview = (mode: 'all' | 'single') => {
