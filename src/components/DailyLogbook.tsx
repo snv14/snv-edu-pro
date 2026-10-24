@@ -310,15 +310,18 @@ export function mergeConsecutiveGroupEntries(entries: LogEntry[]): LogEntry[] {
 
     // إذا كانت الحصة فوجاً، نبحث عن حصة الفوج الشريك لنفس القسم في نفس الأسبوع
     let partnerIdx = -1;
-    if (infoA.isGroup || a.section.includes('ف')) {
+    if ((!a.lessonType || a.lessonType === 'curriculum') && (infoA.isGroup || a.section.includes('ف'))) {
       for (let j = i + 1; j < entries.length; j++) {
         if (visited.has(j)) continue;
         const b = entries[j];
         const infoB = extractGroupInfo(b.section);
         if (
+          (!b.lessonType || b.lessonType === 'curriculum') &&
           (infoB.isGroup || b.section.includes('ف')) &&
           b.level === a.level &&
           getBaseSection(b.section) === baseA &&
+          (!a.sourceLearningUnitId || !b.sourceLearningUnitId || a.sourceLearningUnitId === b.sourceLearningUnitId) &&
+          (!a.sourceActivityId || !b.sourceActivityId || a.sourceActivityId === b.sourceActivityId) &&
           getSchoolWeekKey(b.dateStr) === getSchoolWeekKey(a.dateStr)
         ) {
           partnerIdx = j;
