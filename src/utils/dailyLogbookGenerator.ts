@@ -133,7 +133,7 @@ function getTeachingRowsForLevel(level: LogbookLevel): ProgramLesson[] {
   // أرقام program_*_unit_* هي ترتيب وحدات التدرج في الملفات الأصلية؛
   // نعتمدها هنا صراحةً كي لا يغيّر ترتيب عناصر المصفوفة تسلسل حصص السنة.
   curriculum.sort((a, b) => {
-    const orderOf = (id: string) => Number(id.match(/_unit_(\\d+)$/)?.[1] ?? Number.MAX_SAFE_INTEGER);
+    const orderOf = (id: string) => Number(id.match(/_unit_(\d+)$/)?.[1] ?? Number.MAX_SAFE_INTEGER);
     return orderOf(a.sourceLearningUnitId) - orderOf(b.sourceLearningUnitId);
   });
 
