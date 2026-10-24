@@ -185,7 +185,7 @@ const AUTO_FILLED_TIMETABLE_ROWS: TimetableGridRow[] = [
   { id: 'r8', time: '16:30 - 17:30', cells: createEmptyDayCells() },
 ];
 
-const LOGBOOK_DATA_VERSION = '2026-10-24-sheet-template-v18';
+const LOGBOOK_DATA_VERSION = '2026-10-24-sheet-template-v19';
 const ROWS_PER_PAGE = 10;
 const getPageDimensions = (orientation: 'portrait' | 'landscape') => orientation === 'landscape' ? { w: 297, h: 210 } : { w: 210, h: 297 };
 const PRINT_MARGIN = '14mm';
@@ -460,6 +460,41 @@ const normalizeDailyLogbookRows = (
   _db?: any
 ): LogEntry[] => {
   return mergeConsecutiveGroupEntries(savedRows);
+};
+
+/** Keep teacher-entered or manually changed rows when regenerating the automatic sequence. */
+const mergeGeneratedWithPreservedRows = (
+  generatedRows: LogEntry[],
+  savedRows: unknown
+): LogEntry[] => {
+  if (!Array.isArray(savedRows)) return generatedRows;
+
+  const rowKey = (row: LogEntry) =>
+    `${row.dateStr || ''}|${row.time || ''}|${(row.section || '').trim()}`;
+  const merged = new Map<string, LogEntry>(generatedRows.map((row) => [rowKey(row), row]));
+
+  const preservedRows = (savedRows as LogEntry[]).filter((row) =>
+    Boolean(
+      row &&
+      (
+        String(row.id || '').startsWith('manual-') ||
+        !row.sourceLearningUnitId ||
+        row.manualContent ||
+        row.attendance
+      )
+    )
+  );
+
+  preservedRows.forEach((row) => {
+    // A manual absence/change overrides the generated lesson at the same date, time and class.
+    merged.set(rowKey(row), row);
+  });
+
+  return Array.from(merged.values()).sort((a, b) =>
+    (a.dateStr || '').localeCompare(b.dateStr || '') ||
+    (a.time || '').localeCompare(b.time || '') ||
+    (a.section || '').localeCompare(b.section || '')
+  );
 };
 
 interface DailyLogbookAudit {
@@ -885,13 +920,14 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
             setGridRows(AUTO_FILLED_TIMETABLE_ROWS);
           }
 
-          const fresh = generateLogbookEntries({
+          const generatedRows = generateLogbookEntries({
             startDate: effectiveStart,
             gridRows: effectiveGrid,
             period: parsed.period || period || 'سنة',
             holidays: parsed.holidays || holidays,
             curriculumDb: CURRICULUM_DATABASE,
           });
+          const fresh = mergeGeneratedWithPreservedRows(generatedRows, parsed.rows);
           if (fresh.length > 0) {
             setRows(fresh);
             const dataToSave = {
@@ -1163,7 +1199,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
 
 
 
-  // توليد الدفتر اليومي الذكي مرتبطاً بقاعدة بيانات مذكرات المستويات المسندة حصراً
+  // توليد الدفتر اليومي من البرنامج المستقل الخاص بكل مستوى، مع احترام المدة المحددة
   const handleGenerateSmartLogbook = () => {
     const effectiveStart = startDate || deriveDefaultSchoolEntryDate(config.schoolYear || '2026-2027');
     const isGridEmpty = gridRows.every(r => Object.values(r.cells).every((cell: any) => !cell || !cell.trim()));
@@ -1200,7 +1236,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
         };
         localStorage.setItem('daftar_table_v2027', JSON.stringify(dataToSave));
       } catch {}
-      showToast('تم توليد وتحديث ' + fresh.length + ' حصة وفق التدرج الرسمي لسنة أولى متوسط بنجاح 🇩🇿');
+      showToast(`تم توليد الدفتر: ${fresh.length} حصة وفق البرنامج المستقل لمدة ${period || 'سنة'} بنجاح 🇩🇿`);
       setTimeout(() => {
         document.getElementById('pages-start')?.scrollIntoView({ behavior: 'smooth' });
       }, 100);
