@@ -93,15 +93,41 @@ const findPreviousComparableCurriculumLog = (logs: LogEntry[], currentIndex: num
 };
 
 const getExportLessonContent = (log: LogEntry, previous?: LogEntry): string => {
-  void previous;
+  const clean = (value?: string) => String(value || '').trim();
+  const content = clean(log.manualContent || log.content);
+  const learningOutcome = clean(log.ta3alom);
+  if (clean(log.manualContent)) return clean(log.manualContent);
+  if (log.lessonType && log.lessonType !== 'curriculum') return content || learningOutcome;
+
   const parts: string[] = [];
-  if (log.midan) parts.push(`الميدان: ${log.midan}`);
-  if (log.maqta) parts.push(`المقطع: ${log.maqta}`);
-  if (log.mawrid) parts.push(`المورد التعلمي: ${log.mawrid}`);
-  if (log.ta3alom) parts.push(`تعلم المورد: ${log.ta3alom}`);
-  if (log.content) parts.push(log.content);
-  else if (log.manualContent) parts.push(log.manualContent);
-  return parts.length ? parts.join('\n') : (log.content || log.manualContent || '').trim();
+  const currentMidan = clean(log.midan);
+  const previousMidan = clean(previous?.midan);
+  const currentMaqta = clean(log.maqta);
+  const previousMaqta = clean(previous?.maqta);
+
+  // Keep the hierarchy readable without repeating the field and segment on every row.
+  if (currentMidan && (!previous || currentMidan !== previousMidan)) parts.push(`الميدان: ${currentMidan}`);
+  if (currentMaqta && (currentMidan !== previousMidan || !previous || currentMaqta !== previousMaqta)) {
+    parts.push(`المقطع: ${currentMaqta}`);
+  }
+  if (clean(log.mawrid)) parts.push(`المورد التعلمي: ${clean(log.mawrid)}`);
+
+  const activities = Array.from(new Set([
+    ...(log.activitiesList || []),
+    content,
+  ].map(clean).filter(Boolean)));
+
+  if (learningOutcome && !activities.includes(learningOutcome)) {
+    parts.push(`تعلم المورد: ${learningOutcome}`);
+  }
+  if (activities.length) parts.push(`الأنشطة: ${activities.join(' + ')}');
+
+  const assessment = clean(log.taqwim);
+  if (assessment && !activities.includes(assessment) && assessment !== learningOutcome) {
+    parts.push(`التقويم: ${assessment}`);
+  }
+
+  return parts.join('\n') || content || learningOutcome || clean(log.mawrid);
 };
 
 const base64ToUint8Array = (base64: string): Uint8Array => {
