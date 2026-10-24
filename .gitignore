@@ -7,10 +7,7 @@ coverage/
 
 # متغيرات البيئة - حماية البيانات الحساسة
 .env
-.env.local
-.env.*.local
-.env.production.local
-.env.development.local
+.env.*
 
 # السماح فقط بالنموذج الآمن
 !.env.example
