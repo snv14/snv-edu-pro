@@ -18,195 +18,195 @@ export const DAILY_LOGBOOK_PROGRAM_3AM: DailyLogbookProgramItem[] = [
     ta3alom:'تعلم مورد 1-1: مظاهر عواقب الزلازل', moshkila:'فيم تتمثل مظاهر الزلزال على سطح الأرض؟ وما هي أهم خصائصه؟',
     activities:['النشاط 01: المظاهر التي يخلفها زلزال بومرداس','النشاط 02: خصائص الزلزال'],
     taqwim:'استبدل العبارات برقم الوثيقة وشرح التباين في آثار الخسائر بين المناطق العمرانية والمناطق الخالية.',
-    sourceLearningUnitId:'program_3am_unit_01', sourceActivityIds:['program_3am_act_01','program_3am_act_02']
+    activityPeriods:[1,1],sourceLearningUnitId:'program_3am_unit_01', sourceActivityIds:['program_3am_act_01','program_3am_act_02']
   },
   {
     level:'3am', midan:MIDAN1, maqta:M1, mawrid:'المورد التعلمي 01: الزلازل، ظاهرة طبيعية',
     ta3alom:'تعلم مورد 1-2: المركز السطحي للزلزال', moshkila:'كيف نسمي المنطقة الأكثر تضررًا بالزلزال على السطح؟ وبماذا تتميز؟',
     activities:['النشاط 01: درجات شدة الزلزال','النشاط 02: العلاقة بين عمق البؤرة والخسائر'],
     taqwim:'سمّ البيانات في رسم انتشار الأمواج الزلزالية (البؤرة، المركز السطحي، خطوط متساوية الشدة)، وضع علاقة بين عمق البؤرة وشدة الخسائر على السطح.',
-    sourceLearningUnitId:'program_3am_unit_02', sourceActivityIds:['program_3am_act_03','program_3am_act_04']
+    activityPeriods:[1,1],sourceLearningUnitId:'program_3am_unit_02', sourceActivityIds:['program_3am_act_03','program_3am_act_04']
   },
   {
     level:'3am', midan:MIDAN1, maqta:M1, mawrid:'المورد التعلمي 01: الزلازل، ظاهرة طبيعية',
     ta3alom:'تعلم مورد 1-3: مسجل الزلازل', moshkila:'كيف يتم تسجيل الهزات الزلزالية وتحديد شدتها وبؤرتها؟',
     activities:['النشاط 01: تسجيل هزة زلزالية وتحليل التسجيل الزلزالي (السيسموغرام)'],
     taqwim:'تحليل تسجيل زلزالي واستخراج زمن وصول الموجات الزلزالية وتحديد المقدار.',
-    sourceLearningUnitId:'program_3am_unit_03', sourceActivityIds:['program_3am_act_05']
+    activityPeriods:[1],sourceLearningUnitId:'program_3am_unit_03', sourceActivityIds:['program_3am_act_05']
   },
   {
     level:'3am', midan:MIDAN1, maqta:M1, mawrid:'المورد التعلمي 01: الزلازل، ظاهرة طبيعية',
     ta3alom:'تعلم مورد 1-4: أسباب النشاط الزلزالي في شمال إفريقيا', moshkila:'ما هي أسباب النشاط الزلزالي في منطقة شمال إفريقيا؟',
     activities:['النشاط 01: النشاط الزلزالي في شمال إفريقيا وسلسلة جبال الأطلس'],
     taqwim:'التفسير العلمي لتوزع الزلازل على طول خط السلسلة الأطلسية في شمال إفريقيا.',
-    sourceLearningUnitId:'program_3am_unit_04', sourceActivityIds:['program_3am_act_06']
+    activityPeriods:[1],sourceLearningUnitId:'program_3am_unit_04', sourceActivityIds:['program_3am_act_06']
   },
   {
     level:'3am', midan:MIDAN1, maqta:M1, mawrid:'المورد التعلمي 02: تشوه الصخور وعلاقتها بالزلازل',
     ta3alom:'تشوهات الطبقات الصخرية', moshkila:'ما هي أسباب حدوث الزلازل وتكون التشوهات الصخرية؟',
     activities:['النشاط 01: تشوهات الطبقات الصخرية (الطيات والفوالق)'],
     taqwim:'1. ما هو سبب هذه التشوهات الصخرية؟ 2. ما هي أنواع التشوهات الناجمة؟ وضح ذلك برسم تخطيطي لتشكل الطيات والفوالق.',
-    sourceLearningUnitId:'program_3am_unit_05', sourceActivityIds:['program_3am_act_07']
+    activityPeriods:[1],sourceLearningUnitId:'program_3am_unit_05', sourceActivityIds:['program_3am_act_07']
   },
   {
     level:'3am', midan:MIDAN1, maqta:M1, mawrid:'المورد التعلمي 03: نشاط الظهرات',
     ta3alom:'تعلم مورد 3-1: زحزحة القارات', moshkila:'ما هي الآليات المتسببة في زحزحة القارات؟',
     activities:['النشاط 01: نظرية زحزحة القارات والحجج المعتمدة (المورفولوجية، المستحاثية، والجغرافية)'],
     taqwim:'حدد انعكاسات نشاط الظهرة المحيطية بالأطلسي على تباعد القارات.',
-    sourceLearningUnitId:'program_3am_unit_06', sourceActivityIds:['program_3am_act_08']
+    activityPeriods:[1],sourceLearningUnitId:'program_3am_unit_06', sourceActivityIds:['program_3am_act_08']
   },
   {
     level:'3am', midan:MIDAN1, maqta:M1, mawrid:'المورد التعلمي 03: نشاط الظهرات',
     ta3alom:'تعلم مورد 3-2: بنية الظهرات المحيطية', moshkila:'ما هي البنية الجيولوجية للظهرة المحيطية وكيف تتشكل القشرة المحيطية الجديدة؟',
     activities:['النشاط 01: دراسة بنية ونشاط الظهرة المحيطية'],
     taqwim:'التفسير العلمي لتوسع قعر المحيطات وصعود الماغما البازلتية.',
-    sourceLearningUnitId:'program_3am_unit_07', sourceActivityIds:['program_3am_act_09']
+    activityPeriods:[1],sourceLearningUnitId:'program_3am_unit_07', sourceActivityIds:['program_3am_act_09']
   },
   {
     level:'3am', midan:MIDAN1, maqta:M1, mawrid:'المورد التعلمي 03: نشاط الظهرات',
     ta3alom:'تعلم مورد 3-3: حركة الصفائح التكتونية', moshkila:'ما هو مصدر القوى التي تؤدي إلى تباعد القارات وحركة الصفائح؟',
     activities:['النشاط 01: الصفائح التكتونية وتيارات الحمل الحراري'],
     taqwim:'1. استنتج تعريفًا شاملًا للصفائح التكتونية. 2. حدد نمط حركة الصفائح المتأثرة بتيارات الحمل الحراري النازلة والصاعدة.',
-    sourceLearningUnitId:'program_3am_unit_08', sourceActivityIds:['program_3am_act_10']
+    activityPeriods:[1],sourceLearningUnitId:'program_3am_unit_08', sourceActivityIds:['program_3am_act_10']
   },
   {
     level:'3am', midan:MIDAN1, maqta:M1, mawrid:'المورد التعلمي 04: الغوص والظواهر الجيولوجية المرتبطة به',
     ta3alom:'تعلم مورد 4-1: ظاهرة الغوص', moshkila:'كيف نفسر ثبات حجم الكرة الأرضية رغم النشاط الدائم والاتساع المستمر للظهرات؟',
     activities:['النشاط 01: ظاهرة الغوص على مستوى الخنادق المحيطية'],
     taqwim:'فسر سبب زيادة شدة النشاط الزلزالي والبؤر الزلزالية المائلة على مستوى منطقة بنيوف.',
-    sourceLearningUnitId:'program_3am_unit_09', sourceActivityIds:['program_3am_act_11']
+    activityPeriods:[1],sourceLearningUnitId:'program_3am_unit_09', sourceActivityIds:['program_3am_act_11']
   },
   {
     level:'3am', midan:MIDAN1, maqta:M1, mawrid:'المورد التعلمي 04: الغوص والظواهر الجيولوجية المرتبطة به',
     ta3alom:'تعلم مورد 4-2: الظواهر الجيولوجية المرتبطة بالغوص', moshkila:'ما هي الظواهر الجيولوجية المرتبطة بظاهرة الغوص؟',
     activities:['النشاط 01: البركنة الانفجارية','النشاط 02: تشكل الجبال (سلسلة جبال الهيمااليا)'],
     taqwim:'1. قدم تفسيرًا لزحزحة القارة الهندية نحو القارة الآسيوية. 2. فسر اختفاء محيط التيتيس. 3. حدد عواقب الغوص الكلي للقشرة المحيطية تحت قارة آسيا وتصادم القارتين.',
-    sourceLearningUnitId:'program_3am_unit_10', sourceActivityIds:['program_3am_act_12','program_3am_act_13']
+    activityPeriods:[1,1],sourceLearningUnitId:'program_3am_unit_10', sourceActivityIds:['program_3am_act_12','program_3am_act_13']
   },
   {
     level:'3am', midan:MIDAN1, maqta:M1, mawrid:'المورد التعلمي 05: التكتونية العامة والبنية الداخلية للكرة الأرضية',
     ta3alom:'بنية الكرة الأرضية وتكتونيتها', moshkila:'ما هي البنية الداخلية للكرة الأرضية وما هي الطبقات المكونة لها؟',
     activities:['النشاط 01: وصف بنية الكرة الأرضية','النشاط 02: تكتونية الكرة الأرضية'],
     taqwim:'أكمل البيانات على الرسم التخطيطي لمقطع يوضح بنية الكرة الأرضية: القشرة الأرضية، الليتوسفير، الأستينوسفير، الرداء السفلي، النواة الخارجية، والنواة الداخلية.',
-    sourceLearningUnitId:'program_3am_unit_11', sourceActivityIds:['program_3am_act_14','program_3am_act_15']
+    activityPeriods:[1,1],sourceLearningUnitId:'program_3am_unit_11', sourceActivityIds:['program_3am_act_14','program_3am_act_15']
   },
   {
     level:'3am', midan:MIDAN1, maqta:M1, mawrid:'المورد التعلمي 06: التكتونية في حوض البحر الأبيض المتوسط',
     ta3alom:'الحركية التكتونية في حوض البحر الأبيض المتوسط', moshkila:'ما هي أسباب الظواهر الجيولوجية (الزلازل والبراكين) في حوض البحر الأبيض المتوسط؟',
     activities:['النشاط 01: الحركية التكتونية بين الصفيحتين الإفريقية والأوروآسيوية','النشاط 02: أصل النشاط الزلزالي والبركاني في إيطاليا'],
     taqwim:'أكمل المخطط التلخيصي الذي يوضح صعود الصفيحة الإفريقية نحو الشمال وانغلاق حوض البحر الأبيض المتوسط والنتائج الناجمة عنها.',
-    sourceLearningUnitId:'program_3am_unit_12', sourceActivityIds:['program_3am_act_16','program_3am_act_17']
+    activityPeriods:[1,1],sourceLearningUnitId:'program_3am_unit_12', sourceActivityIds:['program_3am_act_16','program_3am_act_17']
   },
   {
     level:'3am', midan:MIDAN1, maqta:M1, mawrid:'المورد التعلمي 07: الإجراءات الوقائية والتنبئية المتعلقة بالظواهر الجيولوجية',
     ta3alom:'الإجراءات التنبئية والوقائية من أخطار الزلازل والبراكين', moshkila:'ما هي الإجراءات التنبئية والوقائية الخاصة بالبراكين والزلازل للتقليل من أخطارها؟',
     activities:['النشاط 01: الإجراءات المتبعة للتقليل من أخطار الزلازل والبراكين'],
     taqwim:'صنف السلوكيات الوقائية الواجب اتخاذها في الجدول: قبل حدوث الزلزال، أثناء حدوث الزلزال، وبعد حدوث الزلزال.',
-    sourceLearningUnitId:'program_3am_unit_13', sourceActivityIds:['program_3am_act_18']
+    activityPeriods:[1],sourceLearningUnitId:'program_3am_unit_13', sourceActivityIds:['program_3am_act_18']
   },
   {
     level:'3am', midan:MIDAN2, maqta:M2, mawrid:'المورد التعلمي 01: البنيات الجيولوجية الكبرى وخصائصها',
     ta3alom:'تعلم مورد 1-1: مكونات منظر طبيعي', moshkila:'مما يتكون المنظر الطبيعي وما هي مكوناته الأساسية؟',
     activities:['النشاط 01: إحصاء وتصنيف مكونات منظر طبيعي محلي'],
     taqwim:'حدد المكونات الأساسية الظاهرة في المخطط: التضاريس، الغطاء النباتي، المجاري المائية، مكاشف الصخور، ونشاطات الإنسان.',
-    sourceLearningUnitId:'program_3am_unit_14', sourceActivityIds:['program_3am_act_19']
+    activityPeriods:[1],sourceLearningUnitId:'program_3am_unit_14', sourceActivityIds:['program_3am_act_19']
   },
   {
     level:'3am', midan:MIDAN2, maqta:M2, mawrid:'المورد التعلمي 01: البنيات الجيولوجية الكبرى وخصائصها',
     ta3alom:'تعلم مورد 1-2: أصل اختلاف مكاشف الصخور في المناظر الطبيعية', moshkila:'كيف يمكن تفسير اختلاف مكاشف الصخور في المناظر الطبيعية؟',
     activities:['النشاط 01: أشكال وتوضع مكاشف الصخور'],
     taqwim:'حدد سبب تشوه الطبقات الصخرية وفسر سبب تكون المكاشف المتراكبة والمائلة والمطوية.',
-    sourceLearningUnitId:'program_3am_unit_15', sourceActivityIds:['program_3am_act_20']
+    activityPeriods:[1],sourceLearningUnitId:'program_3am_unit_15', sourceActivityIds:['program_3am_act_20']
   },
   {
     level:'3am', midan:MIDAN2, maqta:M2, mawrid:'المورد التعلمي 02: شكل المنظر الطبيعي وخصائص الصخور',
     ta3alom:'خصائص الصخور وعلاقتها بشكل المنظر الطبيعي', moshkila:'ما هي العلاقة بين خصائص الصخور الفيزيوكيميائية وشكل المنظر الطبيعي؟',
     activities:['النشاط 01: خواص الصخور (الصلابة، التماسك، النفاذية، والتأثير بالحمض)'],
     taqwim:'فسر تباين درجة تآكل وتغير شكل المناظر الطبيعية باختلاف طبيعة الصخور: الغرانيت، الكلس، الغضار، والرمل.',
-    sourceLearningUnitId:'program_3am_unit_16', sourceActivityIds:['program_3am_act_21']
+    activityPeriods:[1],sourceLearningUnitId:'program_3am_unit_16', sourceActivityIds:['program_3am_act_21']
   },
   {
     level:'3am', midan:MIDAN2, maqta:M2, mawrid:'المورد التعلمي 03: أثر العوامل المناخية في تغيير المنظر الطبيعي',
     ta3alom:'تأثير العوامل المناخية في حت الصخور ونقلها وترسيبها', moshkila:'كيف تؤثر العوامل المناخية على المنظر الطبيعي وتطوره؟',
     activities:['النشاط 01: تأثير عوامل المناخ (الحرارة، الرياح، والمياه) في حت، نقل، وترسيب الصخور'],
     taqwim:'حل التمرين 5 ص 95 من الكتاب المدرسي وتفسير دور الفوارق الحرارية والأمطار الحمضية في تفكيك الصخور وتشكل الكثبان الرملية وأحواض الترسيب.',
-    sourceLearningUnitId:'program_3am_unit_17', sourceActivityIds:['program_3am_act_22']
+    activityPeriods:[1],sourceLearningUnitId:'program_3am_unit_17', sourceActivityIds:['program_3am_act_22']
   },
   {
     level:'3am', midan:MIDAN2, maqta:M2, mawrid:'المورد التعلمي 04: دور الإنسان في تطور شكل منظر طبيعي',
     ta3alom:'تدخلات الإنسان السلبية والإيجابية في المنظر الطبيعي', moshkila:'ما هي تدخلات الإنسان وعواقبها على تطور منظر طبيعي؟',
     activities:['النشاط 01: تدخلات الإنسان السلبية وعواقبها على تطور منظر طبيعي','النشاط 02: تدخلات الإنسان الإيجابية وعواقبها على تطور منظر طبيعي'],
     taqwim:'1. ماذا تمثل الصور المعروضة؟ 2. كيف تصنف تدخل الإنسان في كل حالة (سلبي أم إيجابي)؟ 3. وضح فوائد إقامة المصاطب والسدود وبناء المتراس وحملات التشجير.',
-    sourceLearningUnitId:'program_3am_unit_18', sourceActivityIds:['program_3am_act_23','program_3am_act_24']
+    activityPeriods:[1,1],sourceLearningUnitId:'program_3am_unit_18', sourceActivityIds:['program_3am_act_23','program_3am_act_24']
   },
   {
     level:'3am', midan:MIDAN2, maqta:M2, mawrid:'المورد التعلمي 05: تاريخ منظر طبيعي',
     ta3alom:'تطور المنظر الطبيعي عبر الزمن الجيولوجي', moshkila:'كيف يتطور المنظر الطبيعي عبر الزمن الجيولوجي؟',
     activities:['النشاط 01: تطور المنظر الطبيعي عبر الزمن الجيولوجي'],
     taqwim:'عبّر عن تصورك بخصوص المناظر الطبيعية القديمة للصحراء الجزائرية اعتمادًا على رسومات ونقوش التاسيلي والهقار، وفسر التحول المناخي والجغرافي الناجم.',
-    sourceLearningUnitId:'program_3am_unit_19', sourceActivityIds:['program_3am_act_25']
+    activityPeriods:[1],sourceLearningUnitId:'program_3am_unit_19', sourceActivityIds:['program_3am_act_25']
   },
   {
     level:'3am', midan:MIDAN2, maqta:M3, mawrid:'المورد التعلمي 01: الثروات الطبيعية الباطنية في الجزائر',
     ta3alom:'الثروات الطبيعية الباطنية في الجزائر', moshkila:'ما هي أهم الموارد والثروات الطبيعية الباطنية في الجزائر؟',
     activities:['النشاط 01: إحصاء أهم الموارد الطبيعية في الجزائر'],
     taqwim:'صنف الثروات الطبيعية الباطنية الموضحة في الخريطة إلى محروقات، معادن، موارد مستخرجة من المقالع، ومياه جوفية مع تحديد أماكن تواجدها.',
-    sourceLearningUnitId:'program_3am_unit_20', sourceActivityIds:['program_3am_act_26']
+    activityPeriods:[1],sourceLearningUnitId:'program_3am_unit_20', sourceActivityIds:['program_3am_act_26']
   },
   {
     level:'3am', midan:MIDAN2, maqta:M3, mawrid:'المورد التعلمي 02: مميزات الموارد الطبيعية في الجزائر',
     ta3alom:'تعلم مورد 2-1: خواص البترول وتشكل الجيب البترولي', moshkila:'ما هي أهم مميزات وخواص البترول وكيف يتشكل؟',
     activities:['النشاط 01: خواص البترول الفيزيوكيميائية','النشاط 02: مراحل تشكل البترول'],
     taqwim:'فسر العبارة العلمية التالية: «البترول ثروة طبيعية غير متجددة».',
-    sourceLearningUnitId:'program_3am_unit_21', sourceActivityIds:['program_3am_act_27','program_3am_act_28']
+    activityPeriods:[1,1],sourceLearningUnitId:'program_3am_unit_21', sourceActivityIds:['program_3am_act_27','program_3am_act_28']
   },
   {
     level:'3am', midan:MIDAN2, maqta:M3, mawrid:'المورد التعلمي 02: مميزات الموارد الطبيعية في الجزائر',
     ta3alom:'تعلم مورد 2-2: المياه الجوفية', moshkila:'كيف تتشكل المياه الجوفية وما هي أشكال تواجدها؟',
     activities:['النشاط 01: تشكل الجيب المائي ودورة الماء في الطبيعة'],
     taqwim:'رسم وملاءمة مخطط الوثيقة (دورة الماء في الطبيعة) ص 103 من الكتاب المدرسي.',
-    sourceLearningUnitId:'program_3am_unit_22', sourceActivityIds:['program_3am_act_29']
+    activityPeriods:[1],sourceLearningUnitId:'program_3am_unit_22', sourceActivityIds:['program_3am_act_29']
   },
   {
     level:'3am', midan:MIDAN2, maqta:M3, mawrid:'المورد التعلمي 03: استغلال الموارد الطبيعية الباطنية وتسييرها',
     ta3alom:'تعلم مورد 3-1: طرق استغلال الموارد الباطنية', moshkila:'كيف يمكن استغلال هذه الموارد الطبيعية الباطنية؟',
     activities:['النشاط 01: طرق وتقنيات استغلال البترول والمياه الجوفية'],
     taqwim:'الشرح العلمي لخطوات ومراحل استخراج البترول (التنقيب، الحفر، الاستخراج، التكرير) والفرق بين الآبار العادية والارتوازية.',
-    sourceLearningUnitId:'program_3am_unit_23', sourceActivityIds:['program_3am_act_30']
+    activityPeriods:[1],sourceLearningUnitId:'program_3am_unit_23', sourceActivityIds:['program_3am_act_30']
   },
   {
     level:'3am', midan:MIDAN2, maqta:M3, mawrid:'المورد التعلمي 03: استغلال الموارد الطبيعية الباطنية وتسييرها',
     ta3alom:'تعلم مورد 3-2: تسيير الموارد الطبيعية وتوفير البدائل', moshkila:'ما هي عواقب الاستغلال المفرط للموارد الطبيعية وفيما تتمثل البدائل المتاحة؟',
     activities:['النشاط 01: عواقب الاستغلال المفرط واللجوء للطاقات المتجددة البديلة'],
     taqwim:'حل التمرين 5 ص 113 ورسم التمثيل التخطيطي للاستغلال العقلاني ص 110 من الكتاب المدرسي.',
-    sourceLearningUnitId:'program_3am_unit_24', sourceActivityIds:['program_3am_act_31']
+    activityPeriods:[1],sourceLearningUnitId:'program_3am_unit_24', sourceActivityIds:['program_3am_act_31']
   },
   {
     level:'3am', midan:MIDAN2, maqta:M4, mawrid:'المورد التعلمي 01: التربة وسط حي',
     ta3alom:'مكونات التربة الحية واللاحيوية', moshkila:'ما هي العناصر والمكونات المشكلة للتربة؟',
     activities:['النشاط 01: المكونات الحية واللاحيوية للتربة'],
     taqwim:'تسمية آفاق التربة واستخراج مكوناتها الحية واللاحيوية بناءً على نتائج التجارب المخبرية.',
-    sourceLearningUnitId:'program_3am_unit_25', sourceActivityIds:['program_3am_act_32']
+    activityPeriods:[1],sourceLearningUnitId:'program_3am_unit_25', sourceActivityIds:['program_3am_act_32']
   },
   {
     level:'3am', midan:MIDAN2, maqta:M4, mawrid:'المورد التعلمي 02: خصائص التربة والعلاقة بين بنيتها والغطاء النباتي',
     ta3alom:'خصائص التربة وقدرتها على الاحتفاظ بالماء وعلاقتها بالغطاء النباتي', moshkila:'كيف تؤثر خصائص وبنية التربة على قدرتها على الاحتفاظ بالماء وعلى كثافة الغطاء النباتي؟',
     activities:['النشاط 01: العلاقة بين كمية التساقط وكثافة الغطاء النباتي في الجزائر','النشاط 02: العلاقة بين بنية التربة وقدرة الاحتفاظ بالماء'],
     taqwim:'مقارنة نفاذية وقدرة الاحتفاظ بالماء لدى ثلاثة أنواع من التربة (رملية، غضارية، ودبالية) وتفسير سبب ملاءمة التربة الدبالية للزراعة.',
-    sourceLearningUnitId:'program_3am_unit_26', sourceActivityIds:['program_3am_act_33','program_3am_act_34']
+    activityPeriods:[1,1],sourceLearningUnitId:'program_3am_unit_26', sourceActivityIds:['program_3am_act_33','program_3am_act_34']
   },
   {
     level:'3am', midan:MIDAN2, maqta:M4, mawrid:'المورد التعلمي 03: تشكل التربة وحمايتها',
     ta3alom:'تعلم مورد 3-1: مراحل تشكل التربة وطابعها الهش', moshkila:'ما هي مراحل تشكل التربة وما العوامل المتدخلة في تفكك الصخرة الأم؟',
     activities:['النشاط 01: تحديد منشأ التربة والعوامل المتدخلة في تفكك الصخرة الأم'],
     taqwim:'التفسير العلمي لدور الكائنات الحية العضوية والعوامل المناخية (التجمد، الماء، الحرارة) في نشأة التربة وتشكل الدبال.',
-    sourceLearningUnitId:'program_3am_unit_27', sourceActivityIds:['program_3am_act_35']
+    activityPeriods:[1],sourceLearningUnitId:'program_3am_unit_27', sourceActivityIds:['program_3am_act_35']
   },
   {
     level:'3am', midan:MIDAN2, maqta:M4, mawrid:'المورد التعلمي 03: تشكل التربة وحمايتها',
     ta3alom:'تعلم مورد 3-2: حماية التربة', moshkila:'كيف يتدخل الإنسان لحماية الأراضي الزراعية من التدهور والانجراف والتصحر؟',
     activities:['النشاط 01: آثار العوامل المناخية والتدخلات السلبية للإنسان على التربة الزراعية','النشاط 02: التدخلات الإيجابية للإنسان لحماية التربة الزراعية'],
     taqwim:'حل التمرين 4 ص 139 من الكتاب المدرسي وإنجاز الرسم التخطيطي ص 136 الخاص بحماية التربة وتطبيق دورة المزروعات وإقامة المصاطب والتشجير.',
-    sourceLearningUnitId:'program_3am_unit_28', sourceActivityIds:['program_3am_act_36','program_3am_act_37']
+    activityPeriods:[1,1],sourceLearningUnitId:'program_3am_unit_28', sourceActivityIds:['program_3am_act_36','program_3am_act_37']
   }
 ];
