@@ -190,6 +190,12 @@ function getLogbookSortDate(dateStr: string): string {
   return (String(dateStr || '').match(/\d{4}-\d{2}-\d{2}/g) || [String(dateStr || '')]).sort()[0];
 }
 
+function filterLogbookRowsFromDate(rows: LogEntry[], startDate: string): LogEntry[] {
+  const startDateOnly = String(startDate || '').match(/\\d{4}-\\d{2}-\\d{2}/)?.[0] || startDate;
+  if (!startDateOnly) return rows;
+  return rows.filter((row) => getLogbookSortDate(row.dateStr || '') >= startDateOnly);
+}
+
 function getSchoolWeekKey(dateStr: string): string {
   const date = String(dateStr || '').match(/\d{4}-\d{2}-\d{2}/)?.[0] || dateStr;
   const d = new Date(date + 'T12:00:00');
@@ -769,13 +775,15 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
           if (oneAmList.length === 0) return true;
           return oneAmList.some((r: any) => r.sourceLearningUnitId === 'program_1am_unit_01');
         };
+        const savedRowsFromStart = Array.isArray(parsed.rows)
+          ? filterLogbookRowsFromDate(parsed.rows, startDate)
+          : [];
         if (
           parsed.logbookDataVersion === LOGBOOK_DATA_VERSION &&
-          Array.isArray(parsed.rows) &&
-          parsed.rows.length > 0 &&
-          hasFresh1Am(parsed.rows)
+          savedRowsFromStart.length > 0 &&
+          hasFresh1Am(savedRowsFromStart)
         ) {
-          return normalizeDailyLogbookRows(parsed.rows, CURRICULUM_DATABASE);
+          return normalizeDailyLogbookRows(savedRowsFromStart, CURRICULUM_DATABASE);
         }
       }
     } catch {}
@@ -940,15 +948,16 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
           return oneAmList.some((r: any) => r.sourceLearningUnitId === 'program_1am_unit_01');
         };
 
+        const savedRowsFromStart = Array.isArray(parsed.rows)
+          ? filterLogbookRowsFromDate(parsed.rows, parsed.startDate || startDate)
+          : [];
         let hasValidRows = false;
         if (
           parsed.logbookDataVersion === LOGBOOK_DATA_VERSION &&
-          parsed.rows &&
-          Array.isArray(parsed.rows) &&
-          parsed.rows.length > 0 &&
-          hasFresh1Am(parsed.rows)
+          savedRowsFromStart.length > 0 &&
+          hasFresh1Am(savedRowsFromStart)
         ) {
-          setRows(normalizeDailyLogbookRows(parsed.rows, CURRICULUM_DATABASE));
+          setRows(normalizeDailyLogbookRows(savedRowsFromStart, CURRICULUM_DATABASE));
           hasValidRows = true;
         }
 
@@ -969,7 +978,10 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
             holidays: parsed.holidays || holidays,
             curriculumDb: CURRICULUM_DATABASE,
           });
-          const fresh = mergeGeneratedWithPreservedRows(generatedRows, parsed.rows);
+          const fresh = filterLogbookRowsFromDate(
+            mergeGeneratedWithPreservedRows(generatedRows, parsed.rows),
+            effectiveStart
+          );
           if (fresh.length > 0) {
             setRows(fresh);
             const dataToSave = {
@@ -1044,6 +1056,14 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       (window as any).syncToCloud('logbook', dataToSave);
     }
   }, [wilaya, school, teacher, subject, config.schoolYear, showSubjectInHeader, showYearInHeader, gridRows, holidays, rows, startDate, period, orientation]);
+
+  // Enforce the selected start date even when older rows are restored from local storage or cloud sync.
+  useEffect(() => {
+    setRows((current) => {
+      const filtered = filterLogbookRowsFromDate(current, startDate);
+      return filtered.length === current.length ? current : filtered;
+    });
+  }, [startDate]);
 
   // Keyboard navigation for preview modal
   useEffect(() => {
@@ -1250,13 +1270,13 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
     if (!startDate) setStartDate(effectiveStart);
     if (isGridEmpty) setGridRows(effectiveGrid);
 
-    const fresh = generateLogbookEntries({
+    const fresh = filterLogbookRowsFromDate(generateLogbookEntries({
       startDate: effectiveStart,
       gridRows: effectiveGrid,
       period: period || 'سنة',
       holidays,
       curriculumDb: CURRICULUM_DATABASE,
-    });
+    }), effectiveStart);
 
     if (fresh.length > 0) {
       setRows(fresh);
@@ -1289,16 +1309,17 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
 
   // ضمان وجود حصص لتفعيل التصدير دائماً دون تعطيل أو رسائل خطأ
   const ensureRowsForExport = (): LogEntry[] => {
-    if (rows.length > 0) return rows;
+    const rowsFromStart = filterLogbookRowsFromDate(rows, startDate);
+    if (rowsFromStart.length > 0) return rowsFromStart;
     showToast('جاري تجهيز حصص الدفتر تلقائياً للتصدير...');
     const effectiveStart = startDate || getDefaultNotebookStartDate(config.schoolYear || '2026-2027');
-    const fresh = generateLogbookEntries({
+    const fresh = filterLogbookRowsFromDate(generateLogbookEntries({
       startDate: effectiveStart,
       gridRows,
       period: period || 'سنة',
       holidays,
       curriculumDb: CURRICULUM_DATABASE,
-    });
+    }), effectiveStart);
     if (fresh.length > 0) {
       setRows(fresh);
       try {
@@ -1597,7 +1618,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
 
   const weeklyGroups = useMemo(() => {
     const groups = new Map<string, LogEntry[]>();
-    [...rows].sort((a, b) => getLogbookSortDate(a.dateStr).localeCompare(getLogbookSortDate(b.dateStr)) || a.time.localeCompare(b.time)).forEach((row) => {
+    [...filterLogbookRowsFromDate(rows, startDate)].sort((a, b) => getLogbookSortDate(a.dateStr).localeCompare(getLogbookSortDate(b.dateStr)) || a.time.localeCompare(b.time)).forEach((row) => {
       const key = getSchoolWeekKey(row.dateStr);
       const current = groups.get(key) || [];
       current.push(row);
@@ -3140,13 +3161,13 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                             Object.values(r.cells || {}).every((cell: any) => !cell || !String(cell).trim())
                           );
                           const effectiveGrid = isGridEmpty ? AUTO_FILLED_TIMETABLE_ROWS : gridRows;
-                          const fresh = generateLogbookEntries({
+                          const fresh = filterLogbookRowsFromDate(generateLogbookEntries({
                             startDate: newStart,
                             gridRows: effectiveGrid,
                             period: period || 'سنة',
                             holidays,
                             curriculumDb: CURRICULUM_DATABASE,
-                          });
+                          }), newStart);
 
                           if (fresh.length > 0) {
                             setRows(fresh);
