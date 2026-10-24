@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { generateLogbookDocx, generateTimetableDocx } from "../utils/docxExportLogbook";
+import { generatePreviewMatchDocx, generateTimetableDocx } from "../utils/docxExportLogbook";
 import { generatePreviewMatchPdf } from "../utils/pdfExportLogbook";
 import { safeHtml2Canvas } from "../utils/html2canvasSanitizer";
 import {
@@ -455,6 +455,62 @@ function buildHierarchicalContent(
  * البحث عن آخر حصة لنفس القسم ونفس المستوى بغض النظر عن حدود الأسابيع
  * حتى لا يتكرر الميدان والمقطع والمورد عند الانتقال من أسبوع لآخر
  */
+/**
+ * Estimate exactly the same weekly content page breaks as the preview so exports
+ * can wait for the correct rendered page count after a fresh generation.
+ */
+const estimateLogbookExportPageCount = (
+  exportRows: LogEntry[],
+  orientation: 'portrait' | 'landscape'
+): number => {
+  const groups = new Map<string, LogEntry[]>();
+  [...exportRows]
+    .sort((a, b) =>
+      getLogbookSortDate(a.dateStr).localeCompare(getLogbookSortDate(b.dateStr)) ||
+      a.time.localeCompare(b.time)
+    )
+    .forEach((row) => {
+      const key = getSchoolWeekKey(row.dateStr);
+      const current = groups.get(key) || [];
+      current.push(row);
+      groups.set(key, current);
+    });
+
+  const pageHeightPx = getPageDimensions(orientation).h * 3.7795;
+  const availableHeightPx = Math.max(360, pageHeightPx - (orientation === 'landscape' ? 330 : 390));
+  const estimateLines = (value: unknown, charsPerLine: number) => {
+    const text = String(value ?? '').replace(/<[^>]*>/g, '').replace(/\\s+/g, ' ').trim();
+    if (!text) return 1;
+    return text.split('\\n').reduce((sum, part) => sum + Math.max(1, Math.ceil(part.length / charsPerLine)), 0);
+  };
+  const estimateRowHeight = (row: LogEntry) => {
+    const content = buildHierarchicalContent(row);
+    const contentLines = estimateLines(content, orientation === 'landscape' ? 95 : 65);
+    const noteLines = estimateLines(row.note, orientation === 'landscape' ? 30 : 22);
+    const sectionLines = estimateLines(row.section, 12);
+    return Math.max(58, 26 + Math.max(contentLines, noteLines, sectionLines) * 17);
+  };
+
+  let contentPageCount = 0;
+  groups.forEach((weekRows) => {
+    let pageRowCount = 0;
+    let usedHeight = 0;
+    weekRows.forEach((row) => {
+      const rowHeight = estimateRowHeight(row);
+      if (pageRowCount > 0 && (usedHeight + rowHeight > availableHeightPx || pageRowCount >= ROWS_PER_PAGE)) {
+        contentPageCount += 1;
+        pageRowCount = 0;
+        usedHeight = 0;
+      }
+      pageRowCount += 1;
+      usedHeight += rowHeight;
+    });
+    if (pageRowCount > 0) contentPageCount += 1;
+  });
+
+  return contentPageCount + 2; // cover page and notebook information page
+};
+
 const findPreviousComparableCurriculumRow = (allRows: LogEntry[], currentIndex: number, row: LogEntry): LogEntry | undefined => {
   const baseSection = getBaseSection(row.section);
 
@@ -1349,34 +1405,62 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
 
   // تصدير جدول استعمال الزمن كملف PDF
   const handleExportTimetablePdf = async () => {
+    const wasModalOpen = isTimetableModalOpen;
     try {
       showToast('جاري تصدير استعمال الزمن PDF...');
-      if (!isTimetableModalOpen) {
-        setIsTimetableModalOpen(true);
-        await new Promise(resolve => setTimeout(resolve, 350));
+      if (!wasModalOpen) setIsTimetableModalOpen(true);
+
+      let el: HTMLElement | null = null;
+      for (let i = 0; i < 100; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        el = document.getElementById('official-printable-timetable');
+        const rect = el?.getBoundingClientRect();
+        if (el && rect && rect.width > 0 && rect.height > 0 && el.querySelector('table')) break;
       }
-      const el = document.getElementById('official-printable-timetable');
       if (!el) throw new Error('تعذر العثور على وثيقة استعمال الزمن');
+      const rect = el.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0 || !el.querySelector('table')) {
+        throw new Error('لم يكتمل عرض جدول استعمال الزمن للتصدير');
+      }
 
-      const { jsPDF } = await import('jspdf');
-
+      if (document.fonts?.ready) await document.fonts.ready;
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       const canvas = await safeHtml2Canvas(el, {
         scale: 2,
         useCORS: true,
+        allowTaint: false,
         backgroundColor: '#ffffff',
+        logging: false,
+        width: el.scrollWidth,
+        height: el.scrollHeight,
+        windowWidth: Math.max(document.documentElement.clientWidth, el.scrollWidth),
+        windowHeight: Math.max(document.documentElement.clientHeight, el.scrollHeight),
       });
-      const imgData = canvas.toDataURL('image/png');
+      if (canvas.width <= 0 || canvas.height <= 0) throw new Error('تعذر إنشاء صورة الجدول');
+
+      const { jsPDF } = await import('jspdf');
       const pdf = new jsPDF({
         orientation: 'landscape',
         unit: 'mm',
         format: 'a4',
       });
-      pdf.addImage(imgData, 'PNG', 0, 0, 297, 210);
+      const pageWidth = 297;
+      const pageHeight = 210;
+      const scale = Math.min(pageWidth / canvas.width, pageHeight / canvas.height);
+      const imageWidth = canvas.width * scale;
+      const imageHeight = canvas.height * scale;
+      const imageX = (pageWidth - imageWidth) / 2;
+      const imageY = (pageHeight - imageHeight) / 2;
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', imageX, imageY, imageWidth, imageHeight);
+      canvas.width = 1;
+      canvas.height = 1;
       pdf.save(`استعمال-الزمن-الاسبوعي-${config.teacherName || 'الاستاذ'}.pdf`);
-      showToast('✅ تم تحميل جدول استعمال الزمن PDF بنجاح');
+      showToast('✅ تم تحميل استعمال الزمن PDF بنجاح');
     } catch (err) {
       console.error(err);
       showToast('تعذر تصدير استعمال الزمن PDF');
+    } finally {
+      if (!wasModalOpen) setIsTimetableModalOpen(false);
     }
   };
 
@@ -1388,7 +1472,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
     }, 400);
   };
 
-  // تفعيل تصدير Word للدفتر اليومي دون أي تعطل
+  // تصدير Word مطابق تماماً لصفحات المعاينة
   const handleExportWord = async () => {
     try {
       const activeRows = ensureRowsForExport();
@@ -1396,15 +1480,31 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
         showToast('يرجى التأكد من برمجة حصة واحدة على الأقل في استعمال الزمن لتصدير Word');
         return;
       }
-      showToast('جاري تصدير الدفتر كملف Word قابل للتعديل...');
-      const blob = await generateLogbookDocx(
-        activeRows,
-        config,
-        gridRows,
-        holidays,
-        assignedLevels,
-        orientation
-      );
+      showToast('جاري تجهيز صفحات الدفتر لتصدير Word مطابق للمعاينة...');
+      if (!isPreviewModalOpen || previewMode !== 'all') {
+        setPreviewMode('all');
+        setPreviewZoom(85);
+        setIsPreviewModalOpen(true);
+      }
+
+      const expectedPageCount = estimateLogbookExportPageCount(activeRows, orientation);
+      let pages: HTMLElement[] = [];
+      for (let i = 0; i < 100; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const modalContainer = document.querySelector('.print-preview-root .preview-scroll');
+        const renderedPages = modalContainer
+          ? Array.from(modalContainer.querySelectorAll<HTMLElement>('[data-preview-export-page="true"]'))
+          : [];
+        pages = renderedPages;
+        if (pages.length === expectedPageCount) break;
+      }
+      if (document.fonts?.ready) await document.fonts.ready;
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      if (pages.length !== expectedPageCount) {
+        throw new Error(`اكتمل عرض ${pages.length} صفحة فقط من أصل ${expectedPageCount}. أُوقف التصدير لتجنب ملف ناقص.`);
+      }
+
+      const blob = await generatePreviewMatchDocx(pages, orientation);
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -1413,7 +1513,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       a.click();
       a.remove();
       setTimeout(() => window.URL.revokeObjectURL(url), 1000);
-      showToast('✅ تم تصدير الدفتر كملف Word قابل للتعديل بنجاح');
+      showToast('✅ تم تصدير الدفتر كملف Word مطابق للمعاينة');
     } catch (error) {
       console.error(error);
       showToast('تعذر تصدير Word');
@@ -1467,51 +1567,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
         setIsPreviewModalOpen(true);
       }
 
-      // احسب عدد الصفحات من الصفوف التي ستُصدَّر فعلاً. قد تكون rows/paginatedPages
-      // في هذه الدالة أقدم من activeRows إذا جرى تجهيز الدفتر للتصدير للتو.
-      const exportWeekGroups = new Map<string, LogEntry[]>();
-      [...activeRows]
-        .sort((a, b) => a.dateStr.localeCompare(b.dateStr) || a.time.localeCompare(b.time))
-        .forEach((row) => {
-          const key = getSchoolWeekKey(row.dateStr);
-          const current = exportWeekGroups.get(key) || [];
-          current.push(row);
-          exportWeekGroups.set(key, current);
-        });
-      const exportPageHeightPx = pageDimensions.h * 3.7795;
-      const exportAvailableHeightPx = Math.max(360, exportPageHeightPx - (orientation === 'landscape' ? 330 : 390));
-      const estimateExportLines = (value: unknown, charsPerLine: number) => {
-        const text = String(value ?? '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
-        if (!text) return 1;
-        return text.split('\n').reduce((sum, part) => sum + Math.max(1, Math.ceil(part.length / charsPerLine)), 0);
-      };
-      const estimateExportRowHeight = (row: LogEntry) => {
-        const content = buildHierarchicalContent(row);
-        const contentLines = estimateExportLines(content, orientation === 'landscape' ? 95 : 65);
-        const noteLines = estimateExportLines(row.note, orientation === 'landscape' ? 30 : 22);
-        const sectionLines = estimateExportLines(row.section, 12);
-        return Math.max(58, 26 + Math.max(contentLines, noteLines, sectionLines) * 17);
-      };
-      let expectedContentPageCount = 0;
-      exportWeekGroups.forEach((weekRows) => {
-        let pageRowCount = 0;
-        let usedHeight = 0;
-        weekRows.forEach((row) => {
-          const rowHeight = estimateExportRowHeight(row);
-          if (
-            pageRowCount > 0 &&
-            (usedHeight + rowHeight > exportAvailableHeightPx || pageRowCount >= ROWS_PER_PAGE)
-          ) {
-            expectedContentPageCount += 1;
-            pageRowCount = 0;
-            usedHeight = 0;
-          }
-          pageRowCount += 1;
-          usedHeight += rowHeight;
-        });
-        if (pageRowCount > 0) expectedContentPageCount += 1;
-      });
-      const expectedPageCount = expectedContentPageCount + 2; // صفحة التقديم + الغلاف + صفحات المحتوى
+      const expectedPageCount = estimateLogbookExportPageCount(activeRows, orientation);
       let pages: HTMLElement[] = [];
       // Wait for React to render every page. Never silently export a partial notebook.
       for (let i = 0; i < 100; i++) {
@@ -1520,12 +1576,8 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
         const renderedPages = modalContainer
           ? Array.from(modalContainer.querySelectorAll<HTMLElement>('[data-preview-export-page="true"]'))
           : [];
-        if (renderedPages.length === expectedPageCount) {
-          pages = renderedPages;
-          break;
-        }
-        // Keep the latest count for a useful diagnostic, but do not export it if incomplete.
         pages = renderedPages;
+        if (pages.length === expectedPageCount) break;
       }
       if (document.fonts?.ready) await document.fonts.ready;
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
