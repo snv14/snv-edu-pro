@@ -36,6 +36,7 @@ export interface SmartAiResponse {
   webSearchQueries: string[];
   usedWeb: boolean;
   usedAttachments: string[];
+  webUnavailable?: boolean;
 }
 
 const compact = (value: unknown, max = 1800): string => {
@@ -238,6 +239,7 @@ export async function askSmartAi(request: SmartAiRequest): Promise<SmartAiRespon
       webSearchQueries: Array.isArray(data.webSearchQueries) ? data.webSearchQueries : [],
       usedWeb: Boolean(data.usedWeb),
       usedAttachments: Array.isArray(data.usedAttachments) ? data.usedAttachments : [],
+      webUnavailable: Boolean(data.webUnavailable),
     };
   } catch (error) {
     console.error('[smart-ai] generation failed', error);

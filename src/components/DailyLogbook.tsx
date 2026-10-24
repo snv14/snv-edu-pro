@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { generateLogbookDocx, generateTimetableDocx } from "../utils/docxExportLogbook";
+import { generatePreviewMatchDocx, generateTimetableDocx } from "../utils/docxExportLogbook";
 import { generatePreviewMatchPdf } from "../utils/pdfExportLogbook";
 import { safeHtml2Canvas } from "../utils/html2canvasSanitizer";
 import {
@@ -130,6 +130,7 @@ export interface HolidayEntry {
   startDate: string;
   endDate?: string;
   label: string;
+  kind?: 'holiday' | 'assignment' | 'test' | 'exam';
 }
 
 export interface LogEntry {
@@ -178,23 +179,36 @@ const AUTO_FILLED_TIMETABLE_ROWS: TimetableGridRow[] = [
   { id: 'r8', time: '16:30 - 17:30', cells: createEmptyDayCells() },
 ];
 
-const LOGBOOK_DATA_VERSION = '2026-10-24-sheet-template-v19';
+const LOGBOOK_DATA_VERSION = '2026-10-24-sheet-template-v22';
 const ROWS_PER_PAGE = 10;
 const getPageDimensions = (orientation: 'portrait' | 'landscape') => orientation === 'landscape' ? { w: 297, h: 210 } : { w: 210, h: 297 };
 const PRINT_MARGIN = '14mm';
 const PAGE_INNER_PADDING = '12px';
 const NOTEBOOK_CONTENT_MIN_HEIGHT = '58px';
 
+function getLogbookSortDate(dateStr: string): string {
+  return (String(dateStr || '').match(/\d{4}-\d{2}-\d{2}/g) || [String(dateStr || '')]).sort()[0];
+}
+
+function filterLogbookRowsFromDate(rows: LogEntry[], startDate: string): LogEntry[] {
+  const startDateOnly = String(startDate || '').match(/\d{4}-\d{2}-\d{2}/)?.[0] || startDate;
+  if (!startDateOnly) return rows;
+  return rows.filter((row) => getLogbookSortDate(row.dateStr || '') >= startDateOnly);
+}
+
 function getSchoolWeekKey(dateStr: string): string {
-  const d = new Date(`${dateStr}T12:00:00`);
+  const date = String(dateStr || '').match(/\d{4}-\d{2}-\d{2}/)?.[0] || dateStr;
+  const d = new Date(date + 'T12:00:00');
   if (Number.isNaN(d.getTime())) return dateStr;
   d.setDate(d.getDate() - d.getDay());
   return formatDateToIsoString(d);
 }
 
 function getSchoolWeekNumber(dateStr: string, startDate: string): number {
-  const start = new Date(startDate + 'T12:00:00');
-  const current = new Date(dateStr + 'T12:00:00');
+  const startDateOnly = String(startDate || '').match(/\d{4}-\d{2}-\d{2}/)?.[0] || startDate;
+  const dateOnly = String(dateStr || '').match(/\d{4}-\d{2}-\d{2}/)?.[0] || dateStr;
+  const start = new Date(startDateOnly + 'T12:00:00');
+  const current = new Date(dateOnly + 'T12:00:00');
   if (Number.isNaN(start.getTime()) || Number.isNaN(current.getTime())) return 1;
   start.setDate(start.getDate() - start.getDay());
   const diff = Math.floor((current.getTime() - start.getTime()) / 86400000);
@@ -302,15 +316,18 @@ export function mergeConsecutiveGroupEntries(entries: LogEntry[]): LogEntry[] {
 
     // إذا كانت الحصة فوجاً، نبحث عن حصة الفوج الشريك لنفس القسم في نفس الأسبوع
     let partnerIdx = -1;
-    if (infoA.isGroup || a.section.includes('ف')) {
+    if ((!a.lessonType || a.lessonType === 'curriculum') && (infoA.isGroup || a.section.includes('ف'))) {
       for (let j = i + 1; j < entries.length; j++) {
         if (visited.has(j)) continue;
         const b = entries[j];
         const infoB = extractGroupInfo(b.section);
         if (
+          (!b.lessonType || b.lessonType === 'curriculum') &&
           (infoB.isGroup || b.section.includes('ف')) &&
           b.level === a.level &&
           getBaseSection(b.section) === baseA &&
+          (!a.sourceLearningUnitId || !b.sourceLearningUnitId || a.sourceLearningUnitId === b.sourceLearningUnitId) &&
+          (!a.sourceActivityId || !b.sourceActivityId || a.sourceActivityId === b.sourceActivityId) &&
           getSchoolWeekKey(b.dateStr) === getSchoolWeekKey(a.dateStr)
         ) {
           partnerIdx = j;
@@ -444,6 +461,62 @@ function buildHierarchicalContent(
  * البحث عن آخر حصة لنفس القسم ونفس المستوى بغض النظر عن حدود الأسابيع
  * حتى لا يتكرر الميدان والمقطع والمورد عند الانتقال من أسبوع لآخر
  */
+/**
+ * Estimate exactly the same weekly content page breaks as the preview so exports
+ * can wait for the correct rendered page count after a fresh generation.
+ */
+const estimateLogbookExportPageCount = (
+  exportRows: LogEntry[],
+  orientation: 'portrait' | 'landscape'
+): number => {
+  const groups = new Map<string, LogEntry[]>();
+  [...exportRows]
+    .sort((a, b) =>
+      getLogbookSortDate(a.dateStr).localeCompare(getLogbookSortDate(b.dateStr)) ||
+      a.time.localeCompare(b.time)
+    )
+    .forEach((row) => {
+      const key = getSchoolWeekKey(row.dateStr);
+      const current = groups.get(key) || [];
+      current.push(row);
+      groups.set(key, current);
+    });
+
+  const pageHeightPx = getPageDimensions(orientation).h * 3.7795;
+  const availableHeightPx = Math.max(360, pageHeightPx - (orientation === 'landscape' ? 330 : 390));
+  const estimateLines = (value: unknown, charsPerLine: number) => {
+    const text = String(value ?? '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+    if (!text) return 1;
+    return text.split('\n').reduce((sum, part) => sum + Math.max(1, Math.ceil(part.length / charsPerLine)), 0);
+  };
+  const estimateRowHeight = (row: LogEntry) => {
+    const content = buildHierarchicalContent(row);
+    const contentLines = estimateLines(content, orientation === 'landscape' ? 95 : 65);
+    const noteLines = estimateLines(row.note, orientation === 'landscape' ? 30 : 22);
+    const sectionLines = estimateLines(row.section, 12);
+    return Math.max(58, 26 + Math.max(contentLines, noteLines, sectionLines) * 17);
+  };
+
+  let contentPageCount = 0;
+  groups.forEach((weekRows) => {
+    let pageRowCount = 0;
+    let usedHeight = 0;
+    weekRows.forEach((row) => {
+      const rowHeight = estimateRowHeight(row);
+      if (pageRowCount > 0 && (usedHeight + rowHeight > availableHeightPx || pageRowCount >= ROWS_PER_PAGE)) {
+        contentPageCount += 1;
+        pageRowCount = 0;
+        usedHeight = 0;
+      }
+      pageRowCount += 1;
+      usedHeight += rowHeight;
+    });
+    if (pageRowCount > 0) contentPageCount += 1;
+  });
+
+  return contentPageCount + 2; // cover page and notebook information page
+};
+
 const findPreviousComparableCurriculumRow = (allRows: LogEntry[], currentIndex: number, row: LogEntry): LogEntry | undefined => {
   const baseSection = getBaseSection(row.section);
 
@@ -496,7 +569,7 @@ const mergeGeneratedWithPreservedRows = (
   });
 
   return Array.from(merged.values()).sort((a, b) =>
-    (a.dateStr || '').localeCompare(b.dateStr || '') ||
+    getLogbookSortDate(a.dateStr || '').localeCompare(getLogbookSortDate(b.dateStr || '')) ||
     (a.time || '').localeCompare(b.time || '') ||
     (a.section || '').localeCompare(b.section || '')
   );
@@ -672,6 +745,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
   const [newHolidayStartDate, setNewHolidayStartDate] = useState<string>('');
   const [newHolidayEndDate, setNewHolidayEndDate] = useState<string>('');
   const [newHolidayLabel, setNewHolidayLabel] = useState<string>('');
+  const [newHolidayKind, setNewHolidayKind] = useState<NonNullable<HolidayEntry['kind']>>('holiday');
 
   // Generation controls
   const [period, setPeriod] = useState<string>('شهر');
@@ -701,13 +775,15 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
           if (oneAmList.length === 0) return true;
           return oneAmList.some((r: any) => r.sourceLearningUnitId === 'program_1am_unit_01');
         };
+        const savedRowsFromStart = Array.isArray(parsed.rows)
+          ? filterLogbookRowsFromDate(parsed.rows, startDate)
+          : [];
         if (
           parsed.logbookDataVersion === LOGBOOK_DATA_VERSION &&
-          Array.isArray(parsed.rows) &&
-          parsed.rows.length > 0 &&
-          hasFresh1Am(parsed.rows)
+          savedRowsFromStart.length > 0 &&
+          hasFresh1Am(savedRowsFromStart)
         ) {
-          return normalizeDailyLogbookRows(parsed.rows, CURRICULUM_DATABASE);
+          return normalizeDailyLogbookRows(savedRowsFromStart, CURRICULUM_DATABASE);
         }
       }
     } catch {}
@@ -872,15 +948,16 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
           return oneAmList.some((r: any) => r.sourceLearningUnitId === 'program_1am_unit_01');
         };
 
+        const savedRowsFromStart = Array.isArray(parsed.rows)
+          ? filterLogbookRowsFromDate(parsed.rows, parsed.startDate || startDate)
+          : [];
         let hasValidRows = false;
         if (
           parsed.logbookDataVersion === LOGBOOK_DATA_VERSION &&
-          parsed.rows &&
-          Array.isArray(parsed.rows) &&
-          parsed.rows.length > 0 &&
-          hasFresh1Am(parsed.rows)
+          savedRowsFromStart.length > 0 &&
+          hasFresh1Am(savedRowsFromStart)
         ) {
-          setRows(normalizeDailyLogbookRows(parsed.rows, CURRICULUM_DATABASE));
+          setRows(normalizeDailyLogbookRows(savedRowsFromStart, CURRICULUM_DATABASE));
           hasValidRows = true;
         }
 
@@ -901,7 +978,10 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
             holidays: parsed.holidays || holidays,
             curriculumDb: CURRICULUM_DATABASE,
           });
-          const fresh = mergeGeneratedWithPreservedRows(generatedRows, parsed.rows);
+          const fresh = filterLogbookRowsFromDate(
+            mergeGeneratedWithPreservedRows(generatedRows, parsed.rows),
+            effectiveStart
+          );
           if (fresh.length > 0) {
             setRows(fresh);
             const dataToSave = {
@@ -976,6 +1056,14 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       (window as any).syncToCloud('logbook', dataToSave);
     }
   }, [wilaya, school, teacher, subject, config.schoolYear, showSubjectInHeader, showYearInHeader, gridRows, holidays, rows, startDate, period, orientation]);
+
+  // Enforce the selected start date even when older rows are restored from local storage or cloud sync.
+  useEffect(() => {
+    setRows((current) => {
+      const filtered = filterLogbookRowsFromDate(current, startDate);
+      return filtered.length === current.length ? current : filtered;
+    });
+  }, [startDate]);
 
   // Keyboard navigation for preview modal
   useEffect(() => {
@@ -1182,13 +1270,13 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
     if (!startDate) setStartDate(effectiveStart);
     if (isGridEmpty) setGridRows(effectiveGrid);
 
-    const fresh = generateLogbookEntries({
+    const fresh = filterLogbookRowsFromDate(generateLogbookEntries({
       startDate: effectiveStart,
       gridRows: effectiveGrid,
       period: period || 'سنة',
       holidays,
       curriculumDb: CURRICULUM_DATABASE,
-    });
+    }), effectiveStart);
 
     if (fresh.length > 0) {
       setRows(fresh);
@@ -1221,16 +1309,17 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
 
   // ضمان وجود حصص لتفعيل التصدير دائماً دون تعطيل أو رسائل خطأ
   const ensureRowsForExport = (): LogEntry[] => {
-    if (rows.length > 0) return rows;
+    const rowsFromStart = filterLogbookRowsFromDate(rows, startDate);
+    if (rowsFromStart.length > 0) return rowsFromStart;
     showToast('جاري تجهيز حصص الدفتر تلقائياً للتصدير...');
     const effectiveStart = startDate || getDefaultNotebookStartDate(config.schoolYear || '2026-2027');
-    const fresh = generateLogbookEntries({
+    const fresh = filterLogbookRowsFromDate(generateLogbookEntries({
       startDate: effectiveStart,
       gridRows,
       period: period || 'سنة',
       holidays,
       curriculumDb: CURRICULUM_DATABASE,
-    });
+    }), effectiveStart);
     if (fresh.length > 0) {
       setRows(fresh);
       try {
@@ -1337,46 +1426,92 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
 
   // تصدير جدول استعمال الزمن كملف PDF
   const handleExportTimetablePdf = async () => {
+    const wasModalOpen = isTimetableModalOpen;
     try {
       showToast('جاري تصدير استعمال الزمن PDF...');
-      if (!isTimetableModalOpen) {
-        setIsTimetableModalOpen(true);
-        await new Promise(resolve => setTimeout(resolve, 350));
+      if (!wasModalOpen) setIsTimetableModalOpen(true);
+
+      let el: HTMLElement | null = null;
+      for (let i = 0; i < 100; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        el = document.getElementById('official-printable-timetable');
+        const rect = el?.getBoundingClientRect();
+        if (el && rect && rect.width > 0 && rect.height > 0 && el.querySelector('table')) break;
       }
-      const el = document.getElementById('official-printable-timetable');
       if (!el) throw new Error('تعذر العثور على وثيقة استعمال الزمن');
+      const rect = el.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0 || !el.querySelector('table')) {
+        throw new Error('لم يكتمل عرض جدول استعمال الزمن للتصدير');
+      }
 
-      const { jsPDF } = await import('jspdf');
-
+      if (document.fonts?.ready) await document.fonts.ready;
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       const canvas = await safeHtml2Canvas(el, {
         scale: 2,
         useCORS: true,
+        allowTaint: false,
         backgroundColor: '#ffffff',
+        logging: false,
+        width: el.scrollWidth,
+        height: el.scrollHeight,
+        windowWidth: Math.max(document.documentElement.clientWidth, el.scrollWidth),
+        windowHeight: Math.max(document.documentElement.clientHeight, el.scrollHeight),
       });
-      const imgData = canvas.toDataURL('image/png');
+      if (canvas.width <= 0 || canvas.height <= 0) throw new Error('تعذر إنشاء صورة الجدول');
+
+      const { jsPDF } = await import('jspdf');
       const pdf = new jsPDF({
         orientation: 'landscape',
         unit: 'mm',
         format: 'a4',
       });
-      pdf.addImage(imgData, 'PNG', 0, 0, 297, 210);
+      const pageWidth = 297;
+      const pageHeight = 210;
+      const scale = Math.min(pageWidth / canvas.width, pageHeight / canvas.height);
+      const imageWidth = canvas.width * scale;
+      const imageHeight = canvas.height * scale;
+      const imageX = (pageWidth - imageWidth) / 2;
+      const imageY = (pageHeight - imageHeight) / 2;
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', imageX, imageY, imageWidth, imageHeight);
+      canvas.width = 1;
+      canvas.height = 1;
       pdf.save(`استعمال-الزمن-الاسبوعي-${config.teacherName || 'الاستاذ'}.pdf`);
-      showToast('✅ تم تحميل جدول استعمال الزمن PDF بنجاح');
+      showToast('✅ تم تحميل استعمال الزمن PDF بنجاح');
     } catch (err) {
       console.error(err);
       showToast('تعذر تصدير استعمال الزمن PDF');
+    } finally {
+      if (!wasModalOpen) setIsTimetableModalOpen(false);
     }
   };
 
   // طباعة جدول استعمال الزمن مباشرة
-  const handlePrintTimetable = () => {
-    setIsTimetableModalOpen(true);
-    setTimeout(() => {
+  const handlePrintTimetable = async () => {
+    try {
+      setIsTimetableModalOpen(true);
+      let printable: HTMLElement | null = null;
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        printable = document.getElementById('official-printable-timetable');
+        const rect = printable?.getBoundingClientRect();
+        if (printable && rect && rect.width > 0 && rect.height > 0 && printable.querySelector('table')) break;
+      }
+      const rect = printable?.getBoundingClientRect();
+      if (!printable || !rect || rect.width <= 0 || rect.height <= 0 || !printable.querySelector('table')) {
+        throw new Error('لم يكتمل عرض جدول استعمال الزمن للطباعة');
+      }
+      if (document.fonts?.ready) await document.fonts.ready;
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+      );
       window.print();
-    }, 400);
+    } catch (error) {
+      console.error(error);
+      showToast('تعذر تجهيز طباعة استعمال الزمن');
+    }
   };
 
-  // تفعيل تصدير Word للدفتر اليومي دون أي تعطل
+  // تصدير Word مطابق تماماً لصفحات المعاينة
   const handleExportWord = async () => {
     try {
       const activeRows = ensureRowsForExport();
@@ -1384,15 +1519,31 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
         showToast('يرجى التأكد من برمجة حصة واحدة على الأقل في استعمال الزمن لتصدير Word');
         return;
       }
-      showToast('جاري تصدير الدفتر كملف Word قابل للتعديل...');
-      const blob = await generateLogbookDocx(
-        activeRows,
-        config,
-        gridRows,
-        holidays,
-        assignedLevels,
-        orientation
-      );
+      showToast('جاري تجهيز صفحات الدفتر لتصدير Word مطابق للمعاينة...');
+      if (!isPreviewModalOpen || previewMode !== 'all') {
+        setPreviewMode('all');
+        setPreviewZoom(85);
+        setIsPreviewModalOpen(true);
+      }
+
+      const expectedPageCount = estimateLogbookExportPageCount(activeRows, orientation);
+      let pages: HTMLElement[] = [];
+      for (let i = 0; i < 100; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const modalContainer = document.querySelector('.print-preview-root .preview-scroll');
+        const renderedPages = modalContainer
+          ? Array.from(modalContainer.querySelectorAll<HTMLElement>('[data-preview-export-page="true"]'))
+          : [];
+        pages = renderedPages;
+        if (pages.length === expectedPageCount) break;
+      }
+      if (document.fonts?.ready) await document.fonts.ready;
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      if (pages.length !== expectedPageCount) {
+        throw new Error(`اكتمل عرض ${pages.length} صفحة فقط من أصل ${expectedPageCount}. أُوقف التصدير لتجنب ملف ناقص.`);
+      }
+
+      const blob = await generatePreviewMatchDocx(pages, orientation);
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -1401,7 +1552,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       a.click();
       a.remove();
       setTimeout(() => window.URL.revokeObjectURL(url), 1000);
-      showToast('✅ تم تصدير الدفتر كملف Word قابل للتعديل بنجاح');
+      showToast('✅ تم تصدير الدفتر كملف Word مطابق للمعاينة');
     } catch (error) {
       console.error(error);
       showToast('تعذر تصدير Word');
@@ -1455,7 +1606,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
         setIsPreviewModalOpen(true);
       }
 
-      const expectedPageCount = paginatedPages.length + 2; // صفحة التقديم + الغلاف + صفحات المحتوى
+      const expectedPageCount = estimateLogbookExportPageCount(activeRows, orientation);
       let pages: HTMLElement[] = [];
       // Wait for React to render every page. Never silently export a partial notebook.
       for (let i = 0; i < 100; i++) {
@@ -1464,12 +1615,8 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
         const renderedPages = modalContainer
           ? Array.from(modalContainer.querySelectorAll<HTMLElement>('[data-preview-export-page="true"]'))
           : [];
-        if (renderedPages.length === expectedPageCount) {
-          pages = renderedPages;
-          break;
-        }
-        // Keep the latest count for a useful diagnostic, but do not export it if incomplete.
         pages = renderedPages;
+        if (pages.length === expectedPageCount) break;
       }
       if (document.fonts?.ready) await document.fonts.ready;
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
@@ -1489,7 +1636,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
 
   const weeklyGroups = useMemo(() => {
     const groups = new Map<string, LogEntry[]>();
-    [...rows].sort((a, b) => a.dateStr.localeCompare(b.dateStr) || a.time.localeCompare(b.time)).forEach((row) => {
+    [...filterLogbookRowsFromDate(rows, startDate)].sort((a, b) => getLogbookSortDate(a.dateStr).localeCompare(getLogbookSortDate(b.dateStr)) || a.time.localeCompare(b.time)).forEach((row) => {
       const key = getSchoolWeekKey(row.dateStr);
       const current = groups.get(key) || [];
       current.push(row);
@@ -1671,7 +1818,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
 
   const handleAddHoliday = () => {
     if (!newHolidayStartDate) {
-      displayUserAlert('يرجى تحديد تاريخ بداية العطلة');
+      displayUserAlert('يرجى تحديد تاريخ البداية');
       return;
     }
     const end = newHolidayEndDate || newHolidayStartDate;
@@ -1679,18 +1826,26 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       displayUserAlert('تاريخ النهاية يجب أن يكون بعد تاريخ البداية');
       return;
     }
+    const kindLabels: Record<NonNullable<HolidayEntry['kind']>, string> = {
+      holiday: 'عطلة رسمية',
+      assignment: 'فرض',
+      test: 'اختبار',
+      exam: 'امتحان',
+    };
     setHolidays((prev) =>
       [...prev, {
         id: Math.random().toString(36).slice(2, 7),
         startDate: newHolidayStartDate,
         endDate: end,
-        label: newHolidayLabel || 'عطلة رسمية'
+        kind: newHolidayKind,
+        label: newHolidayLabel.trim() ? (newHolidayLabel.trim().startsWith(kindLabels[newHolidayKind]) ? newHolidayLabel.trim() : kindLabels[newHolidayKind] + ': ' + newHolidayLabel.trim()) : kindLabels[newHolidayKind],
       }].sort((a, b) => a.startDate.localeCompare(b.startDate))
     );
     setNewHolidayStartDate('');
     setNewHolidayEndDate('');
     setNewHolidayLabel('');
-    showToast('تمت إضافة فترة العطلة بنجاح');
+    setNewHolidayKind('holiday');
+    showToast(newHolidayKind === 'holiday' ? 'تمت إضافة فترة العطلة' : 'تمت إضافة موعد التقييم وسيُستثنى من تقدم التدرج');
   };
 
   const handleOpenPreview = (mode: 'all' | 'single') => {
@@ -2180,12 +2335,12 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
               <div className="w-full max-w-3xl mx-auto">
                 <div className="text-[13px] font-bold text-[#a34f6b] mb-3 flex items-center gap-2">
                   <div className="w-1.5 h-1.5 bg-[#D21034] rounded-full" />
-                  جدول العطل
+                  جدول العطل والفروض والاختبارات
                 </div>
                 <table className="w-full border-collapse border border-zinc-200">
                   <thead>
                     <tr>
-                      <th className="border border-zinc-200 px-2 py-2 text-center bg-[#fff0f5] font-bold text-[#991b1b] text-[11px] w-[50%]">العطلة</th>
+                      <th className="border border-zinc-200 px-2 py-2 text-center bg-[#fff0f5] font-bold text-[#991b1b] text-[11px] w-[50%]">النوع / المناسبة</th>
                       <th className="border border-zinc-200 px-2 py-2 text-center bg-[#f9faf6] font-bold text-zinc-700 text-[11px] w-[25%]">من</th>
                       <th className="border border-zinc-200 px-2 py-2 text-center bg-[#f9faf6] font-bold text-zinc-700 text-[11px] w-[25%]">إلى</th>
                     </tr>
@@ -2194,8 +2349,8 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                     {holidays.map((h, idx) => (
                       <tr key={h.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-[#f9faf6]'}>
                         <td className="border border-zinc-200 px-2 py-1.5 text-center font-bold text-[11px] text-zinc-900">{h.label}</td>
-                        <td className="border border-zinc-200 px-2 py-1.5 text-center font-mono font-medium text-[10px] text-zinc-700" dir="ltr">{h.start}</td>
-                        <td className="border border-zinc-200 px-2 py-1.5 text-center font-mono font-medium text-[10px] text-zinc-700" dir="ltr">{h.end}</td>
+                        <td className="border border-zinc-200 px-2 py-1.5 text-center font-mono font-medium text-[10px] text-zinc-700" dir="ltr">{h.startDate}</td>
+                        <td className="border border-zinc-200 px-2 py-1.5 text-center font-mono font-medium text-[10px] text-zinc-700" dir="ltr">{h.endDate || h.startDate}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -2913,11 +3068,11 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
             <div className="rounded-xl border border-zinc-200 overflow-hidden">
               <div className="bg-zinc-50 px-4 py-2.5 flex items-center gap-2 text-[13px] font-bold border-b border-zinc-200">
                 <Calendar className="w-4 h-4 text-zinc-700" />
-                <span>العطل الرسمية + الجمعة</span>
+                <span>العطل والفروض والاختبارات + الجمعة</span>
               </div>
               <div className="p-3 space-y-2 max-h-[190px] overflow-auto">
                 <div className="text-[11px] bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-2.5 py-1.5">
-                  الجمعة عطلة تلقائية + العطل أدناه محجوبة من التوليد
+                  الجمعة مستثناة تلقائياً؛ العطل توقف الحصص، والفروض والاختبارات تُسجل دون تقديم التدرج
                 </div>
                 {holidays.map((h, idx) => (
                   <div
@@ -2955,12 +3110,23 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                     title="تاريخ النهاية (اختياري)"
                   />
                 </div>
-                <div className="flex gap-2">
+                <div className="grid grid-cols-[120px_1fr_auto] gap-2">
+                  <select
+                    value={newHolidayKind}
+                    onChange={(e) => setNewHolidayKind(e.target.value as NonNullable<HolidayEntry['kind']>)}
+                    className="border border-zinc-200 rounded-lg px-2 py-1.5 text-[12px] bg-white outline-none"
+                    aria-label="نوع الموعد"
+                  >
+                    <option value="holiday">عطلة</option>
+                    <option value="assignment">فرض</option>
+                    <option value="test">اختبار</option>
+                    <option value="exam">امتحان</option>
+                  </select>
                   <input
                     value={newHolidayLabel}
                     onChange={(e) => setNewHolidayLabel(e.target.value)}
-                    placeholder="المناسبة"
-                    className="flex-1 border border-zinc-200 rounded-lg px-2 py-1.5 text-[12px] bg-white outline-none"
+                    placeholder="المناسبة (اختياري)"
+                    className="min-w-0 border border-zinc-200 rounded-lg px-2 py-1.5 text-[12px] bg-white outline-none"
                   />
                   <button
                     type="button"
@@ -3013,13 +3179,13 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                             Object.values(r.cells || {}).every((cell: any) => !cell || !String(cell).trim())
                           );
                           const effectiveGrid = isGridEmpty ? AUTO_FILLED_TIMETABLE_ROWS : gridRows;
-                          const fresh = generateLogbookEntries({
+                          const fresh = filterLogbookRowsFromDate(generateLogbookEntries({
                             startDate: newStart,
                             gridRows: effectiveGrid,
                             period: period || 'سنة',
                             holidays,
                             curriculumDb: CURRICULUM_DATABASE,
-                          });
+                          }), newStart);
 
                           if (fresh.length > 0) {
                             setRows(fresh);

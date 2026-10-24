@@ -1,6 +1,6 @@
 /**
  * برنامج السنة الأولى متوسط - علوم الطبيعة والحياة
- * مصدر مستقل للدفتر الرقمي، مستخرج من ملف «برنامج(5).docx».
+ * مصدر مستقل للدفتر الرقمي، مستخرج من الملف المرفق «سنة الاولى/برنامج.docx».
  * حافظنا على تسلسل الميدان/المقطع/المورد/تعلم المورد والمشكلات والأنشطة والتقويم.
  * لا يعتمد هذا الملف على قاعدة بيانات المذكرات أو التدرج السنوي.
  */
@@ -12,6 +12,8 @@ export interface DailyLogbookProgramItem {
   ta3alom: string;
   moshkila?: string;
   activities: string[];
+  /** Number of scheduled lessons for each matching activity; defaults to one. */
+  activityPeriods?: number[];
   taqwim?: string;
   sourceLearningUnitId: string;
   sourceActivityIds: string[];
@@ -37,21 +39,21 @@ export const DAILY_LOGBOOK_PROGRAM_1AM: DailyLogbookProgramItem[] = [
       'النشاط 01: التعرف على مصدر الأغذية (تمييز الأغذية من حيث المصدر: عضوية ومعدنية)',
       'النشاط 02: تصنيف الأغذية حسب الأصل (أصل نباتي، حيواني، ومعدني)'
     ],
-    sourceLearningUnitId:'program_1am_unit_01', sourceActivityIds:['program_1am_act_01','program_1am_act_02']
+    activityPeriods:[1,1],sourceLearningUnitId:'program_1am_unit_01', sourceActivityIds:['program_1am_act_01','program_1am_act_02']
   },
   {
     level:'1am', midan:MIDAN1, maqta:SEG1, mawrid:'المورد التعلمي 01: مصدر وتركيب الأغذية',
     ta3alom:'تعلم مورد 1-2: تركيب الأغذية', moshkila:'ما هي العناصر التي تتكون وتتركب منها هذه الأغذية؟',
     activities:['النشاط 01: تحليل الحليب (فصل مكونات الحليب والكشف عن العناصر الكيميائية البسيطة: سكريات، بروتينات، دسم، وأملاح معدنية)'],
     taqwim:'تقويم المورد: تمارين وتطبيقات حول تصنيف الأغذية وتحديد الأغذية المركبة والكاملة.',
-    sourceLearningUnitId:'program_1am_unit_02', sourceActivityIds:['program_1am_act_03']
+    activityPeriods:[1],sourceLearningUnitId:'program_1am_unit_02', sourceActivityIds:['program_1am_act_03']
   },
   {
     level:'1am', midan:MIDAN1, maqta:SEG1, mawrid:'المورد التعلمي 02: دور الأغذية في الجسم',
     ta3alom:'تعلم مورد: دور الأغذية في الجسم', moshkila:'ما هو دور الأغذية في الجسم؟',
     activities:['النشاط 01: تحديد الحاجيات الغذائية حسب النشاط وتصنيف الأغذية حسب دورها الوظيفي (أغذية الطاقة، وأغذية النمو والبناء والصيانة)'],
     taqwim:'تقويم المورد: اقتراح نوع الغذاء المناسب لحالات مختلفة (رياضي قبل السباق، متبرع بالدم، مريض بعد جراحة...).',
-    sourceLearningUnitId:'program_1am_unit_03', sourceActivityIds:['program_1am_act_04']
+    activityPeriods:[1],sourceLearningUnitId:'program_1am_unit_03', sourceActivityIds:['program_1am_act_04']
   },
   {
     level:'1am', midan:MIDAN1, maqta:SEG1, mawrid:'المورد التعلمي 03: الرواتب الغذائية والتوازن الغذائي',
@@ -60,26 +62,26 @@ export const DAILY_LOGBOOK_PROGRAM_1AM: DailyLogbookProgramItem[] = [
       'النشاط 01: إبراز مفهوم الراتب الغذائي وعوامله.',
       'النشاط 02: تحديد أنواع الرواتب الغذائية (راتب النمو، راتب العمل/النشاط، راتب الصيانة، راتب الحمل والإرضاع)'
     ],
-    sourceLearningUnitId:'program_1am_unit_04', sourceActivityIds:['program_1am_act_05','program_1am_act_06']
+    activityPeriods:[1,1],sourceLearningUnitId:'program_1am_unit_04', sourceActivityIds:['program_1am_act_05','program_1am_act_06']
   },
   {
     level:'1am', midan:MIDAN1, maqta:SEG1, mawrid:'المورد التعلمي 03: الرواتب الغذائية والتوازن الغذائي',
     ta3alom:'تعلم مورد 3-2: التوازن الغذائي', moshkila:'ما هي مخاطر نقص أو زيادة التغذية على صحة الإنسان؟',
-    activities:['النشاط 01: دراسة عواقب سوء التغذية (أمراض: السلعة الدرقية، الأسقربوط، الكواشيوركور، الكساح، والسمنة)'],
+    activities:['النشاط 01: دراسة عواقب سوء التغذية (أمراض: تضخم الغدة الدرقية، الأسقربوط، الكواشيوركور، الكساح، والسمنة)'],
     taqwim:'تقويم المورد: تقديم نصائح وقواعد التغذية السليمة وشرح مخاطر السلوكيات الغذائية غير السوية.',
-    sourceLearningUnitId:'program_1am_unit_05', sourceActivityIds:['program_1am_act_07']
+    activityPeriods:[1],sourceLearningUnitId:'program_1am_unit_05', sourceActivityIds:['program_1am_act_07']
   },
   {
     level:'1am', midan:MIDAN2, maqta:SEG2, mawrid:'المورد التعلمي 01: أغذية النبات الأخضر',
     ta3alom:'تعلم مورد 1-1: التغذية المعدنية عند النبات الأخضر', moshkila:'ما هي الأغذية التي يحتاجها النبات الأخضر للنمو والتطور؟',
     activities:['النشاط 01: شروط نمو النبات الأخضر وإظهار أهمية العناصر المعدنية الأساسية (محلول كنوب: N, P, K)'],
-    sourceLearningUnitId:'program_1am_unit_06', sourceActivityIds:['program_1am_act_08']
+    activityPeriods:[1],sourceLearningUnitId:'program_1am_unit_06', sourceActivityIds:['program_1am_act_08']
   },
   {
     level:'1am', midan:MIDAN2, maqta:SEG2, mawrid:'المورد التعلمي 01: أغذية النبات الأخضر',
     ta3alom:'تعلم مورد 1-2: مقر الامتصاص عند النبات الأخضر', moshkila:'ما هو مقر امتصاص المحلول المعدني وغاز CO₂ عند النبات الأخضر؟',
     activities:['النشاط 01: تحديد مقر امتصاص المحلول المعدني (الأوبار الماصة في الجذر) وغاز (الثغور/المسام)'],
-    sourceLearningUnitId:'program_1am_unit_07', sourceActivityIds:['program_1am_act_09']
+    activityPeriods:[1],sourceLearningUnitId:'program_1am_unit_07', sourceActivityIds:['program_1am_act_09']
   },
   {
     level:'1am', midan:MIDAN2, maqta:SEG2, mawrid:'المورد التعلمي 02: التركيب الضوئي',
@@ -89,14 +91,14 @@ export const DAILY_LOGBOOK_PROGRAM_1AM: DailyLogbookProgramItem[] = [
       'النشاط 02: إظهار تركيب النبات الأخضر للمواد العضوية (النشاء، السكريات، الدسم، والبروتينات)'
     ],
     taqwim:'تقويم المورد: تعليل أهمية عملية التركيب الضوئي لدى النبات.',
-    sourceLearningUnitId:'program_1am_unit_08', sourceActivityIds:['program_1am_act_10','program_1am_act_11']
+    activityPeriods:[1,1],sourceLearningUnitId:'program_1am_unit_08', sourceActivityIds:['program_1am_act_10','program_1am_act_11']
   },
   {
     level:'1am', midan:MIDAN2, maqta:SEG2, mawrid:'المورد التعلمي 03: أهمية التحكم في شروط التركيب الضوئي',
     ta3alom:'تعلم مورد: أهمية التحكم في شروط التركيب الضوئي', moshkila:'كيف يمكن إنتاج حاصلات زراعية في غير مواسمها وما هي تأثيرات الإنسان الإيجابية والسلبية على النبات؟',
-    activities:['النشاط 01: أهمية التحكم في شروط التركيب الضوئي عبر استغلال البيوت البلاستيكية (ضبط الحرارة، الرطوبة، الإضاءة، ونسبة CO₂)'],
+    activities:['النشاط 01: أهمية التحكم في شروط التركيب الضوئي عبر استغلال البيوت البلاستيكية (ضبط الحرارة، الرطوبة، الإضاءة، ونسبة CO₂)', 'النشاط 02: سلوكات الإنسان تجاه النبات الأخضر (الإيجابية والسلبية: العناية بالنبات، قطع الأشجار، الرعي العشوائي والزحف العمراني)'],
     taqwim:'تقويم المورد: تفسير توفر الخضر والفواكه (كالطماطم) خلال كل فصول السنة.',
-    sourceLearningUnitId:'program_1am_unit_09', sourceActivityIds:['program_1am_act_12']
+    activityPeriods:[1,1],sourceLearningUnitId:'program_1am_unit_09', sourceActivityIds:['program_1am_act_12','program_1am_act_46']
   },
   {
     level:'1am', midan:MIDAN2, maqta:SEG2, mawrid:'المورد التعلمي 04: انتقال النسغ وظاهرة النتح',
@@ -105,7 +107,7 @@ export const DAILY_LOGBOOK_PROGRAM_1AM: DailyLogbookProgramItem[] = [
       'النشاط 01: دراسة الأوعية الناقلة للنسغ الناقص (الأوعية الخشبية)',
       'النشاط 02: مسار ومصير النسغ (النسغ الناقص والنسغ الكامل) داخل النبات الأخضر'
     ],
-    sourceLearningUnitId:'program_1am_unit_10', sourceActivityIds:['program_1am_act_13','program_1am_act_14']
+    activityPeriods:[1,1],sourceLearningUnitId:'program_1am_unit_10', sourceActivityIds:['program_1am_act_13','program_1am_act_14']
   },
   {
     level:'1am', midan:MIDAN2, maqta:SEG2, mawrid:'المورد التعلمي 04: انتقال النسغ وظاهرة النتح',
@@ -115,7 +117,7 @@ export const DAILY_LOGBOOK_PROGRAM_1AM: DailyLogbookProgramItem[] = [
       'النشاط 02: إظهار دور النتح في إحداث الفراغ المسؤول عن دوران النسغ والرفع الهيدروليكي للنسغ الناقص'
     ],
     taqwim:'تقويم المورد: رسم مخطط مسار النسغ الناقص والكامل.',
-    sourceLearningUnitId:'program_1am_unit_11', sourceActivityIds:['program_1am_act_15','program_1am_act_16']
+    activityPeriods:[1,1],sourceLearningUnitId:'program_1am_unit_11', sourceActivityIds:['program_1am_act_15','program_1am_act_16']
   },
   {
     level:'1am', midan:MIDAN2, maqta:SEG3, mawrid:'المورد التعلمي 01: المبادلات الغازية التنفسية عند الإنسان',
@@ -125,7 +127,7 @@ export const DAILY_LOGBOOK_PROGRAM_1AM: DailyLogbookProgramItem[] = [
       'النشاط 02: تحديد خصائص ومقر التبادلات الغازية التنفسية (الأسناخ الرئوية).'
     ],
     taqwim:'تقويم المورد: تعليل سبب مرور الدم بالرئتين ومقر التبادلات.',
-    sourceLearningUnitId:'program_1am_unit_12', sourceActivityIds:['program_1am_act_17','program_1am_act_18']
+    activityPeriods:[1,1],sourceLearningUnitId:'program_1am_unit_12', sourceActivityIds:['program_1am_act_17','program_1am_act_18']
   },
   {
     level:'1am', midan:MIDAN2, maqta:SEG3, mawrid:'المورد التعلمي 02: تعريف التنفس',
@@ -136,7 +138,7 @@ export const DAILY_LOGBOOK_PROGRAM_1AM: DailyLogbookProgramItem[] = [
       'النشاط 03: المقارنة بين التنفس والتخمر (تجربة زراعة الخميرة في وسط هوائي ووسط لاهوائي)'
     ],
     taqwim:'تقويم المورد: استنتاج الظاهرة، تعريف التخمر، والمقارنة بين نمطي إنتاج الطاقة.',
-    sourceLearningUnitId:'program_1am_unit_13', sourceActivityIds:['program_1am_act_19','program_1am_act_20','program_1am_act_21']
+    activityPeriods:[1,1,1],sourceLearningUnitId:'program_1am_unit_13', sourceActivityIds:['program_1am_act_19','program_1am_act_20','program_1am_act_21']
   },
   {
     level:'1am', midan:MIDAN2, maqta:SEG3, mawrid:'المورد التعلمي 03: القواعد الصحية للتنفس',
@@ -146,7 +148,7 @@ export const DAILY_LOGBOOK_PROGRAM_1AM: DailyLogbookProgramItem[] = [
       'النشاط 02: تحديد السلوكيات الصحية الوقائية لحماية الجهاز التنفسي'
     ],
     taqwim:'تقويم المورد: اقتراح سلوكيات وقائية لحماية الجهاز التنفسي.',
-    sourceLearningUnitId:'program_1am_unit_14', sourceActivityIds:['program_1am_act_22','program_1am_act_23']
+    activityPeriods:[1,1],sourceLearningUnitId:'program_1am_unit_14', sourceActivityIds:['program_1am_act_22','program_1am_act_23']
   },
   {
     level:'1am', midan:MIDAN2, maqta:SEG4, mawrid:'المورد التعلمي 01: المبادلات الغازية التنفسية عند النبات الأخضر',
@@ -155,21 +157,21 @@ export const DAILY_LOGBOOK_PROGRAM_1AM: DailyLogbookProgramItem[] = [
       'النشاط 01: إثبات امتصاص O₂ وطرح CO₂ عند مختلف أجزاء النبات الأخضر (الأوراق، الجذور، الثمار).',
       'النشاط 02: تحديد مقر المبادلات الغازية التنفسية عند النبات (الثغور/المسام).'
     ],
-    sourceLearningUnitId:'program_1am_unit_15', sourceActivityIds:['program_1am_act_24','program_1am_act_25']
+    activityPeriods:[1,1],sourceLearningUnitId:'program_1am_unit_15', sourceActivityIds:['program_1am_act_24','program_1am_act_25']
   },
   {
     level:'1am', midan:MIDAN2, maqta:SEG4, mawrid:'المورد التعلمي 02: تعريف التنفس عند النبات الأخضر',
     ta3alom:'تعلم مورد 2-2: التنفس كمصدر للطاقة عند النبات', moshkila:'كيف نفسر زيادة استهلاك غاز O₂ والغذاء خلال إنتاش البذور؟',
     activities:['النشاط 01: إظهار الشدة التنفسية والعلاقة بين استهلاك مدخرات البذرة والشدة التنفسية أثناء إنتاش البذور.'],
     taqwim:'تقويم المورد: المقارنة بين المبادلات اليخضورية (التركيب الضوئي) والمبادلات التنفسية عند النبات.',
-    sourceLearningUnitId:'program_1am_unit_16', sourceActivityIds:['program_1am_act_26']
+    activityPeriods:[1],sourceLearningUnitId:'program_1am_unit_16', sourceActivityIds:['program_1am_act_26']
   },
   {
     level:'1am', midan:MIDAN2, maqta:SEG5, mawrid:'المورد التعلمي 01: تعريف الإطراح',
     ta3alom:'تعلم مورد: تعريف الإطراح', moshkila:'ما هي المكونات السامة الواجب طرحها وما هو المفهوم العلمي للإطراح؟',
     activities:['النشاط 01: تركيب البول والعرق (مقارنة بين تركيب الدم والبول والعرق واستنتاج المكونات الأساسية للفضلات السائلة)'],
     taqwim:'تقويم المورد: تفسير عبارة «العرق بول مخفف» وإكمال التعريف العلمي للإطراح.',
-    sourceLearningUnitId:'program_1am_unit_17', sourceActivityIds:['program_1am_act_27']
+    activityPeriods:[1],sourceLearningUnitId:'program_1am_unit_17', sourceActivityIds:['program_1am_act_27']
   },
   {
     level:'1am', midan:MIDAN2, maqta:SEG5, mawrid:'المورد التعلمي 02: أجهزة الإطراح',
@@ -179,7 +181,7 @@ export const DAILY_LOGBOOK_PROGRAM_1AM: DailyLogbookProgramItem[] = [
       'النشاط 02: إظهار دور الجلد والغدد العرقية في طرح العرق وثبات توازن الوسط الداخلي'
     ],
     taqwim:'تقويم المورد: حل تعليمات «أدمج تعلماتي» (ص 105).',
-    sourceLearningUnitId:'program_1am_unit_18', sourceActivityIds:['program_1am_act_28','program_1am_act_29']
+    activityPeriods:[1,1],sourceLearningUnitId:'program_1am_unit_18', sourceActivityIds:['program_1am_act_28','program_1am_act_29']
   },
   {
     level:'1am', midan:MIDAN2, maqta:SEG5, mawrid:'المورد التعلمي 03: القواعد الصحية للإطراح',
@@ -189,7 +191,7 @@ export const DAILY_LOGBOOK_PROGRAM_1AM: DailyLogbookProgramItem[] = [
       'النشاط 02: استخلاص القواعد الوقائية للحفاظ على سلامة أجهزة الإطراح'
     ],
     taqwim:'تقويم المورد: رسم المخطط التلخيصي وسلوكيات المحافظة على سلامة الإطراح (ص 101).',
-    sourceLearningUnitId:'program_1am_unit_19', sourceActivityIds:['program_1am_act_30','program_1am_act_31']
+    activityPeriods:[1,1],sourceLearningUnitId:'program_1am_unit_19', sourceActivityIds:['program_1am_act_30','program_1am_act_31']
   },
   {
     level:'1am', midan:MIDAN2, maqta:SEG6, mawrid:'المورد التعلمي 01: مراحل الإنتاش',
@@ -199,7 +201,7 @@ export const DAILY_LOGBOOK_PROGRAM_1AM: DailyLogbookProgramItem[] = [
       'النشاط 02: وصف التغيرات المورفولوجية والكتلية للبذرة أثناء الإنتاش ومراحل تحول الرشيم إلى نبتة'
     ],
     taqwim:'تقويم المورد: جدول متابعة نمو البذرة بمرور الأيام (بعد 6، 9، 12، 15، و20 يوماً) ووصفاتها التطورية.',
-    sourceLearningUnitId:'program_1am_unit_20', sourceActivityIds:['program_1am_act_32','program_1am_act_33']
+    activityPeriods:[1,1],sourceLearningUnitId:'program_1am_unit_20', sourceActivityIds:['program_1am_act_32','program_1am_act_33']
   },
   {
     level:'1am', midan:MIDAN2, maqta:SEG7, mawrid:'المورد التعلمي 01: الجهاز التكاثري عند الإنسان',
@@ -208,7 +210,7 @@ export const DAILY_LOGBOOK_PROGRAM_1AM: DailyLogbookProgramItem[] = [
       'النشاط 01: وصف الجهاز التكاثري الذكري عند الإنسان والفأر (الخصيتان، المجاري التناسلية، الغدد الملحقة)',
       'النشاط 02: وصف الجهاز التكاثري الأنثوي عند الإنسان والفأر (المبيضان، القناتان الناقلتان للبيوض، الرحم، والمهبل)'
     ],
-    sourceLearningUnitId:'program_1am_unit_21', sourceActivityIds:['program_1am_act_34','program_1am_act_35']
+    activityPeriods:[1,1],sourceLearningUnitId:'program_1am_unit_21', sourceActivityIds:['program_1am_act_34','program_1am_act_35']
   },
   {
     level:'1am', midan:MIDAN2, maqta:SEG7, mawrid:'المورد التعلمي 02: الإلقاح',
@@ -217,7 +219,7 @@ export const DAILY_LOGBOOK_PROGRAM_1AM: DailyLogbookProgramItem[] = [
       'النشاط 01: دراسة الخصائص البنيوية للخلايا التناسلية الذكرية والأنثوية (النطاف والبيوض)',
       'النشاط 02: التعرف على مفهوم عملية الإلقاح وشروط حدوثه ومقره (اتحاد الخلية التناسلية الذكرية مع الخلية التناسلية الأنثوية لتشكيل بيضة ملقحة)'
     ],
-    sourceLearningUnitId:'program_1am_unit_22', sourceActivityIds:['program_1am_act_36','program_1am_act_37']
+    activityPeriods:[1,1],sourceLearningUnitId:'program_1am_unit_22', sourceActivityIds:['program_1am_act_36','program_1am_act_37']
   },
   {
     level:'1am', midan:MIDAN2, maqta:SEG7, mawrid:'المورد التعلمي 03: القواعد الصحية الجنسية عند الإنسان',
@@ -227,16 +229,17 @@ export const DAILY_LOGBOOK_PROGRAM_1AM: DailyLogbookProgramItem[] = [
       'النشاط 02: استخلاص القواعد الصحية الوقائية للحفاظ على سلامة الجهاز التكاثري'
     ],
     taqwim:'تقويم المورد: حل التمارين والتطبيقات المتعلقة بسلامة الجهاز التكاثري (ص 136).',
-    sourceLearningUnitId:'program_1am_unit_23', sourceActivityIds:['program_1am_act_38','program_1am_act_39']
+    activityPeriods:[1,1],sourceLearningUnitId:'program_1am_unit_23', sourceActivityIds:['program_1am_act_38','program_1am_act_39']
   },
   {
     level:'1am', midan:MIDAN2, maqta:SEG8, mawrid:'المورد التعلمي 01: مكونات الجهاز التكاثري عند النباتات الزهرية',
     ta3alom:'تعلم مورد: الجهاز التكاثري الزهري', moshkila:'ما هي مكونات الزهرة وما هي الأعضاء المسؤولة عن التكاثر الزهري؟',
     activities:[
       'النشاط 01: تشريح ودراسة مكونات الزهرة (الكأس، التويج، الأسدية، والمدقة)',
-      'النشاط 02: إبراز المناسل ودورها (الأسدية لإنتاج حبوب الطلع، والمدقة التي تحتوي المبيض والبيوض)'
+      'النشاط 02: إبراز المناسل ودورها (الأسدية لإنتاج حبوب الطلع، والمدقة التي تحتوي المبيض والبيوض)',
+      'النشاط 03: تصنيف الأزهار حسب الجنس (خنثى، مذكرة، ومؤنثة)'
     ],
-    sourceLearningUnitId:'program_1am_unit_24', sourceActivityIds:['program_1am_act_40','program_1am_act_41']
+    activityPeriods:[1,1,1],sourceLearningUnitId:'program_1am_unit_24', sourceActivityIds:['program_1am_act_40','program_1am_act_41','program_1am_act_47']
   },
   {
     level:'1am', midan:MIDAN2, maqta:SEG8, mawrid:'المورد التعلمي 02: مميزات التكاثر الجنسي عند النباتات ذات الأزهار',
@@ -246,7 +249,7 @@ export const DAILY_LOGBOOK_PROGRAM_1AM: DailyLogbookProgramItem[] = [
       'النشاط 02: إنبات حبة الطلع وحدوث الإلقاح وتشكل البذرة والثمرة'
     ],
     taqwim:'تقويم المورد: حل تمارين الكتاب المدرسي (ص 151 / ص 152) ورسم مخطط دورة الحياة (ص 149).',
-    sourceLearningUnitId:'program_1am_unit_25', sourceActivityIds:['program_1am_act_42','program_1am_act_43']
+    activityPeriods:[1,1],sourceLearningUnitId:'program_1am_unit_25', sourceActivityIds:['program_1am_act_42','program_1am_act_43']
   },
   {
     level:'1am', midan:MIDAN2, maqta:SEG9, mawrid:'المورد التعلمي 01: بنية الخلية',
@@ -256,6 +259,6 @@ export const DAILY_LOGBOOK_PROGRAM_1AM: DailyLogbookProgramItem[] = [
       'النشاط 02: الفحص المجهري لنسيج بشرة البصل (الخلية النباتية)'
     ],
     taqwim:'تقويم المورد: المقارنة المجهرية، الرسم والتخطيط للبنية المجهرية للخلية (غشاء هيولي، هيولى، ونواة).',
-    sourceLearningUnitId:'program_1am_unit_26', sourceActivityIds:['program_1am_act_44','program_1am_act_45']
+    activityPeriods:[1,1],sourceLearningUnitId:'program_1am_unit_26', sourceActivityIds:['program_1am_act_44','program_1am_act_45']
   }
 ];

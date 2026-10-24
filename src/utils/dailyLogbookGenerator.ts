@@ -87,6 +87,8 @@ interface ProgramLesson {
   isIntroductory?: boolean;
   isExam?: boolean;
   sourceLearningUnitId: string;
+  sourceActivityIds?: string[];
+  activityPeriods?: number[];
 }
 
 const LEVEL_PROGRAMS: Record<LogbookLevel, DailyLogbookProgramItem[]> = {
@@ -113,7 +115,10 @@ function getTeachingRowsForLevel(level: LogbookLevel): ProgramLesson[] {
   };
 
   const curriculum: ProgramLesson[] = (LEVEL_PROGRAMS[level] || LEVEL_PROGRAMS['1م']).map((item) => {
-    const activities = (item.activities || []).filter((activity) => Boolean(activity && activity.trim()));
+    const activityItems = (item.activities || [])
+      .map((activity, index) => ({ activity, index }))
+      .filter(({ activity }) => Boolean(activity && activity.trim()));
+    const activities = activityItems.map(({ activity }) => activity.trim());
     const fallback = item.ta3alom || item.mawrid || 'نشاط تعلمي';
     return {
       id: item.sourceLearningUnitId,
@@ -123,11 +128,23 @@ function getTeachingRowsForLevel(level: LogbookLevel): ProgramLesson[] {
       ta3alom: item.ta3alom,
       moshkila: item.moshkila,
       activities,
+      sourceActivityIds: activityItems.map(({ index }) => item.sourceActivityIds?.[index] || ''),
+      activityPeriods: activityItems.map(({ index }) => {
+        const periods = Number(item.activityPeriods?.[index] ?? 1);
+        return Number.isFinite(periods) ? Math.max(1, Math.floor(periods)) : 1;
+      }),
       session1: activities[0] || fallback,
       session2: activities[1] || activities[0] || fallback,
       taqwim: item.taqwim,
       sourceLearningUnitId: item.sourceLearningUnitId,
     };
+  });
+
+  // أرقام program_*_unit_* هي ترتيب وحدات التدرج في الملفات الأصلية؛
+  // نعتمدها هنا صراحةً كي لا يغيّر ترتيب عناصر المصفوفة تسلسل حصص السنة.
+  curriculum.sort((a, b) => {
+    const orderOf = (id: string) => Number(id.match(/_unit_(\d+)$/)?.[1] ?? Number.MAX_SAFE_INTEGER);
+    return orderOf(a.sourceLearningUnitId) - orderOf(b.sourceLearningUnitId);
   });
 
   const review: ProgramLesson = {
@@ -231,7 +248,11 @@ export function generateLogbookEntries({
   if (allScheduledSlots.length === 0) return [];
 
   const isDateInHoliday = (dateStr: string): boolean =>
-    holidays.some((h) => dateStr >= h.startDate && dateStr <= (h.endDate || h.startDate));
+    holidays.some((h) =>
+      (!h.kind || h.kind === 'holiday') &&
+      dateStr >= h.startDate &&
+      dateStr <= (h.endDate || h.startDate)
+    );
 
   // تحديد عدد الأسابيع المستهدفة
   const targetWeeksCount =
@@ -248,18 +269,15 @@ export function generateLogbookEntries({
     '4م': getTeachingRowsForLevel('4م'),
   };
 
-  // مؤشر أسبوع التدرج لكل قسم
-  const sectionWeekProgress: Record<string, number> = {};
+  // تقدم مستقل لكل قسم ونشاط؛ أيام التقييم لا تحرك مؤشر التدرج.
+  const sectionProgress: Record<string, { lessonIndex: number; activityIndex: number; activitySession: number }> = {};
 
   const generated: LogEntry[] = [];
-  const parsedStart = new Date(`${startDate}T12:00:00`);
+  const parsedStart = new Date(startDate + 'T12:00:00');
   if (Number.isNaN(parsedStart.getTime())) return [];
 
-  // الانطلاق من يوم الأحد للأسبوع الدراسي الذي يحوي تاريخ البداية
   const currentSunday = new Date(parsedStart);
   currentSunday.setDate(parsedStart.getDate() - parsedStart.getDay());
-
-  // قائمة الأقسام الأساسية الفريدة
   const uniqueBaseSections = Array.from(new Set(allScheduledSlots.map((s) => s.baseSection)));
 
   let weeksGenerated = 0;
@@ -268,179 +286,238 @@ export function generateLogbookEntries({
   while (weeksGenerated < targetWeeksCount && maxLoopIterations > 0) {
     maxLoopIterations--;
 
-    // معلومات أيام هذا الأسبوع (الأحد إلى الخميس)
-    const weekDaysMap: Record<string, { dateStr: string; isHoliday: boolean; isBeforeStart: boolean }> = {};
+    const weekDaysMap: Record<string, { dateStr: string; isHoliday: boolean; isBeforeStart: boolean; assessmentLabel?: string; assessmentKind?: 'assignment' | 'test' | 'exam' }> = {};
     let allHolidayCount = 0;
-
     for (let dIdx = 0; dIdx < 5; dIdx++) {
       const d = new Date(currentSunday);
       d.setDate(currentSunday.getDate() + dIdx);
       const dateStr = formatDateToIsoString(d);
       const dayName = days[dIdx];
+      const dateEvents = holidays.filter((h) => dateStr >= h.startDate && dateStr <= (h.endDate || h.startDate));
       const isHoliday = isDateInHoliday(dateStr);
+      const event = isHoliday ? undefined : dateEvents.find((h) => h.kind && h.kind !== 'holiday');
+      const assessmentKind = event?.kind && event.kind !== 'holiday' ? event.kind : undefined;
+      const assessmentLabel = assessmentKind
+        ? (event?.label || (assessmentKind === 'assignment' ? 'فرض' : assessmentKind === 'test' ? 'اختبار' : 'امتحان'))
+        : undefined;
       const isBeforeStart = dateStr < startDate;
-
       if (isHoliday) allHolidayCount++;
-      weekDaysMap[dayName] = { dateStr, isHoliday, isBeforeStart };
+      weekDaysMap[dayName] = { dateStr, isHoliday, isBeforeStart, assessmentLabel, assessmentKind };
     }
 
-    // إذا كان الأسبوع بأكمله عطلة (مثل عطلة الشتاء أو الربيع)، نتجاوزه دون تقديم مؤشر التدرج
-    if (allHolidayCount === 5) {
+    const hasAssessmentThisWeek = Object.values(weekDaysMap).some((day) => Boolean(day.assessmentLabel));
+    if (allHolidayCount === 5 && !hasAssessmentThisWeek) {
       currentSunday.setDate(currentSunday.getDate() + 7);
       continue;
     }
 
     const currentWeekEntries: LogEntry[] = [];
+    type WeekSession = {
+      sortDate: string;
+      sortTime: number;
+      dayName: string;
+      dateStr: string;
+      time: string;
+      section: string;
+      note: string;
+      assessmentLabel?: string;
+      assessmentKind?: 'assignment' | 'test' | 'exam';
+    };
 
-    // معالجة كل قسم لهذا الأسبوع
     for (const baseSec of uniqueBaseSections) {
       const secSlots = allScheduledSlots.filter((s) => s.baseSection === baseSec);
       if (secSlots.length === 0) continue;
 
       const lvl = secSlots[0].level;
       const teachingRows = teachingRowsByLevel[lvl] || teachingRowsByLevel['1م'];
-      const weekIdx = sectionWeekProgress[baseSec] || 0;
-      const currentRow = teachingRows[Math.min(weekIdx, teachingRows.length - 1)];
-      const sectionEntriesBefore = currentWeekEntries.length;
+      const groupSlots = secSlots
+        .filter((s) => s.isGroup)
+        .sort((a, b) => a.groupNumber - b.groupNumber || a.timeMinutes - b.timeMinutes);
+      const collectiveSlots = secSlots
+        .filter((s) => !s.isGroup)
+        .sort((a, b) => a.timeMinutes - b.timeMinutes);
+      const weekSessions: WeekSession[] = [];
 
-      const groupSlots = secSlots.filter((s) => s.isGroup).sort((a, b) => a.groupNumber - b.groupNumber || a.timeMinutes - b.timeMinutes);
-      const collectiveSlots = secSlots.filter((s) => !s.isGroup).sort((a, b) => a.timeMinutes - b.timeMinutes);
-
-      // 1. معالجة حصص الأفواج (دمج الحصص أفواج لكل قسم في حصة مخبرية وتطبيقية واحدة مشتركة)
-      if (groupSlots.length >= 2) {
-        const allSameDay = groupSlots.every((g) => g.dayName === groupSlots[0].dayName);
-        const dayInfo0 = weekDaysMap[groupSlots[0].dayName];
-        const isAnyValid = groupSlots.some((g) => {
-          const dInfo = weekDaysMap[g.dayName];
-          return dInfo && !dInfo.isBeforeStart && !dInfo.isHoliday;
-        });
-
-        if (isAnyValid) {
-          const groupNumbers = groupSlots.map((g) => g.groupNumber);
-          const mergedSection = `${baseSec} (${groupNumbers.map((num) => `فوج ${num}`).join(' + ')})`;
-
-          let mergedDay = '';
-          let mergedDate = '';
-          let mergedTime = '';
-
-          if (allSameDay) {
-            mergedDay = groupSlots[0].dayName;
-            mergedDate = dayInfo0?.dateStr || '';
-            mergedTime = groupSlots
-              .map((g) => `${formatTimeWithArrow(g.time)} (ف${g.groupNumber})`)
-              .join(' / ');
-          } else {
-            mergedDay = groupSlots.map((g) => g.dayName).join(' / ');
-            mergedDate = groupSlots
-              .map((g) => `${weekDaysMap[g.dayName]?.dateStr || ''} (ف${g.groupNumber})`)
-              .join(' / ');
-            mergedTime = groupSlots
-              .map((g) => `${formatTimeWithArrow(g.time)} (ف${g.groupNumber})`)
-              .join(' / ');
-          }
-
-          // محتوى العمل المخبري والتطبيقي للأفواج (كلا الفوجين يأخذان نفس المحتوى المخبري بالضبط)
-          const practicalContent = currentRow.session2 || currentRow.session1 || currentRow.mawrid || 'نشاط مخبري وتطبيقي';
-          const entryId = `${mergedDate.split(' ')[0] || 'date'}-${baseSec.replace(/\s+/g, '')}-groups-${generated.length + currentWeekEntries.length}`;
-
-          currentWeekEntries.push({
-            id: entryId,
-            dayName: mergedDay,
-            dateStr: mergedDate,
-            time: mergedTime,
-            section: mergedSection,
-            level: lvl,
-            midan: currentRow.midan || '',
-            maqta: currentRow.maqta || '',
-            mawrid: currentRow.mawrid || '',
-            ta3alom: currentRow.ta3alom || practicalContent,
-            activitiesList: [practicalContent],
-            content: practicalContent,
-            taqwim: currentRow.taqwim || (currentRow.isExam ? 'تقويم تحصيلي وفصلّي رسمي' : 'تقويم تكويني ومتابعة الإنجاز المخبري والتجريبي'),
-            note: `عمل مخبري (${groupNumbers.map((num) => `أفواج ${num}`).join(' + ')})`,
-            lessonType: currentRow.isExam ? 'assessment' : (currentRow.isIntroductory ? 'introductory' : 'curriculum'),
-            resourceIndex: weekIdx + 1,
-            sourceLearningUnitId: currentRow.id,
-          });
-        }
-      } else if (groupSlots.length === 1) {
-        // فوج فردي
-        const g = groupSlots[0];
-        const dInfo = weekDaysMap[g.dayName];
-        if (dInfo && !dInfo.isBeforeStart && !dInfo.isHoliday) {
-          const practicalContent = currentRow.session2 || currentRow.session1 || currentRow.mawrid || 'نشاط مخبري وتطبيقي';
-          const entryId = `${dInfo.dateStr}-${g.section.replace(/\s+/g, '')}-${g.timeMinutes}-${generated.length + currentWeekEntries.length}`;
-
-          currentWeekEntries.push({
-            id: entryId,
+      const addGroupTeachingSession = (slots: ScheduledSlot[]) => {
+        if (slots.length === 0) return;
+        if (slots.length === 1) {
+          const g = slots[0];
+          const dayInfo = weekDaysMap[g.dayName];
+          if (!dayInfo || dayInfo.isBeforeStart || dayInfo.isHoliday) return;
+          weekSessions.push({
+            sortDate: dayInfo.dateStr,
+            sortTime: g.timeMinutes,
             dayName: g.dayName,
-            dateStr: dInfo.dateStr,
-            time: `${formatTimeWithArrow(g.time)} (ف${g.groupNumber})`,
-            section: `${baseSec} (فوج ${g.groupNumber})`,
-            level: lvl,
-            midan: currentRow.midan || '',
-            maqta: currentRow.maqta || '',
-            mawrid: currentRow.mawrid || '',
-            ta3alom: currentRow.ta3alom || practicalContent,
-            activitiesList: [practicalContent],
-            content: practicalContent,
-            taqwim: currentRow.isExam ? 'تقويم تحصيلي وفصلّي رسمي' : 'تقويم تكويني ومتابعة الإنجاز المخبري والتجريبي',
-            note: `عمل مخبري (فوج ${g.groupNumber})`,
-            lessonType: currentRow.isExam ? 'assessment' : (currentRow.isIntroductory ? 'introductory' : 'curriculum'),
-            resourceIndex: weekIdx + 1,
-            sourceLearningUnitId: currentRow.id,
+            dateStr: dayInfo.dateStr,
+            time: formatTimeWithArrow(g.time) + ' (ف' + g.groupNumber + ')',
+            section: baseSec + ' (فوج ' + g.groupNumber + ')',
+            note: 'عمل مخبري (فوج ' + g.groupNumber + ')',
           });
-        }
-      }
-
-      // 2. معالجة الحصص الجماعية (القسم كاملاً)
-      collectiveSlots.forEach((cSlot, cIdx) => {
-        const dInfo = weekDaysMap[cSlot.dayName];
-        if (!dInfo || dInfo.isBeforeStart || dInfo.isHoliday) return;
-
-        // إذا كان هناك حصة أفواج، تأخذ الحصة الجماعية الدرس الأول (session1) لبناء المفاهيم
-        // إذا لم يكن هناك أفواج، توزع الحصص بين session1 و session2
-        let lessonContent = '';
-        if (groupSlots.length > 0) {
-          lessonContent = currentRow.session1 || currentRow.mawrid || 'حصة تعلمية نظامية';
-        } else {
-          lessonContent = (cIdx === 0 ? currentRow.session1 : (currentRow.session2 || currentRow.session1)) || currentRow.mawrid || 'حصة تعلمية نظامية';
+          return;
         }
 
-        const entryId = `${dInfo.dateStr}-${baseSec.replace(/\s+/g, '')}-${cSlot.timeMinutes}-${generated.length + currentWeekEntries.length}`;
+        const valid = slots.filter((slot) => {
+          const dayInfo = weekDaysMap[slot.dayName];
+          return dayInfo && !dayInfo.isBeforeStart && !dayInfo.isHoliday;
+        });
+        if (valid.length === 0) return;
+        const allSameDay = slots.every((g) => g.dayName === slots[0].dayName);
+        const groupNumbers = slots.map((g) => g.groupNumber);
+        const dayInfo0 = weekDaysMap[slots[0].dayName];
+        const mergedDay = allSameDay ? slots[0].dayName : slots.map((g) => g.dayName).join(' / ');
+        const mergedDate = allSameDay
+          ? (dayInfo0?.dateStr || '')
+          : slots.map((g) => (weekDaysMap[g.dayName]?.dateStr || '') + ' (ف' + g.groupNumber + ')').join(' / ');
+        const mergedTime = slots.map((g) => formatTimeWithArrow(g.time) + ' (ف' + g.groupNumber + ')').join(' / ');
+        const firstValid = [...valid].sort((a, b) =>
+          (weekDaysMap[a.dayName]?.dateStr || '').localeCompare(weekDaysMap[b.dayName]?.dateStr || '') ||
+          a.timeMinutes - b.timeMinutes
+        )[0];
+        weekSessions.push({
+          sortDate: weekDaysMap[firstValid.dayName].dateStr,
+          sortTime: firstValid.timeMinutes,
+          dayName: mergedDay,
+          dateStr: mergedDate,
+          time: mergedTime,
+          section: baseSec + ' (' + groupNumbers.map((num) => 'فوج ' + num).join(' + ') + ')',
+          note: 'عمل مخبري (' + groupNumbers.map((num) => 'أفواج ' + num).join(' + ') + ')',
+        });
+      };
+
+      const assessmentGroups = new Map<string, ScheduledSlot[]>();
+      const teachingGroups: ScheduledSlot[] = [];
+      groupSlots.forEach((slot) => {
+        const dayInfo = weekDaysMap[slot.dayName];
+        if (!dayInfo || dayInfo.isBeforeStart || dayInfo.isHoliday) return;
+        if (!dayInfo.assessmentLabel) {
+          teachingGroups.push(slot);
+          return;
+        }
+        const key = dayInfo.dateStr + '|' + dayInfo.assessmentKind + '|' + dayInfo.assessmentLabel;
+        const grouped = assessmentGroups.get(key) || [];
+        grouped.push(slot);
+        assessmentGroups.set(key, grouped);
+      });
+      addGroupTeachingSession(teachingGroups);
+      assessmentGroups.forEach((slots) => {
+        const first = slots[0];
+        const dayInfo = weekDaysMap[first.dayName];
+        const nums = slots.map((slot) => slot.groupNumber);
+        weekSessions.push({
+          sortDate: dayInfo.dateStr,
+          sortTime: Math.min(...slots.map((slot) => slot.timeMinutes)),
+          dayName: first.dayName,
+          dateStr: dayInfo.dateStr,
+          time: slots.map((slot) => formatTimeWithArrow(slot.time) + ' (ف' + slot.groupNumber + ')').join(' / '),
+          section: baseSec + ' (' + nums.map((num) => 'فوج ' + num).join(' + ') + ')',
+          note: dayInfo.assessmentLabel + ' • فترة تقييم',
+          assessmentLabel: dayInfo.assessmentLabel,
+          assessmentKind: dayInfo.assessmentKind,
+        });
+      });
+
+      collectiveSlots.forEach((slot) => {
+        const dayInfo = weekDaysMap[slot.dayName];
+        if (!dayInfo || dayInfo.isBeforeStart || dayInfo.isHoliday) return;
+        weekSessions.push({
+          sortDate: dayInfo.dateStr,
+          sortTime: slot.timeMinutes,
+          dayName: slot.dayName,
+          dateStr: dayInfo.dateStr,
+          time: formatTimeWithArrow(slot.time),
+          section: baseSec,
+          note: dayInfo.assessmentLabel ? dayInfo.assessmentLabel + ' • فترة تقييم' : 'حصة جماعية (القسم كاملاً)',
+          assessmentLabel: dayInfo.assessmentLabel,
+          assessmentKind: dayInfo.assessmentKind,
+        });
+      });
+
+      weekSessions.sort((a, b) =>
+        a.sortDate.localeCompare(b.sortDate) ||
+        a.sortTime - b.sortTime ||
+        a.section.localeCompare(b.section)
+      );
+
+      const progress = { ...(sectionProgress[baseSec] || { lessonIndex: 0, activityIndex: 0, activitySession: 0 }) };
+      weekSessions.forEach((session) => {
+        if (session.assessmentLabel) {
+          const assessmentText = session.assessmentLabel;
+          const entryId = session.sortDate + '-' + baseSec.replace(/\s+/g, '') + '-' + session.sortTime + '-assessment-' + currentWeekEntries.length;
+          currentWeekEntries.push({
+            id: entryId,
+            dayName: session.dayName,
+            dateStr: session.dateStr,
+            time: session.time,
+            section: session.section,
+            level: lvl,
+            content: assessmentText,
+            activitiesList: [assessmentText],
+            note: session.note + ' • لا يتقدم التدرج',
+            lessonType: 'assessment',
+            sourceLearningUnitId: 'calendar-' + (session.assessmentKind || 'assessment') + '-' + session.sortDate,
+          });
+          return;
+        }
+
+        const lessonIndex = Math.min(progress.lessonIndex, teachingRows.length - 1);
+        const currentRow = teachingRows[lessonIndex];
+        const activities = currentRow.activities.length
+          ? currentRow.activities
+          : [currentRow.session1 || currentRow.mawrid || 'نشاط تعلمي'];
+        const activityIndex = Math.min(progress.activityIndex, activities.length - 1);
+        const activityContent = activities[activityIndex] || currentRow.session1 || currentRow.mawrid || 'نشاط تعلمي';
+        const requiredPeriods = Math.max(1, currentRow.activityPeriods?.[activityIndex] || 1);
+        const activitySession = Math.min(requiredPeriods, progress.activitySession + 1);
+        const progressLabel = requiredPeriods > 1
+          ? ' • متابعة النشاط ' + (activityIndex + 1) + ' (الحصة ' + activitySession + ' من ' + requiredPeriods + ')'
+          : (activities.length > 1 ? ' • النشاط ' + (activityIndex + 1) : '');
+        const entryId = session.sortDate + '-' + baseSec.replace(/\s+/g, '') + '-' + session.sortTime + '-' + generated.length + '-' + currentWeekEntries.length;
 
         currentWeekEntries.push({
           id: entryId,
-          dayName: cSlot.dayName,
-          dateStr: dInfo.dateStr,
-          time: formatTimeWithArrow(cSlot.time),
-          section: baseSec,
+          dayName: session.dayName,
+          dateStr: session.dateStr,
+          time: session.time,
+          section: session.section,
           level: lvl,
           midan: currentRow.midan || '',
           maqta: currentRow.maqta || '',
           mawrid: currentRow.mawrid || '',
-          ta3alom: currentRow.ta3alom || lessonContent,
-          activitiesList: [lessonContent],
-          content: lessonContent,
-          taqwim: currentRow.isExam ? 'تقويم تحصيلي وفصلّي رسمي' : 'تقويم تكويني ومتابعة الإنجاز الكتابي',
-          note: 'حصة جماعية (القسم كاملاً)',
+          ta3alom: currentRow.ta3alom || activityContent,
+          activitiesList: [activityContent],
+          content: activityContent,
+          taqwim: currentRow.taqwim || (currentRow.isExam ? 'تقويم تحصيلي وفصلّي رسمي' : 'تقويم تكويني ومتابعة الإنجاز'),
+          note: session.note + progressLabel,
           lessonType: currentRow.isExam ? 'assessment' : (currentRow.isIntroductory ? 'introductory' : 'curriculum'),
-          resourceIndex: weekIdx + 1,
-          sourceLearningUnitId: currentRow.id,
+          resourceIndex: lessonIndex + 1,
+          sourceLearningUnitId: currentRow.sourceLearningUnitId,
+          sourceActivityId: currentRow.sourceActivityIds?.[activityIndex] || undefined,
         });
-      });
 
-      // لا نتقدم في البرنامج إلا إذا أُدرجت حصة فعلية لهذا القسم هذا الأسبوع.
-      // هذا يمنع تخطي التعارف أو أي مورد بسبب تاريخ البداية أو العطل.
-      if (currentWeekEntries.length > sectionEntriesBefore) {
-        sectionWeekProgress[baseSec] = weekIdx + 1;
-      }
+        if (activitySession < requiredPeriods) {
+          progress.activitySession = activitySession;
+        } else {
+          progress.activitySession = 0;
+          if (activityIndex + 1 < activities.length) {
+            progress.lessonIndex = lessonIndex;
+            progress.activityIndex = activityIndex + 1;
+          } else if (lessonIndex < teachingRows.length - 1) {
+            progress.lessonIndex = lessonIndex + 1;
+            progress.activityIndex = 0;
+          } else {
+            progress.lessonIndex = lessonIndex;
+            progress.activityIndex = activityIndex;
+          }
+        }
+      });
+      if (weekSessions.length > 0) sectionProgress[baseSec] = progress;
     }
 
     if (currentWeekEntries.length > 0) {
       // ترتيب حصص الأسبوع زمنياً حسب التاريخ ثم وقت الحصة
+      const dateKey = (value: string) => (value.match(/\d{4}-\d{2}-\d{2}/g) || [value]).sort()[0];
       currentWeekEntries.sort((a, b) => {
-        const dateCmp = a.dateStr.localeCompare(b.dateStr);
+        const dateCmp = dateKey(a.dateStr).localeCompare(dateKey(b.dateStr));
         if (dateCmp !== 0) return dateCmp;
         return getTimeMinutes(a.time) - getTimeMinutes(b.time);
       });
@@ -452,5 +529,9 @@ export function generateLogbookEntries({
     currentSunday.setDate(currentSunday.getDate() + 7);
   }
 
-  return generated;
+  // A final lower-bound guard prevents restored/merged group dates from adding earlier lessons.
+  return generated.filter((row) => {
+    const firstDate = (String(row.dateStr || '').match(/\d{4}-\d{2}-\d{2}/g) || [row.dateStr || '']).sort()[0];
+    return firstDate >= startDate;
+  });
 }

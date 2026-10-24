@@ -11,9 +11,17 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-export const isFirebaseConfigValid = Boolean(
-  firebaseConfig.apiKey && firebaseConfig.projectId && firebaseConfig.appId,
-);
+const requiredFirebaseEnvironment = {
+  VITE_FIREBASE_API_KEY: firebaseConfig.apiKey,
+  VITE_FIREBASE_AUTH_DOMAIN: firebaseConfig.authDomain,
+  VITE_FIREBASE_PROJECT_ID: firebaseConfig.projectId,
+  VITE_FIREBASE_APP_ID: firebaseConfig.appId,
+};
+const missingFirebaseEnvironment = Object.entries(requiredFirebaseEnvironment)
+  .filter(([, value]) => !value)
+  .map(([name]) => name);
+
+export const isFirebaseConfigValid = missingFirebaseEnvironment.length === 0;
 
 let appInstance: FirebaseApp | null = null;
 let dbInstance: Firestore | null = null;
@@ -29,7 +37,7 @@ if (isFirebaseConfigValid) {
     console.warn('Firebase initialization warning:', error);
   }
 } else {
-  console.warn('Firebase is disabled: complete the VITE_FIREBASE_* variables in .env.local.');
+  console.warn(`Firebase is disabled: missing ${missingFirebaseEnvironment.join(', ')}. Configure these in .env.local.`);
 }
 
 export const app = appInstance;
