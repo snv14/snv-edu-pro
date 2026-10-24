@@ -12,6 +12,8 @@ export interface DailyLogbookProgramItem {
   ta3alom: string;
   moshkila?: string;
   activities: string[];
+  /** Number of scheduled lessons for each matching activity; defaults to one. */
+  activityPeriods?: number[];
   taqwim?: string;
   sourceLearningUnitId: string;
   sourceActivityIds: string[];
