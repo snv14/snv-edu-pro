@@ -1448,14 +1448,18 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
         setPreviewZoom(100);
         setIsPreviewModalOpen(true);
       }
-      const targetCount = paginatedPages.length + 2;
-      for (let i = 0; i < 30; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 120));
+      const expectedPageCount = paginatedPages.length + 2;
+      let renderedPageCount = 0;
+      for (let i = 0; i < 100; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
         const modalContainer = document.querySelector('.print-preview-root .preview-scroll');
-        const pages = modalContainer?.querySelectorAll<HTMLElement>('[data-preview-export-page="true"]') || [];
-        if (pages.length >= targetCount) break;
+        renderedPageCount = modalContainer?.querySelectorAll<HTMLElement>('[data-preview-export-page="true"]').length || 0;
+        if (renderedPageCount === expectedPageCount) break;
       }
       if (document.fonts?.ready) await document.fonts.ready;
+      if (renderedPageCount !== expectedPageCount) {
+        throw new Error(`الصفحات المعروضة ${renderedPageCount} من أصل ${expectedPageCount}; لم تبدأ الطباعة لتجنب إسقاط صفحات.`);
+      }
       window.print();
     } catch (error) {
       console.error(error);
@@ -1477,33 +1481,27 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
         setIsPreviewModalOpen(true);
       }
 
-      const targetCount = paginatedPages.length + 2;
+      const expectedPageCount = paginatedPages.length + 2; // صفحة التقديم + الغلاف + صفحات المحتوى
       let pages: HTMLElement[] = [];
-      for (let i = 0; i < 35; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 120));
+      // Wait for React to render every page. Never silently export a partial notebook.
+      for (let i = 0; i < 100; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
         const modalContainer = document.querySelector('.print-preview-root .preview-scroll');
-        if (modalContainer) {
-          const contentPages = Array.from(modalContainer.querySelectorAll<HTMLElement>('[data-preview-export-page="true"]'));
-          if (contentPages.length >= targetCount) {
-            pages = contentPages;
-            break;
-          }
-          if (contentPages.length > 0) {
-            pages = contentPages;
-          }
+        const renderedPages = modalContainer
+          ? Array.from(modalContainer.querySelectorAll<HTMLElement>('[data-preview-export-page="true"]'))
+          : [];
+        if (renderedPages.length === expectedPageCount) {
+          pages = renderedPages;
+          break;
         }
+        // Keep the latest count for a useful diagnostic, but do not export it if incomplete.
+        pages = renderedPages;
       }
-      if (!pages.length || pages.length < paginatedPages.length) {
-        const modalContainer = document.querySelector('.print-preview-root .preview-scroll');
-        const fallback = modalContainer?.querySelectorAll<HTMLElement>('[data-preview-export-page="true"]') ||
-          document.querySelectorAll<HTMLElement>('[data-preview-export-page="true"]');
-        if (fallback.length > pages.length) {
-          pages = Array.from(fallback);
-        }
-      }
-      if (!pages.length) throw new Error('تعذر العثور على صفحات الدفتر للتصدير');
       if (document.fonts?.ready) await document.fonts.ready;
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      if (pages.length !== expectedPageCount) {
+        throw new Error(`اكتمل عرض ${pages.length} صفحة فقط من أصل ${expectedPageCount}. أُوقف التصدير لتجنب ملف ناقص.`);
+      }
 
       await generatePreviewMatchPdf(pages, orientation, (current, total) => {
         showToast(`جاري تصدير الصفحة ${current} من ${total}...`);
