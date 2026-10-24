@@ -738,7 +738,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       }
     } catch {}
     return generateLogbookEntries({
-      startDate: deriveDefaultSchoolEntryDate(config.schoolYear || '2026-2027'),
+      startDate: startDate || deriveDefaultSchoolEntryDate(config.schoolYear || '2026-2027'),
       gridRows: AUTO_FILLED_TIMETABLE_ROWS,
       period: 'سنة',
       holidays: [],
@@ -3037,6 +3037,46 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                           const newSettings = getDefaultCalendarSettings(derivedYear, newStart);
                           syncCalendarToDailyLogbook(newStart, newSettings);
                           syncCalendarToAllLevels(newSettings);
+
+                          // أعد توليد الحصص فوراً من التاريخ الذي اختاره الأستاذ،
+                          // ولا تترك الصفوف القديمة المرتبطة بتاريخ فتح الصفحة.
+                          const isGridEmpty = gridRows.every((r) =>
+                            Object.values(r.cells || {}).every((cell: any) => !cell || !String(cell).trim())
+                          );
+                          const effectiveGrid = isGridEmpty ? AUTO_FILLED_TIMETABLE_ROWS : gridRows;
+                          const fresh = generateLogbookEntries({
+                            startDate: newStart,
+                            gridRows: effectiveGrid,
+                            period: period || 'سنة',
+                            holidays,
+                            curriculumDb: CURRICULUM_DATABASE,
+                          });
+
+                          if (fresh.length > 0) {
+                            setRows(fresh);
+                            if (isGridEmpty) setGridRows(effectiveGrid);
+                            try {
+                              localStorage.setItem('daftar_table_v2027', JSON.stringify({
+                                logbookDataVersion: LOGBOOK_DATA_VERSION,
+                                wilaya,
+                                school,
+                                teacher,
+                                subject,
+                                showSubjectInHeader,
+                                showYearInHeader,
+                                gridRows: effectiveGrid,
+                                holidays,
+                                rows: fresh,
+                                startDate: newStart,
+                                period: period || 'سنة',
+                                orientation,
+                              }));
+                            } catch {}
+                            showToast('تم تحديث الدفتر انطلاقاً من التاريخ المحدد.');
+                          } else {
+                            setRows([]);
+                            showToast('لم تُولّد حصص. تحقق من استعمال الزمن والعطل.');
+                          }
                         }
                       }}
                       className="w-full border border-zinc-200 rounded-lg px-2 py-2 text-[12px] bg-white outline-none font-medium focus:border-emerald-600"
