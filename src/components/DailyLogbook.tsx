@@ -187,11 +187,11 @@ const PAGE_INNER_PADDING = '12px';
 const NOTEBOOK_CONTENT_MIN_HEIGHT = '58px';
 
 function getLogbookSortDate(dateStr: string): string {
-  return (String(dateStr || '').match(/\d{4}-\\d{2}-\\d{2}/g) || [String(dateStr || '')]).sort()[0];
+  return (String(dateStr || '').match(/\d{4}-\d{2}-\d{2}/g) || [String(dateStr || '')]).sort()[0];
 }
 
 function getSchoolWeekKey(dateStr: string): string {
-  const date = String(dateStr || '').match(/\d{4}-\\d{2}-\\d{2}/)?.[0] || dateStr;
+  const date = String(dateStr || '').match(/\d{4}-\d{2}-\d{2}/)?.[0] || dateStr;
   const d = new Date(date + 'T12:00:00');
   if (Number.isNaN(d.getTime())) return dateStr;
   d.setDate(d.getDate() - d.getDay());
@@ -199,8 +199,8 @@ function getSchoolWeekKey(dateStr: string): string {
 }
 
 function getSchoolWeekNumber(dateStr: string, startDate: string): number {
-  const startDateOnly = String(startDate || '').match(/\d{4}-\\d{2}-\\d{2}/)?.[0] || startDate;
-  const dateOnly = String(dateStr || '').match(/\d{4}-\\d{2}-\\d{2}/)?.[0] || dateStr;
+  const startDateOnly = String(startDate || '').match(/\d{4}-\d{2}-\d{2}/)?.[0] || startDate;
+  const dateOnly = String(dateStr || '').match(/\d{4}-\d{2}-\d{2}/)?.[0] || dateStr;
   const start = new Date(startDateOnly + 'T12:00:00');
   const current = new Date(dateOnly + 'T12:00:00');
   if (Number.isNaN(start.getTime()) || Number.isNaN(current.getTime())) return 1;
