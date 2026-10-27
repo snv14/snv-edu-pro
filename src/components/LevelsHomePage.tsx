@@ -10,7 +10,6 @@ import {
   TreePine,
   Sprout,
   Globe2,
-  Bot,
   Sparkles,
   Info,
   Layers,
@@ -37,7 +36,6 @@ interface LevelsHomePageProps {
   onSelectYear: (level: '1am' | '2am' | '3am' | '4am', subTab?: 'memos' | 'distribution') => void;
   onOpenLogbook: () => void;
   onOpenSettings: () => void;
-  onOpenAssistant?: () => void;
   onOpenInfoModal?: (tab: 'about' | 'guide' | 'contact') => void;
   config: MemoConfig;
   curriculumBackground?: string;
@@ -47,7 +45,6 @@ export const LevelsHomePage: React.FC<LevelsHomePageProps> = ({
   onSelectYear,
   onOpenLogbook,
   onOpenSettings,
-  onOpenAssistant,
   onOpenInfoModal,
   config,
   curriculumBackground,
@@ -339,46 +336,7 @@ export const LevelsHomePage: React.FC<LevelsHomePageProps> = ({
           </div>
         </div>
 
-        {/* ═══════════════════════════════════════════════════════════════
-            قسم المساعد البيداغوجي الذكي (AI Pedagogical Assistant)
-           ═══════════════════════════════════════════════════════════════ */}
-        <div className="p-6 sm:p-7 rounded-3xl bg-gradient-to-l from-teal-900 via-teal-800 to-emerald-900 text-white shadow-xl relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-          <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
-            <div className="space-y-3 text-right">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-emerald-200 text-xs font-bold border border-white/10">
-                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                <span>مساعد بيداغوجي متخصص في منهاج علوم الطبيعة والحياة</span>
-              </div>
-              <h3 className="text-2xl sm:text-3xl font-black">
-                المساعد الذكي للأستاذ في التحضير والتقويم
-              </h3>
-              <p className="text-teal-100 text-sm max-w-2xl leading-relaxed">
-                استشر المساعد الذكي في صياغة الفرضيات، وضعيات الانطلاق، تكييف النشاطات التعليمية،
-                واقتراح بروتوكولات تجريبية مطابقة للتوجيهات البيداغوجية الرسمية لوزارة التربية الوطنية.
-              </p>
-              <div className="flex flex-wrap gap-2 pt-1 text-xs">
-                <span className="px-3 py-1 rounded-lg bg-white/10 text-white font-medium">✓ صياغة المشكل العلمي</span>
-                <span className="px-3 py-1 rounded-lg bg-white/10 text-white font-medium">✓ اقتراح استراتيجيات تعليمية</span>
-                <span className="px-3 py-1 rounded-lg bg-white/10 text-white font-medium">✓ تحليل النشاطات التجريبية</span>
-                <span className="px-3 py-1 rounded-lg bg-white/10 text-white font-medium">✓ معايير التقويم البيداغوجي</span>
-              </div>
-            </div>
 
-            <div className="shrink-0 w-full sm:w-auto flex flex-col sm:flex-row items-center gap-3">
-              <button
-                type="button"
-                id="home-open-assistant-btn"
-                onClick={onOpenAssistant}
-                className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-amber-400 hover:bg-amber-300 text-teal-950 font-black text-sm flex items-center justify-center gap-2 shadow-lg transition cursor-pointer"
-              >
-                <Bot className="w-5 h-5 text-teal-950" />
-                <span>فتح المساعد الذكي الآن</span>
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        </div>
 
         {/* ═══════════════════════════════════════════════════════════════
             قسم معلومات وميزات المنصة البيداغوجية

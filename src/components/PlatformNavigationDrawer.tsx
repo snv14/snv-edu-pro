@@ -6,7 +6,6 @@ import {
   BookOpenCheck,
   UserCog,
   Database,
-  Bot,
   Info,
   Mail,
   HelpCircle,
@@ -28,7 +27,6 @@ interface PlatformNavigationDrawerProps {
   onClose: () => void;
   activeSection: string;
   onNavigate: (section: string) => void;
-  onOpenAssistant: () => void;
   onOpenInfoModal: (tab: 'about' | 'contact' | 'guide') => void;
   config: MemoConfig;
 }
@@ -38,7 +36,6 @@ export const PlatformNavigationDrawer: React.FC<PlatformNavigationDrawerProps> =
   onClose,
   activeSection,
   onNavigate,
-  onOpenAssistant,
   onOpenInfoModal,
   config,
 }) => {
@@ -240,26 +237,7 @@ export const PlatformNavigationDrawer: React.FC<PlatformNavigationDrawerProps> =
               أدوات وخدمات المنصة
             </div>
 
-            {/* Smart AI Assistant Button */}
-            <button
-              type="button"
-              onClick={() => {
-                onClose();
-                onOpenAssistant();
-              }}
-              className="w-full flex items-center justify-between p-3 rounded-2xl bg-gradient-to-l from-teal-700 to-emerald-800 text-white font-black text-[13px] shadow-sm hover:opacity-95 transition cursor-pointer group"
-            >
-              <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center">
-                  <Bot className="w-4 h-4 text-emerald-200" />
-                </div>
-                <div className="text-right">
-                  <div>المساعد البيداغوجي الذكي</div>
-                  <div className="text-[10.5px] text-teal-100 font-medium">استشارات وتحضير التجارب</div>
-                </div>
-              </div>
-              <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
-            </button>
+
 
             {/* About Platform Button */}
             <button

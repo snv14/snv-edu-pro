@@ -35,7 +35,6 @@ import {
 } from 'lucide-react';
 import { LessonMemo, MemoConfig, Activity } from '../types';
 import { TeacherOfficialStamp } from './TeacherOfficialStamp';
-// دفتر مستقل: تاريخ البداية يُدار داخل الدفتر ولا يُزامَن مع التدرج السنوي.
 import { generateLogbookEntries } from '../utils/dailyLogbookGenerator';
 import { DailyLogSheetTemplate } from './DailyLogSheetTemplate';
 import { DAILY_LOGBOOK_PROGRAM_1AM } from '../data/dailyLogbookProgram1am';
@@ -125,11 +124,14 @@ export interface TimetableGridRow {
   cells: Record<string, string>;
 }
 
+export type CalendarEventType = 'holiday' | 'exam' | 'test' | 'official_exam';
+
 export interface HolidayEntry {
   id?: string;
   startDate: string;
   endDate?: string;
   label: string;
+  type?: CalendarEventType;
 }
 
 export interface LogEntry {
@@ -672,9 +674,20 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
   const [newHolidayStartDate, setNewHolidayStartDate] = useState<string>('');
   const [newHolidayEndDate, setNewHolidayEndDate] = useState<string>('');
   const [newHolidayLabel, setNewHolidayLabel] = useState<string>('');
+  const [newHolidayType, setNewHolidayType] = useState<CalendarEventType>('holiday');
 
   // Generation controls
   const [period, setPeriod] = useState<string>('شهر');
+  const [sessionsPerActivity, setSessionsPerActivity] = useState<number>(() => {
+    try {
+      const item = localStorage.getItem('daftar_table_v2027');
+      if (item) {
+        const parsed = JSON.parse(item);
+        if (parsed.sessionsPerActivity) return Number(parsed.sessionsPerActivity) || 1;
+      }
+    } catch {}
+    return 1;
+  });
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait');
   const pageDimensions = getPageDimensions(orientation);
   const [startDate, setStartDate] = useState<string>(() => {
@@ -840,8 +853,13 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
             startDate: h.startDate || h.date || '',
             endDate: h.endDate || h.startDate || h.date || '',
             label: h.label || 'عطلة',
+            type: h.type || 'holiday',
           })).filter((h: HolidayEntry) => !!h.startDate);
           if (normalized.length > 0) setHolidays(normalized);
+        }
+
+        if (parsed.sessionsPerActivity) {
+          setSessionsPerActivity(Number(parsed.sessionsPerActivity) || 1);
         }
 
         if (parsed.startDate) {
@@ -953,6 +971,8 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
 
   // Save to localStorage on change
   useEffect(() => {
+    // Only persist rows that are on or after startDate to prevent orphan rows from prior dates
+    const filteredRows = startDate ? rows.filter((r) => r.dateStr >= startDate) : rows;
     const dataToSave = {
       logbookDataVersion: LOGBOOK_DATA_VERSION,
       wilaya,
@@ -963,9 +983,10 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       showYearInHeader,
       gridRows,
       holidays,
-      rows,
+      rows: filteredRows,
       startDate,
       period,
+      sessionsPerActivity,
       orientation,
     };
     localStorage.setItem(
@@ -975,7 +996,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
     if ((window as any).syncToCloud) {
       (window as any).syncToCloud('logbook', dataToSave);
     }
-  }, [wilaya, school, teacher, subject, config.schoolYear, showSubjectInHeader, showYearInHeader, gridRows, holidays, rows, startDate, period, orientation]);
+  }, [wilaya, school, teacher, subject, config.schoolYear, showSubjectInHeader, showYearInHeader, gridRows, holidays, rows, startDate, period, sessionsPerActivity, orientation]);
 
   // Keyboard navigation for preview modal
   useEffect(() => {
@@ -1188,6 +1209,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       period: period || 'سنة',
       holidays,
       curriculumDb: CURRICULUM_DATABASE,
+      sessionsPerActivity,
     });
 
     if (fresh.length > 0) {
@@ -1206,6 +1228,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
           rows: fresh,
           startDate: effectiveStart,
           period: period || 'سنة',
+          sessionsPerActivity,
           orientation,
         };
         localStorage.setItem('daftar_table_v2027', JSON.stringify(dataToSave));
@@ -1230,6 +1253,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       period: period || 'سنة',
       holidays,
       curriculumDb: CURRICULUM_DATABASE,
+      sessionsPerActivity,
     });
     if (fresh.length > 0) {
       setRows(fresh);
@@ -1327,7 +1351,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       document.body.appendChild(a);
       a.click();
       a.remove();
-      setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+      setTimeout(() => window.URL.revokeObjectURL(url), 10000);
       showToast('✅ تم تصدير جدول استعمال الزمن كملف Word بنجاح');
     } catch (err) {
       console.error(err);
@@ -1400,7 +1424,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       document.body.appendChild(a);
       a.click();
       a.remove();
-      setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+      setTimeout(() => window.URL.revokeObjectURL(url), 10000);
       showToast('✅ تم تصدير الدفتر كملف Word قابل للتعديل بنجاح');
     } catch (error) {
       console.error(error);
@@ -1671,7 +1695,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
 
   const handleAddHoliday = () => {
     if (!newHolidayStartDate) {
-      displayUserAlert('يرجى تحديد تاريخ بداية العطلة');
+      displayUserAlert('يرجى تحديد تاريخ بداية العطلة أو المناسبة');
       return;
     }
     const end = newHolidayEndDate || newHolidayStartDate;
@@ -1679,18 +1703,49 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       displayUserAlert('تاريخ النهاية يجب أن يكون بعد تاريخ البداية');
       return;
     }
+    const defaultLabel =
+      newHolidayType === 'test'
+        ? 'فرض محروس'
+        : newHolidayType === 'exam'
+        ? 'اختبار فصلي'
+        : newHolidayType === 'official_exam'
+        ? 'امتحان رسمي'
+        : 'عطلة رسمية';
+
     setHolidays((prev) =>
       [...prev, {
         id: Math.random().toString(36).slice(2, 7),
         startDate: newHolidayStartDate,
         endDate: end,
-        label: newHolidayLabel || 'عطلة رسمية'
+        label: newHolidayLabel.trim() || defaultLabel,
+        type: newHolidayType,
       }].sort((a, b) => a.startDate.localeCompare(b.startDate))
     );
     setNewHolidayStartDate('');
     setNewHolidayEndDate('');
     setNewHolidayLabel('');
-    showToast('تمت إضافة فترة العطلة بنجاح');
+    showToast('تمت إضافة المناسبة بنجاح');
+  };
+
+  const handleLoadOfficialCalendar = () => {
+    const yearMatch = (config.schoolYear || '2026-2027').match(/(20\d{2})/);
+    const startYear = yearMatch ? Number(yearMatch[1]) : 2026;
+    const nextYear = startYear + 1;
+
+    const officialEvents: HolidayEntry[] = [
+      { id: 'hol-autumn', startDate: `${startYear}-10-27`, endDate: `${startYear}-11-03`, label: 'عطلة الخريف', type: 'holiday' },
+      { id: 'test-trim1', startDate: `${startYear}-11-10`, endDate: `${startYear}-11-14`, label: 'فروض الفصل الأول', type: 'test' },
+      { id: 'exam-trim1', startDate: `${startYear}-12-01`, endDate: `${startYear}-12-05`, label: 'اختبارات الفصل الأول', type: 'exam' },
+      { id: 'hol-winter', startDate: `${startYear}-12-19`, endDate: `${nextYear}-01-04`, label: 'عطلة الشتاء', type: 'holiday' },
+      { id: 'test-trim2', startDate: `${nextYear}-02-08`, endDate: `${nextYear}-02-12`, label: 'فروض الفصل الثاني', type: 'test' },
+      { id: 'exam-trim2', startDate: `${nextYear}-03-01`, endDate: `${nextYear}-03-05`, label: 'اختبارات الفصل الثاني', type: 'exam' },
+      { id: 'hol-spring', startDate: `${nextYear}-03-19`, endDate: `${nextYear}-04-05`, label: 'عطلة الربيع', type: 'holiday' },
+      { id: 'test-trim3', startDate: `${nextYear}-04-26`, endDate: `${nextYear}-04-30`, label: 'فروض الفصل الثالث', type: 'test' },
+      { id: 'exam-trim3', startDate: `${nextYear}-05-24`, endDate: `${nextYear}-05-28`, label: 'اختبارات الفصل الثالث / شهادة BEM', type: 'exam' },
+    ];
+
+    setHolidays(officialEvents);
+    showToast('✅ تم تحميل الرزنامة الرسمية (العطل، الفروض، والاختبارات) بنجاح');
   };
 
   const handleOpenPreview = (mode: 'all' | 'single') => {
@@ -2911,23 +2966,47 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
 
             {/* Official Holidays Card */}
             <div className="rounded-xl border border-zinc-200 overflow-hidden">
-              <div className="bg-zinc-50 px-4 py-2.5 flex items-center gap-2 text-[13px] font-bold border-b border-zinc-200">
-                <Calendar className="w-4 h-4 text-zinc-700" />
-                <span>العطل الرسمية + الجمعة</span>
-              </div>
-              <div className="p-3 space-y-2 max-h-[190px] overflow-auto">
-                <div className="text-[11px] bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-2.5 py-1.5">
-                  الجمعة عطلة تلقائية + العطل أدناه محجوبة من التوليد
+              <div className="bg-zinc-50 px-4 py-2.5 flex items-center justify-between text-[13px] font-bold border-b border-zinc-200">
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-zinc-700" />
+                  <span>الرزنامة الرسمية (العطل والفروض والاختبارات)</span>
                 </div>
+                <button
+                  type="button"
+                  onClick={handleLoadOfficialCalendar}
+                  className="text-[10px] bg-emerald-50 hover:bg-emerald-100 text-[#064e3b] border border-emerald-300 font-bold px-2 py-0.5 rounded cursor-pointer"
+                  title="تحميل العطل والفروض والاختبارات الرسمية بنقرة واحدة"
+                >
+                  تحميل الرزنامة الرسمية
+                </button>
+              </div>
+              <div className="p-3 space-y-2 max-h-[220px] overflow-auto">
+                <div className="text-[11px] bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-2.5 py-1.5 leading-relaxed">
+                  الجمعة عطلة تلقائية. الفروض والاختبارات تُدرج في الدفتر كتقويم، والعطل تُستثنى دون تقديم المنهاج.
+                </div>
+                {holidays.length === 0 && (
+                  <div className="text-[11px] text-zinc-500 text-center py-2">
+                    لا توجد مناسبات مضافة. انقر «تحميل الرزنامة الرسمية» لإضافتها فوراً.
+                  </div>
+                )}
                 {holidays.map((h, idx) => (
                   <div
                     key={idx}
                     className="flex items-center gap-2 text-[11px] border border-zinc-200 rounded-lg px-2.5 py-1.5 bg-white"
                   >
-                    <span className="font-mono text-[11px] bg-zinc-900 text-white px-1.5 py-0.5 rounded">
+                    <span className="font-mono text-[10px] bg-zinc-900 text-white px-1.5 py-0.5 rounded">
                       {h.startDate} {h.endDate && h.endDate !== h.startDate ? ' - ' + h.endDate : ''}
                     </span>
                     <span className="flex-1 font-medium text-zinc-800">{h.label}</span>
+                    {h.type === 'test' ? (
+                      <span className="text-[9.5px] font-bold bg-amber-100 text-amber-800 border border-amber-200 px-1.5 py-0.5 rounded">فرض</span>
+                    ) : h.type === 'exam' ? (
+                      <span className="text-[9.5px] font-bold bg-purple-100 text-purple-800 border border-purple-200 px-1.5 py-0.5 rounded">اختبار</span>
+                    ) : h.type === 'official_exam' ? (
+                      <span className="text-[9.5px] font-bold bg-rose-100 text-rose-800 border border-rose-200 px-1.5 py-0.5 rounded">امتحان رسمي</span>
+                    ) : (
+                      <span className="text-[9.5px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 px-1.5 py-0.5 rounded">عطلة</span>
+                    )}
                     <button
                       type="button"
                       onClick={() => setHolidays((prev) => prev.filter((_, i) => i !== idx))}
@@ -2955,12 +3034,22 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                     title="تاريخ النهاية (اختياري)"
                   />
                 </div>
-                <div className="flex gap-2">
+                <div className="grid grid-cols-[110px_1fr_auto] gap-2">
+                  <select
+                    value={newHolidayType}
+                    onChange={(e) => setNewHolidayType(e.target.value as CalendarEventType)}
+                    className="border border-zinc-200 rounded-lg px-2 py-1.5 text-[11px] font-bold bg-white outline-none"
+                  >
+                    <option value="holiday">عطلة مدرسية</option>
+                    <option value="test">فرض محروس</option>
+                    <option value="exam">اختبار فصلي</option>
+                    <option value="official_exam">امتحان رسمي</option>
+                  </select>
                   <input
                     value={newHolidayLabel}
                     onChange={(e) => setNewHolidayLabel(e.target.value)}
-                    placeholder="المناسبة"
-                    className="flex-1 border border-zinc-200 rounded-lg px-2 py-1.5 text-[12px] bg-white outline-none"
+                    placeholder="اسم المناسبة..."
+                    className="border border-zinc-200 rounded-lg px-2 py-1.5 text-[12px] bg-white outline-none"
                   />
                   <button
                     type="button"
@@ -2999,6 +3088,27 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                     </p>
                   </div>
                   <div>
+                    <label className="block text-[10px] font-bold text-zinc-600 mb-1">الحصص المطلوبة لكل نشاط</label>
+                    <select
+                      value={sessionsPerActivity}
+                      onChange={(e) => {
+                        const val = Number(e.target.value) || 1;
+                        setSessionsPerActivity(val);
+                      }}
+                      className="w-full border border-zinc-200 rounded-lg px-2 py-2 text-[12px] font-bold bg-white outline-none"
+                    >
+                      <option value={1}>1 حصة لكل نشاط (افتراضي)</option>
+                      <option value={2}>حصتان متتاليتان لكل نشاط (2)</option>
+                      <option value={3}>3 حصص متتالية لكل نشاط (3)</option>
+                    </select>
+                    <p className="text-[10px] text-zinc-500 mt-1">
+                      توزيع النشاط على حصص متتابعة
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
                     <label className="block text-[10px] font-bold text-zinc-600 mb-1">تاريخ بداية الدفتر (الدخول المدرسي)</label>
                     <input
                       type="date"
@@ -3007,8 +3117,6 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                         const newStart = e.target.value;
                         setStartDate(newStart);
                         if (newStart) {
-                          // أعد توليد الحصص فوراً من التاريخ الذي اختاره الأستاذ،
-                          // ولا تترك الصفوف القديمة المرتبطة بتاريخ فتح الصفحة.
                           const isGridEmpty = gridRows.every((r) =>
                             Object.values(r.cells || {}).every((cell: any) => !cell || !String(cell).trim())
                           );
@@ -3019,6 +3127,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                             period: period || 'سنة',
                             holidays,
                             curriculumDb: CURRICULUM_DATABASE,
+                            sessionsPerActivity,
                           });
 
                           if (fresh.length > 0) {
@@ -3038,6 +3147,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                                 rows: fresh,
                                 startDate: newStart,
                                 period: period || 'سنة',
+                                sessionsPerActivity,
                                 orientation,
                               }));
                             } catch {}
@@ -3146,7 +3256,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
         </aside>
 
         {/* Main Printable Area */}
-        <main className="bg-[#edf9f6] p-2 md:p-6 lg:p-8">
+        <main className={`bg-[#edf9f6] p-2 md:p-6 lg:p-8 ${isPreviewModalOpen ? 'print:hidden' : ''}`}>
           <div id="pages-start" className="no-print mb-4 flex items-center justify-between gap-2 text-[12px] text-zinc-600">
             <div className="flex items-center gap-2">
               <FileStack className="w-4 h-4 text-[#064e3b]" />

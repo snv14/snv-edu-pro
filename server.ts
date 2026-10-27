@@ -5,7 +5,8 @@ import dotenv from 'dotenv';
 import { createServer as createViteServer } from 'vite';
 import { apiApp } from './src/server/api';
 
-dotenv.config();
+dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

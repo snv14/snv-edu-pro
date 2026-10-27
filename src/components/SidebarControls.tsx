@@ -1,14 +1,7 @@
-import React, { useRef, useState, useEffect } from 'react';
-import { Calendar, Hash, Stamp, Upload, GraduationCap, Building2, Layers, Columns, BookmarkCheck, Copy, Check, CalendarDays } from 'lucide-react';
+import React, { useState } from 'react';
+import { GraduationCap, Layers, Columns, BookmarkCheck, Copy, Check } from 'lucide-react';
 import { LessonMemo, MemoConfig } from '../types';
 import { LEVELS, MAQATI_BY_LEVEL } from '../data/lessonsData';
-import { 
-  deriveDefaultSchoolEntryDate, 
-  deriveSchoolYearFromDate, 
-  getDefaultCalendarSettings, 
-  syncCalendarToAllLevels,
-  ANNUAL_STORAGE_KEY 
-} from '../utils/annualDistributionDateUtils';
 
 interface SidebarControlsProps {
   selectedLevel: '1am' | '2am' | '3am' | '4am';
@@ -56,7 +49,6 @@ export const SidebarControls: React.FC<SidebarControlsProps> = ({
   showToast,
   maqatiList: providedMaqatiList,
 }) => {
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [copiedIrsae, setCopiedIrsae] = useState(false);
 
   const handleCopyIrsae = () => {
@@ -65,17 +57,6 @@ export const SidebarControls: React.FC<SidebarControlsProps> = ({
     setCopiedIrsae(true);
     showToast('تم نسخ إرساء الموارد بنجاح إلى الحافظة');
     setTimeout(() => setCopiedIrsae(false), 2000);
-  };
-
-  const handleStampUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      setConfig((prev) => ({ ...prev, teacherStamp: reader.result as string }));
-      showToast('تم رفع ختم الأستاذ بنجاح');
-    };
-    reader.readAsDataURL(file);
   };
 
   const maqatiList = providedMaqatiList || MAQATI_BY_LEVEL[selectedLevel] || [];
@@ -393,170 +374,7 @@ export const SidebarControls: React.FC<SidebarControlsProps> = ({
           </div>
         )}
 
-        {/* 8- الهوية والإدارة */}
-        <div className="border-t border-gray-200 pt-4 space-y-3.5">
-          <div className="flex items-center gap-2 font-bold text-[13px] text-gray-800">
-            <Building2 className="w-4 h-4 text-[#c2185b]" />
-            8- المؤسسة والتوقيعات
-          </div>
 
-          <div>
-            <label className="block text-[11px] font-bold mb-1 text-gray-600">
-              مديرية التربية
-            </label>
-            <input
-              id="input-directorate"
-              type="text"
-              value={config.directorate}
-              onChange={(e) => setConfig((prev) => ({ ...prev, directorate: e.target.value }))}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[12.5px] bg-white focus:outline-none focus:border-[#c2185b]"
-              placeholder="مديرية التربية تيارت"
-            />
-          </div>
-
-          <div>
-            <label className="block text-[11px] font-bold mb-1 text-gray-600">
-              اسم المتوسطة
-            </label>
-            <input
-              id="input-school-name"
-              type="text"
-              value={config.schoolName}
-              onChange={(e) => setConfig((prev) => ({ ...prev, schoolName: e.target.value }))}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[12.5px] bg-white focus:outline-none focus:border-[#c2185b]"
-              placeholder="شيخاوي عمر عين الذهب"
-            />
-          </div>
-
-          <div>
-            <label className="block text-[11px] font-bold mb-1 text-gray-600">
-              اسم الأستاذ(ة)
-            </label>
-            <input
-              id="input-teacher-name"
-              type="text"
-              value={config.teacherName}
-              onChange={(e) => setConfig((prev) => ({ ...prev, teacherName: e.target.value }))}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[12.5px] bg-white focus:outline-none focus:border-[#c2185b]"
-              placeholder="بغداد الطيب"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-2.5">
-            <div>
-              <label className="block text-[11px] font-bold mb-1 text-gray-600 flex items-center gap-1">
-                <Calendar className="w-3 h-3" /> الموسم
-              </label>
-              <input
-                id="input-school-year"
-                type="text"
-                value={config.schoolYear}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setConfig((prev) => ({ ...prev, schoolYear: val }));
-                  if (val && /(20\d{2})/.test(val)) {
-                    const derivedStart = deriveDefaultSchoolEntryDate(val);
-                    const newSettings = getDefaultCalendarSettings(val, derivedStart);
-                    syncCalendarToAllLevels(newSettings);
-                  }
-                }}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[12.5px] bg-white focus:outline-none focus:border-[#c2185b]"
-                placeholder="2025 - 2026"
-              />
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold mb-1 text-gray-600 flex items-center gap-1">
-                <Hash className="w-3 h-3" /> رقم المذكرة
-              </label>
-              <input
-                id="input-memo-number"
-                type="text"
-                value={config.memoNumber}
-                onChange={(e) => setConfig((prev) => ({ ...prev, memoNumber: e.target.value }))}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[12.5px] bg-[#fff0f5] border-[#c2185b]/30 focus:outline-none focus:border-[#c2185b]"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-[11px] font-bold mb-1 text-gray-600 flex items-center justify-between">
-              <span className="flex items-center gap-1">
-                <CalendarDays className="w-3 h-3 text-emerald-700" /> تاريخ الدخول المدرسي
-              </span>
-              <span className="text-[10px] text-emerald-800 font-normal">تطبيق فوري على التدرج</span>
-            </label>
-            <input
-              type="date"
-              defaultValue={deriveDefaultSchoolEntryDate(config.schoolYear)}
-              onChange={(e) => {
-                const newDate = e.target.value;
-                if (newDate) {
-                  const derivedYear = deriveSchoolYearFromDate(newDate);
-                  setConfig((prev) => ({ ...prev, schoolYear: derivedYear }));
-                  const newSettings = getDefaultCalendarSettings(derivedYear, newDate);
-                  syncCalendarToAllLevels(newSettings);
-                  showToast(`تم اعتماد تاريخ الدخول ${newDate} وتطبيقه على كامل التدرج ودفتر النصوص 📅`);
-                }
-              }}
-              className="w-full border border-emerald-300 rounded-lg px-3 py-1.5 text-[12.5px] bg-emerald-50/50 font-bold text-emerald-950 focus:outline-none focus:border-emerald-600"
-            />
-          </div>
-
-          <div>
-            <label className="block text-[11px] font-bold mb-1.5 text-gray-600">
-              ختم الأستاذ
-            </label>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleStampUpload}
-              className="hidden"
-            />
-            <div className="flex gap-2">
-              <button
-                id="btn-upload-stamp"
-                type="button"
-                onClick={() => {
-                  fileInputRef.current?.click();
-                  showToast('اختر صورة الختم');
-                }}
-                className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-white border border-gray-300 text-[12px] font-bold hover:bg-gray-50 transition"
-              >
-                <Upload className="w-4 h-4 text-gray-600" />
-                رفع الختم
-              </button>
-              {config.teacherStamp && (
-                <button
-                  id="btn-remove-stamp"
-                  type="button"
-                  onClick={() => {
-                    setConfig((prev) => ({ ...prev, teacherStamp: null }));
-                    showToast('تم حذف الختم');
-                  }}
-                  className="px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-red-600 text-[12px] font-bold hover:bg-red-100 transition"
-                >
-                  حذف
-                </button>
-              )}
-            </div>
-
-            {config.teacherStamp ? (
-              <div className="mt-2.5 w-[110px] h-[110px] border-2 border-dashed border-[#c2185b]/40 rounded-full overflow-hidden bg-[#fff0f5] flex items-center justify-center mx-auto p-1">
-                <img
-                  src={config.teacherStamp}
-                  alt="ختم"
-                  className="w-full h-full object-contain"
-                />
-              </div>
-            ) : (
-              <div className="mt-2.5 w-[110px] h-[110px] border-2 border-dashed border-gray-300 rounded-full flex flex-col items-center justify-center gap-1 mx-auto text-gray-400">
-                <Stamp className="w-5 h-5 text-gray-400" />
-                <span className="text-[10px] font-medium">ختم الأستاذ</span>
-              </div>
-            )}
-          </div>
-        </div>
       </div>
 
       <div className="p-4 border-t border-gray-200 text-[11px] text-gray-400 leading-4">

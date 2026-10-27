@@ -120,7 +120,7 @@ const getExportLessonContent = (log: LogEntry, previous?: LogEntry): string => {
   if (learningOutcome && !activities.includes(learningOutcome)) {
     parts.push(`تعلم المورد: ${learningOutcome}`);
   }
-  if (activities.length) parts.push(`الأنشطة: ${activities.join(' + ')}');
+  if (activities.length) parts.push(`الأنشطة: ${activities.join(' + ')}`);
 
   const assessment = clean(log.taqwim);
   if (assessment && !activities.includes(assessment) && assessment !== learningOutcome) {
@@ -227,17 +227,12 @@ export const generateLogbookDocx = async (
     })();
 
     if (previousWeekKey && currentWeekKey !== previousWeekKey) {
-      for (let weekSpaceIdx = 0; weekSpaceIdx < 2; weekSpaceIdx++) {
-        rows.push(new TableRow({
-          children: [
-            createCell("", false, "FFFFFF", 1, 1, 18, AlignmentType.CENTER, 16),
-            createCell("", false, "FFFFFF", 1, 1, 18, AlignmentType.CENTER, 15),
-            createCell("", false, "FFFFFF", 1, 1, 18, AlignmentType.CENTER, 13),
-            createCell("", false, "FFFFFF", 1, 1, 18, AlignmentType.RIGHT, 41),
-            createCell("", false, "FFFFFF", 1, 1, 18, AlignmentType.CENTER, 15)
-          ]
-        }));
-      }
+      rows.push(new TableRow({
+        cantSplit: true,
+        children: [
+          createCell("— فاصل الأسبوع الدراسي —", true, theme.soft, 5, 1, 14, AlignmentType.CENTER),
+        ]
+      }));
     }
 
     previousWeekKey = currentWeekKey;
@@ -269,20 +264,6 @@ export const generateLogbookDocx = async (
       ]
     }));
   });
-
-  // صفوف إضافية فارغة داخل جدول Word نفسه؛ تبقى خلاياها قابلة للنقر والكتابة والتعديل.
-  for (let blankRow = 0; blankRow < 3; blankRow++) {
-    rows.push(new TableRow({
-      cantSplit: true,
-      children: [
-        createCell("", false, "FFFFFF", 1, 1, 18, AlignmentType.CENTER, 16),
-        createCell("", false, "FFFFFF", 1, 1, 18, AlignmentType.CENTER, 15),
-        createCell("", false, "FFFFFF", 1, 1, 18, AlignmentType.CENTER, 13),
-        createCell("", false, "FFFFFF", 1, 1, 18, AlignmentType.RIGHT, 41),
-        createCell("", false, "FFFFFF", 1, 1, 18, AlignmentType.RIGHT, 15),
-      ],
-    }));
-  }
 
   // Front Page Content
   const frontPageChildren: any[] = [

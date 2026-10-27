@@ -196,6 +196,7 @@ export const generateDistributionDocx = async (
       }
 
       rows.push(new TableRow({
+        tableHeader: true,
         children: [
           new TableCell({ width: { size: 7, type: WidthType.PERCENTAGE }, shading: { fill: "F8F8F8", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("الشهر", true, "000000", 20)] }),
           new TableCell({ width: { size: 10, type: WidthType.PERCENTAGE }, shading: { fill: "F8F8F8", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("الأسابيع", true, "000000", 20)] }),

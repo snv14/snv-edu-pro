@@ -8,7 +8,8 @@ import { buildGeminiSystemPrompt } from '../services/geminiPrompts';
 import { generateTextWithGateway, getAIProviderStatus } from './aiGateway';
 import { sourcePriorityOf } from '../services/aiSourcePriority';
 
-dotenv.config();
+dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 export const apiApp = express();
 
@@ -231,13 +232,41 @@ apiApp.post('/api/gemini/smart-assistant', async (req, res) => {
       String(question).slice(0, 12000),
     ].join('\n\n');
 
-    // عند غياب المرفقات والبحث الويب، يسمح الممر النصي باستخدام مزود بديل.
-    if (attachmentInputs.length === 0 && !useWeb) {
-      const generated = await generateTextWithGateway(context);
-      return res.json({ text: generated.text, provider: generated.provider, sources: [], webSearchQueries: [], usedWeb: false, usedAttachments: [] });
+    // معالجة الأسئلة النصية (بدون مرفقات): إذا غاب Gemini أو طُلب مزود بديل، يتم الرد عبر المزود النصي المتاح حتى لو كان الويب مفعلاً
+    const geminiKeyAvailable = Boolean(apiKey);
+
+    if (attachmentInputs.length === 0 && !geminiKeyAvailable) {
+      try {
+        const generated = await generateTextWithGateway(context);
+        return res.json({
+          text: generated.text,
+          provider: generated.provider,
+          sources: [],
+          webSearchQueries: [],
+          usedWeb: false,
+          usedAttachments: [],
+          fallbackNotice: useWeb
+            ? `تمت صياغة الإجابة عبر المزود الاحتياطي (${generated.provider}) لعدم توفر مفتاح GEMINI_API_KEY على الخادم. أُجيب على السؤال كنص تربوي مباشر دون بحث ويب، لأن البحث الشبكي التفاعلي يتطلب تفعيل Gemini.`
+            : `تمت الإجابة عبر المزود الاحتياطي (${generated.provider}).`,
+        });
+      } catch (fallbackError: any) {
+        return res.status(503).json({
+          error: `تعذر الاتصال بالمزود النصي الاحتياطي: ${fallbackError?.message || 'خطأ غير معروف'}. يرجى إضافة GEMINI_API_KEY على الخادم أو التحقق من مفاتيح المزودات البديلة.`,
+        });
+      }
     }
 
-    if (!apiKey) return res.status(503).json({ error: 'لم يتم إعداد مفتاح Gemini على الخادم. أضف GEMINI_API_KEY أو GOOGLE_API_KEY في أسرار النشر.' });
+    if (attachmentInputs.length > 0 && !geminiKeyAvailable) {
+      return res.status(503).json({
+        error: 'يتطلب تحليل المرفقات (الصور، ملفات PDF، والمستندات) توفير مفتاح GEMINI_API_KEY على الخادم.',
+        provider: 'gemini_required',
+      });
+    }
+
+    if (!apiKey) {
+      return res.status(503).json({ error: 'لم يتم إعداد أي مزود ذكاء اصطناعي متاح على الخادم. يرجى إضافة GEMINI_API_KEY في ملف البيئة.' });
+    }
+
     const ai = new GoogleGenAI({ apiKey, httpOptions: { headers: { 'User-Agent': 'aistudio-build' } } });
     const uploadedFiles: any[] = [];
 
@@ -258,17 +287,42 @@ apiApp.post('/api/gemini/smart-assistant', async (req, res) => {
 
       const fileParts = uploadedFiles.map((file) => createPartFromUri(file.uri, file.mimeType));
       const model = getValidGeminiModel();
-      const response = await ai.models.generateContent({
-        model,
-        contents: fileParts.length
-          ? [{ role: 'user', parts: [{ text: context }, ...fileParts] }]
-          : context,
-        config: {
-          tools: useWeb ? [{ googleSearch: {} }] : undefined,
-        },
-      });
+      let response: any = null;
 
-      const candidate: any = response.candidates?.[0];
+      try {
+        response = await ai.models.generateContent({
+          model,
+          contents: fileParts.length
+            ? [{ role: 'user', parts: [{ text: context }, ...fileParts] }]
+            : context,
+          config: {
+            tools: useWeb ? [{ googleSearch: {} }] : undefined,
+          },
+        });
+      } catch (geminiCallError: any) {
+        // إذا فشل Gemini في سؤال نصي، ولدينا مزود بديل مضبوط، نحول تلقائياً
+        const hasFallback = Boolean(process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.HF_TOKEN);
+        if (attachmentInputs.length === 0 && hasFallback) {
+          console.warn('[Gemini failed, falling back to text gateway]:', geminiCallError?.message);
+          try {
+            const fallbackResult = await generateTextWithGateway(context);
+            return res.json({
+              text: fallbackResult.text,
+              provider: fallbackResult.provider,
+              sources: [],
+              webSearchQueries: [],
+              usedWeb: false,
+              usedAttachments: [],
+              fallbackNotice: `تعذر الاتصال بـ Gemini (${geminiCallError?.message || 'انقطاع مؤقت'})، وتم التحويل تلقائياً إلى المزود الاحتياطي (${fallbackResult.provider}) لتقديم الإجابة بدون بحث ويب.`,
+            });
+          } catch {
+            // Re-throw original Gemini error
+          }
+        }
+        throw geminiCallError;
+      }
+
+      const candidate: any = response?.candidates?.[0];
       const grounding = candidate?.groundingMetadata;
       const sources = Array.isArray(grounding?.groundingChunks)
         ? grounding.groundingChunks
@@ -293,7 +347,9 @@ apiApp.post('/api/gemini/smart-assistant', async (req, res) => {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('[Smart Assistant Error]:', message);
     const normalized = message.toLowerCase();
-    if (normalized.includes('401') || normalized.includes('403') || normalized.includes('api key') || normalized.includes('permission') || normalized.includes('unauthorized')) {
+    // عدم عرض أخطاء المزودات الاحتياطية (OpenAI / Anthropic / HF) على أنها أخطاء مفتاح Gemini
+    const isFromOtherProvider = message.includes('OpenAI') || message.includes('Anthropic') || message.includes('Hugging Face');
+    if (!isFromOtherProvider && (normalized.includes('401') || normalized.includes('403') || normalized.includes('api key') || normalized.includes('permission') || normalized.includes('unauthorized'))) {
       return res.status(503).json({
         error: 'مفتاح Gemini موجود لكنه غير صالح أو غير مصرح به. أنشئ/حدّث مفتاح Gemini المصرح به في Google AI Studio، ثم ضعه في أسرار النشر باسم GEMINI_API_KEY أو GOOGLE_API_KEY.',
         code: 'GEMINI_AUTH_ERROR',

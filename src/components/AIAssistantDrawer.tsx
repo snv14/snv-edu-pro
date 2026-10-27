@@ -239,10 +239,13 @@ const [expertMode, setExpertMode] = useState(true);
       let reply = liveReply?.text || '';
       if (reply) {
         saveLabBlock(makeLabBlock(query, reply, liveReply?.sources || []));
+        const displayText = liveReply?.fallbackNotice
+          ? `> ℹ️ **تنبيه المزود:** ${liveReply.fallbackNotice}\n\n${reply}`
+          : reply;
         const aiMsg: Message = {
           id: (Date.now() + 1).toString(),
           sender: 'ai',
-          text: reply,
+          text: displayText,
           sources: liveReply?.sources || [],
           timestamp: new Date().toLocaleTimeString('ar-DZ', { hour: '2-digit', minute: '2-digit' }),
         };
@@ -282,7 +285,7 @@ const [expertMode, setExpertMode] = useState(true);
       console.error('[smart-ai]', error);
       const errorText = error instanceof Error && error.message
         ? error.message
-        : (assistantStatus?.message || 'تعذر الوصول إلى المساعد الذكي حالياً. تحقق من إعداد مفتاح Gemini على الخادم ثم حاول مرة أخرى.');
+        : (assistantStatus?.message || 'تعذر الحصول على إجابة من المساعد الذكي حالياً. يرجى التحقق من إعدادات مزودات الذكاء الاصطناعي على الخادم.');
       const errorMsg: Message = {
         id: (Date.now() + 1).toString(),
         sender: 'ai',

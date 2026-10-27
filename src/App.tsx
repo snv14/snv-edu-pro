@@ -11,13 +11,10 @@ import {
   UserCog,
   Database,
   GraduationCap,
-  Sparkles,
-  ClipboardCheck,
   School,
   Home,
   ArrowRight,
   Menu,
-  Bot,
   Info,
   Mail,
   HelpCircle,
@@ -32,10 +29,7 @@ import { DailyLogbook } from './components/DailyLogbook';
 import { AccountSettings } from './components/AccountSettings';
 import { LevelsHomePage } from './components/LevelsHomePage';
 import { PlatformNavigationDrawer } from './components/PlatformNavigationDrawer';
-import { AIAssistantDrawer } from './components/AIAssistantDrawer';
-import { CorrectionMemoDrawer } from './components/CorrectionMemoDrawer';
 import { SourceMemo1AMViewer } from './components/SourceMemo1AMViewer';
-import { PedagogicalNoteModal } from './components/PedagogicalNoteModal';
 import { PlatformInfoModal } from './components/PlatformInfoModal';
 import { InteractiveMaqta1 } from './components/InteractiveMaqta1';
 import { UserProfile } from './components/UserProfile';
@@ -56,9 +50,6 @@ export const App: React.FC = () => {
 
   // Drawers and Modals
   const [isNavDrawerOpen, setIsNavDrawerOpen] = useState<boolean>(false);
-  const [isAssistantOpen, setIsAssistantOpen] = useState<boolean>(false);
-  const [isCorrectionMemoOpen, setIsCorrectionMemoOpen] = useState<boolean>(false);
-  const [isPedagogicalModalOpen, setIsPedagogicalModalOpen] = useState<boolean>(false);
   const [infoModalTab, setInfoModalTab] = useState<'about' | 'contact' | 'guide' | null>(null);
 
   const [designerPhoto, setDesignerPhoto] = useState<string>(() => getDesignerPhoto());
@@ -301,7 +292,7 @@ export const App: React.FC = () => {
       // تنظيف
       setTimeout(() => {
         URL.revokeObjectURL(url);
-      }, 100);
+      }, 10000);
       
       showToast('✅ تم تصدير المذكرة بنجاح');
     } catch (error) {
@@ -579,41 +570,7 @@ export const App: React.FC = () => {
               </div>
             </div>
 
-            {/* Standalone Correction Memo Trigger */}
-            <button
-              type="button"
-              id="header-btn-correction-memo"
-              onClick={() => setIsCorrectionMemoOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-teal-200 text-teal-800 text-[12px] font-black hover:bg-teal-50 shadow-xs transition cursor-pointer"
-              title="إنشاء مذكرة تصحيح مستقلة للفرض أو الاختبار"
-            >
-              <ClipboardCheck className="w-4 h-4" />
-              <span className="hidden md:inline">مذكرة التصحيح</span>
-            </button>
 
-            {/* Quick AI Assistant Trigger */}
-            <button
-              type="button"
-              id="header-btn-ai-assistant"
-              onClick={() => setIsAssistantOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-l from-teal-700 to-emerald-800 text-white text-[12px] font-black hover:opacity-95 shadow-xs transition cursor-pointer"
-            >
-              <Bot className="w-4 h-4 text-emerald-200" />
-              <span className="hidden sm:inline">المساعد الذكي</span>
-              <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
-            </button>
-
-            {/* Quick Gemini Pedagogical Note Trigger */}
-            <button
-              type="button"
-              id="header-btn-pedagogical-note"
-              onClick={() => setIsPedagogicalModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-l from-amber-600 via-emerald-700 to-teal-800 text-white text-[12px] font-black hover:opacity-95 shadow-xs transition cursor-pointer"
-              title="توليد مذكرة بيداغوجية رسمية بالذكاء الاصطناعي (منهاج الجيل الثاني)"
-            >
-              <Sparkles className="w-4 h-4 text-amber-300" />
-              <span className="hidden md:inline">مذكرة AI رسمية</span>
-            </button>
 
             {activeSection === 'home' ? (
               <UserProfile />
@@ -671,7 +628,6 @@ export const App: React.FC = () => {
           }}
           onOpenLogbook={() => setActiveSection('logbook')}
           onOpenSettings={() => setActiveSection('settings')}
-          onOpenAssistant={() => setIsAssistantOpen(true)}
           onOpenInfoModal={(tab) => setInfoModalTab(tab)}
           config={config}
           curriculumBackground={curriculumBackground}
@@ -923,38 +879,8 @@ export const App: React.FC = () => {
           setActiveSection(sec as MainSectionType);
           setYearSubTab('memos');
         }}
-        onOpenAssistant={() => setIsAssistantOpen(true)}
         onOpenInfoModal={(tab) => setInfoModalTab(tab)}
         config={config}
-      />
-
-      {/* Standalone Correction Memo Drawer */}
-      <CorrectionMemoDrawer
-        isOpen={isCorrectionMemoOpen}
-        onClose={() => setIsCorrectionMemoOpen(false)}
-        currentLesson={currentLesson}
-        curriculumLessons={curriculumLessons}
-        config={config}
-      />
-
-      {/* AI Assistant Drawer */}
-      <AIAssistantDrawer
-        isOpen={isAssistantOpen}
-        onClose={() => setIsAssistantOpen(false)}
-        selectedLevel={selectedLevel}
-        currentLesson={currentLesson}
-        curriculumLessons={curriculumLessons}
-        onOpenPedagogicalModal={() => setIsPedagogicalModalOpen(true)}
-      />
-
-      {/* Official AI Pedagogical Note Modal (Second Generation) */}
-      <PedagogicalNoteModal
-        isOpen={isPedagogicalModalOpen}
-        onClose={() => setIsPedagogicalModalOpen(false)}
-        defaultLevel={selectedLevel}
-        defaultTopic={currentLesson?.ta3alom || currentLesson?.mawrid || ''}
-        config={config}
-        showToast={showToast}
       />
 
       {/* Platform Info and Contact Modal */}

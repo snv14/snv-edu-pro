@@ -4,7 +4,8 @@ import path from 'path';
 import { defineConfig } from 'vite';
 import dotenv from 'dotenv';
 
-dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, '.env.local') });
+dotenv.config({ path: path.resolve(__dirname, '.env') });
 
 export default defineConfig(() => ({
   plugins: [react(), tailwindcss()],

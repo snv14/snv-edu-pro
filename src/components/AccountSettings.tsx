@@ -18,10 +18,13 @@ import {
   Layers,
   GraduationCap,
   Camera,
+  Database,
+  AlertTriangle,
 } from 'lucide-react';
 import { MemoConfig } from '../types';
 import { TeacherOfficialStamp } from './TeacherOfficialStamp';
 import { getDesignerPhoto, saveDesignerPhoto, resetDesignerPhoto } from '../utils/designerPhoto';
+import { getFirebaseConfigStatus } from '../firebase';
 
 interface AccountSettingsProps {
   config: MemoConfig;
@@ -38,6 +41,7 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
   const [stampColor, setStampColor] = useState<'blue' | 'purple' | 'red' | 'teal'>('blue');
   const [isSaved, setIsSaved] = useState(false);
   const [designerPhoto, setDesignerPhoto] = useState<string>(() => getDesignerPhoto());
+  const fbStatus = React.useMemo(() => getFirebaseConfigStatus(), []);
 
   React.useEffect(() => {
     const handleUpdated = (e: any) => {
@@ -503,6 +507,43 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Firebase & Cloud Status Card */}
+        <div className="bg-white rounded-3xl border border-gray-200 p-6 shadow-xs">
+          <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-4">
+            <div className="flex items-center gap-2">
+              <Database className="w-5 h-5 text-emerald-700" />
+              <h3 className="font-black text-gray-900 text-[15px]">
+                حالة الاتصال السحابي وقاعدة البيانات (Firebase)
+              </h3>
+            </div>
+            {fbStatus.isValid ? (
+              <span className="text-[11.5px] font-bold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200 flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                متصل وجاهز للمزامنة السحابية
+              </span>
+            ) : (
+              <span className="text-[11.5px] font-bold text-amber-700 bg-amber-50 px-3 py-1 rounded-full border border-amber-200 flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                تخزين محلي نشط (المزامنة السحابية اختيارية)
+              </span>
+            )}
+          </div>
+
+          <p className="text-[12.5px] text-gray-600 leading-relaxed font-medium">
+            تعمل المنصة تلقائياً بالتخزين المحلي الآمن داخل المتصفح (Local Storage) لجميع البيانات (الدفتر اليومي، التدرج، والمذكرات).
+            {fbStatus.isValid ? (
+              <span className="text-emerald-700 font-bold block mt-1">
+                تم تهيئة متغيرات Firebase بنجاح. بياناتك تتم مزامنتها تلقائياً عبر السحابة.
+              </span>
+            ) : (
+              <span className="text-zinc-600 block mt-1">
+                لتفعيل المزامنة السحابية عبر أجهزة متعددة، أضف مفاتيح Firebase في ملف البيئة (<code className="bg-zinc-100 px-1 py-0.5 rounded text-[11px] font-mono">.env.local</code>):{' '}
+                <span className="text-amber-700 font-mono text-[11px] font-bold">{fbStatus.missingVars.join('، ')}</span>
+              </span>
+            )}
+          </p>
         </div>
 
         {/* Action Bar */}

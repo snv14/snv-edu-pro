@@ -4,8 +4,6 @@ import { DAILY_LOGBOOK_PROGRAM_2AM } from '../data/dailyLogbookProgram2am';
 import { DAILY_LOGBOOK_PROGRAM_3AM } from '../data/dailyLogbookProgram3am';
 import { DAILY_LOGBOOK_PROGRAM_4AM } from '../data/dailyLogbookProgram4am';
 
-const JS_DAY_NAMES = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
-
 export function formatDateToIsoString(date: Date): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -33,7 +31,6 @@ export function extractGroupInfo(sec: string): {
   const raw = String(sec || '').trim();
   const level = detectLevelFromSection(raw) || '1م';
 
-  // Matches (ف1), (فوج 1), فـ1, ف1, فوج 2, g1, grp2, etc.
   const groupMatch = raw.match(/(?:فوج|فـ|ف|g|grp|group)\s*(\d+)/i);
   if (groupMatch) {
     const groupNumber = parseInt(groupMatch[1], 10) || 1;
@@ -47,7 +44,6 @@ export function extractGroupInfo(sec: string): {
     };
   }
 
-  // Also check general (ف) without number
   if (/\b(?:فوج|فـ|ف)\b/i.test(raw)) {
     const baseSection = raw.replace(/\s*\(?(?:فوج|فـ|ف)\)?\s*/gi, '').trim();
     return {
@@ -71,22 +67,23 @@ export function getBaseSection(sec: string): string {
   return extractGroupInfo(sec).baseSection;
 }
 
-type LogbookLevel = '1م' | '2م' | '3م' | '4م';
+export type LogbookLevel = '1م' | '2م' | '3م' | '4م';
 
-interface ProgramLesson {
-  id: string;
+export interface PedagogicalStep {
+  sourceLearningUnitId: string;
   midan: string;
   maqta: string;
   mawrid: string;
   ta3alom: string;
   moshkila?: string;
-  activities: string[];
-  session1: string;
-  session2: string;
+  activityText: string;
+  fullContent: string;
+  sessionIndexInActivity: number; // 1, 2, ...
+  totalSessionsForActivity: number;
   taqwim?: string;
   isIntroductory?: boolean;
-  isExam?: boolean;
-  sourceLearningUnitId: string;
+  isReview?: boolean;
+  isPractical?: boolean;
 }
 
 const LEVEL_PROGRAMS: Record<LogbookLevel, DailyLogbookProgramItem[]> = {
@@ -96,62 +93,107 @@ const LEVEL_PROGRAMS: Record<LogbookLevel, DailyLogbookProgramItem[]> = {
   '4م': DAILY_LOGBOOK_PROGRAM_4AM,
 };
 
-function getTeachingRowsForLevel(level: LogbookLevel): ProgramLesson[] {
-  const introContent = 'التعارف والصحة المدرسية: التعارف بين الأستاذ والتلاميذ، تقديم المادة، قواعد الأمن والنظافة، والمحافظة على الصحة المدرسية.';
-  const intro: ProgramLesson = {
-    id: `daily_logbook_intro_${level}`,
-    midan: 'التحضير للدخول المدرسي',
-    maqta: 'الافتتاح والتعارف',
-    mawrid: 'التعارف والصحة المدرسية',
-    ta3alom: introContent,
-    activities: [introContent],
-    session1: introContent,
-    session2: introContent,
-    taqwim: 'التعرف على التلاميذ، والتذكير بقواعد النظافة والأمن والانضباط داخل المؤسسة والمخبر.',
-    isIntroductory: true,
-    sourceLearningUnitId: `daily_logbook_intro_${level}`,
-  };
+/**
+ * بناء التسلسل الفعلي لأنشطة التدرج السنوي وفق المستوى والميدان والمقطع والمورد،
+ * مع توزيع كل نشاط على عدد الحصص المطلوبة له قبل الانتقال إلى النشاط التالي.
+ */
+export function buildPedagogicalStepsForLevel(
+  level: LogbookLevel,
+  sessionsPerActivity = 1,
+  activitySessionsMap?: Record<string, number>
+): PedagogicalStep[] {
+  const steps: PedagogicalStep[] = [];
 
-  const curriculum: ProgramLesson[] = (LEVEL_PROGRAMS[level] || LEVEL_PROGRAMS['1م']).map((item) => {
-    const activities = (item.activities || []).filter((activity) => Boolean(activity && activity.trim()));
-    const fallback = item.ta3alom || item.mawrid || 'نشاط تعلمي';
-    return {
-      id: item.sourceLearningUnitId,
-      midan: item.midan,
-      maqta: item.maqta,
-      mawrid: item.mawrid,
-      ta3alom: item.ta3alom,
-      moshkila: item.moshkila,
-      activities,
-      session1: activities[0] || fallback,
-      session2: activities[1] || activities[0] || fallback,
-      taqwim: item.taqwim,
-      sourceLearningUnitId: item.sourceLearningUnitId,
-    };
+  // 1. أسبوع الافتتاح: التعارف والصحة المدرسية
+  const introActivities = [
+    'التعارف بين الأستاذ والتلاميذ وتقديم برنامج مادة علوم الطبيعة والحياة وطريقة العمل وتنظيم الكراس',
+    'قواعد الأمن والنظافة والمحافظة على الصحة المدرسية والوقاية داخل المخبر العلمي',
+  ];
+
+  introActivities.forEach((act, actIdx) => {
+    steps.push({
+      sourceLearningUnitId: `daily_logbook_intro_${level}_${actIdx + 1}`,
+      midan: 'التحضير للدخول المدرسي',
+      maqta: 'الافتتاح والتعارف',
+      mawrid: 'التعارف والصحة المدرسية',
+      ta3alom: 'التعارف بين الأستاذ والتلاميذ، تقديم المادة، وقواعد الأمن والنظافة والصحة المدرسية.',
+      activityText: act,
+      fullContent: act,
+      sessionIndexInActivity: 1,
+      totalSessionsForActivity: 1,
+      taqwim: 'التعرف على التلاميذ والتذكير بقواعد النظافة والأمن والانضباط داخل المخبر والمؤسسة.',
+      isIntroductory: true,
+      isPractical: actIdx === 1,
+    });
   });
 
-  const review: ProgramLesson = {
-    id: `daily_logbook_review_${level}`,
-    midan: 'الإدماج والتقويم',
-    maqta: 'مراجعة التعلمات',
-    mawrid: 'تقويم وإدماج الموارد',
-    ta3alom: 'تثبيت المكتسبات ومعالجة الصعوبات المسجلة أثناء التعلمات.',
-    activities: ['تمارين إدماجية، معالجة التعثرات، وتقويم المكتسبات.'],
-    session1: 'تمارين إدماجية، معالجة التعثرات، وتقويم المكتسبات.',
-    session2: 'تمارين دعم واستدراك وتقويم المكتسبات.',
-    taqwim: 'تقويم تشخيصي وتكويني لمعرفة مدى التحكم في التعلمات.',
-    sourceLearningUnitId: `daily_logbook_review_${level}`,
-  };
+  // 2. وحدات المنهاج والتدرج السنوي الرسمي
+  const rawUnits = LEVEL_PROGRAMS[level] || LEVEL_PROGRAMS['1م'];
 
-  return [intro, ...curriculum, review];
+  rawUnits.forEach((unit) => {
+    const validActivities = (unit.activities || []).filter((a) => Boolean(a && a.trim()));
+    const activitiesToUse = validActivities.length > 0 ? validActivities : [unit.ta3alom || unit.mawrid || 'نشاط تعلمي'];
+
+    activitiesToUse.forEach((act) => {
+      // عدد الحصص المخصصة لهذا النشاط
+      const isLab = /تحليل|الكشف|تجربة|مخبر|تشريح|ملاحظة مجهرية|فصل|كواشف|هضم كيميائي|البلعمة/i.test(act);
+      const configuredSessions = activitySessionsMap?.[act] || sessionsPerActivity;
+      const totalSessions = Math.max(1, configuredSessions || 1);
+
+      for (let sIdx = 1; sIdx <= totalSessions; sIdx++) {
+        let sessionContent = act;
+        if (totalSessions > 1) {
+          if (sIdx === 1) {
+            sessionContent = `${act} (الحصة 1: الانطلاق والتقصي)`;
+          } else {
+            sessionContent = `متابعة ${act} (الحصة 2: الاستنتاج والتركيب)`;
+          }
+        }
+
+        steps.push({
+          sourceLearningUnitId: unit.sourceLearningUnitId,
+          midan: unit.midan,
+          maqta: unit.maqta,
+          mawrid: unit.mawrid,
+          ta3alom: unit.ta3alom,
+          moshkila: unit.moshkila,
+          activityText: act,
+          fullContent: sessionContent,
+          sessionIndexInActivity: sIdx,
+          totalSessionsForActivity: totalSessions,
+          taqwim: unit.taqwim,
+          isPractical: isLab,
+        });
+      }
+    });
+  });
+
+  // 3. محطة الإدماج والتقويم والمعالجة البيداغوجية
+  const reviewActivities = [
+    'تمارين إدماجية ومعالجة التعثرات البيداغوجية حول المكتسبات السابقة',
+    'تقويم المكتسبات وحل الوضعيات الإدماجية التقييمية',
+  ];
+
+  reviewActivities.forEach((act, actIdx) => {
+    steps.push({
+      sourceLearningUnitId: `daily_logbook_review_${level}_${actIdx + 1}`,
+      midan: 'الإدماج والتقويم',
+      maqta: 'مراجعة التعلمات',
+      mawrid: 'تقويم وإدماج الموارد',
+      ta3alom: 'تثبيت المكتسبات ومعالجة الصعوبات المسجلة أثناء التعلمات.',
+      activityText: act,
+      fullContent: act,
+      sessionIndexInActivity: 1,
+      totalSessionsForActivity: 1,
+      taqwim: 'تقويم تشخيصي وتكويني لمعرفة مدى التحكم في التعلمات واستدراك الصعوبات.',
+      isReview: true,
+      isPractical: actIdx === 1,
+    });
+  });
+
+  return steps;
 }
 
-/**
- * توليد الدفتر اليومي بربط مباشر ودقيق بالتدرج السنوي الرسمي:
- * - تماثل كامل في محتوى الأفواج (فوج 1 وفوج 2 لنفس القسم يأخذان نفس الحصة المخبرية دون تقدم أحدهما عن الآخر).
- * - تسلسل زمني دقيق ومنتظم انطلاقاً من تاريخ بداية الدخول المدرسي.
- * - إلغاء أي توليد عشوائي، والالتزام الحرفي بتوزيع الأنشطة والموارد الرسمية.
- */
 export function formatTimeWithArrow(timeStr: string): string {
   if (!timeStr) return '';
   return timeStr
@@ -169,30 +211,38 @@ function getTimeMinutes(timeStr: string): number {
   return 9999;
 }
 
+export type CalendarEventType = 'holiday' | 'exam' | 'test' | 'official_exam';
+
+export interface GenerateLogbookEntriesParams {
+  startDate: string;
+  gridRows: TimetableGridRow[];
+  period?: string;
+  holidays?: HolidayEntry[];
+  sessionsPerActivity?: number;
+  activitySessionsMap?: Record<string, number>;
+  curriculumDb?: any;
+}
+
 /**
  * توليد الدفتر اليومي بربط مباشر ودقيق بالتدرج السنوي الرسمي:
- * - دمج حصص الأفواج (فوج 1 وفوج 2) لكل قسم في حصة مخبرية واحدة بتوقيت مدمج ومحتوى عملي مشترك.
- * - تخصيص الحصة الجماعية لبناء المورد والتعلمات النظامية (session1).
- * - تخصيص حصة الأفواج للأعمال المخبرية والتطبيقية (session2).
- * - معالجة نموذج 15 ساعة (5 أقسام × 3 ساعات = 10 حصص مدمجة أسبوعياً) ليتناسب تماماً مع صفحة أسبوعية واحدة (10 أسطر).
+ * - يحترم الترتيب الفعلي لأنشطة التدرج السنوي (المستوى -> الميدان -> المقطع -> المورد -> الأنشطة).
+ * - يوزع النشاط على عدد الحصص المطلوبة له قبل الانتقال إلى النشاط التالي.
+ * - يراعي بدقة تاريخ بداية الدفتر، فلا يُنشئ أي حصص أو صفحات تسبقه.
+ * - يراعي العطل المدرسية، الفروض، الاختبارات والامتحانات الرسمية.
+ * - خلال فترة الفروض والاختبارات، يولد حصص تقويمية رسمية مع تجميد مؤشر الأنشطة التربوية لتستأنف بعد الامتحان مباشرة.
  */
 export function generateLogbookEntries({
   startDate,
   gridRows,
   period = 'سنة',
   holidays = [],
-}: {
-  startDate: string;
-  gridRows: TimetableGridRow[];
-  period?: string;
-  holidays?: HolidayEntry[];
-  curriculumDb?: any;
-}): LogEntry[] {
+  sessionsPerActivity = 1,
+  activitySessionsMap,
+}: GenerateLogbookEntriesParams): LogEntry[] {
   if (!startDate) return [];
 
   const days = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
-  
-  // استخراج الحصص المبرمجة أسبوعياً
+
   interface ScheduledSlot {
     time: string;
     section: string;
@@ -230,62 +280,81 @@ export function generateLogbookEntries({
 
   if (allScheduledSlots.length === 0) return [];
 
-  const isDateInHoliday = (dateStr: string): boolean =>
-    holidays.some((h) => dateStr >= h.startDate && dateStr <= (h.endDate || h.startDate));
+  // كشف الفعاليات التقويمية (عطلة، فرض، اختبار)
+  const getCalendarEvent = (dateStr: string): HolidayEntry | undefined => {
+    return holidays.find((h) => dateStr >= h.startDate && dateStr <= (h.endDate || h.startDate));
+  };
 
-  // تحديد عدد الأسابيع المستهدفة
+  const isDateHoliday = (dateStr: string): boolean => {
+    const ev = getCalendarEvent(dateStr);
+    return Boolean(ev && (!ev.type || ev.type === 'holiday'));
+  };
+
+  const getDateExamEvent = (dateStr: string): HolidayEntry | undefined => {
+    const ev = getCalendarEvent(dateStr);
+    if (!ev) return undefined;
+    if (ev.type === 'exam' || ev.type === 'test' || ev.type === 'official_exam') return ev;
+    if (/فرض|اختبار|امتحان|bem|شهادة/i.test(ev.label)) return ev;
+    return undefined;
+  };
+
+  // تحديد عدد الأسابيع المستهدفة للتوليد
   const targetWeeksCount =
     period === 'أسبوع' || period === 'أسبوع واحد' ? 1 :
     period === 'أسبوعين' ? 2 :
     period === 'شهر' ? 4 :
-    period === 'فصل' || period === 'ثلاثي' ? 12 : 32;
+    period === 'فصل' || period === 'ثلاثي' ? 12 : 34;
 
-  // جداول التدرج لكل مستوى
-  const teachingRowsByLevel: Record<LogbookLevel, ProgramLesson[]> = {
-    '1م': getTeachingRowsForLevel('1م'),
-    '2م': getTeachingRowsForLevel('2م'),
-    '3م': getTeachingRowsForLevel('3م'),
-    '4م': getTeachingRowsForLevel('4م'),
+  // إعداد مصفوفة الخطوات البيداغوجية المتتالية لكل مستوى
+  const stepsByLevel: Record<LogbookLevel, PedagogicalStep[]> = {
+    '1م': buildPedagogicalStepsForLevel('1م', sessionsPerActivity, activitySessionsMap),
+    '2م': buildPedagogicalStepsForLevel('2م', sessionsPerActivity, activitySessionsMap),
+    '3م': buildPedagogicalStepsForLevel('3م', sessionsPerActivity, activitySessionsMap),
+    '4م': buildPedagogicalStepsForLevel('4م', sessionsPerActivity, activitySessionsMap),
   };
 
-  // مؤشر أسبوع التدرج لكل قسم
-  const sectionWeekProgress: Record<string, number> = {};
+  // مؤشر التقدم في خطوات المنهاج لكل قسم
+  const sectionStepCursor: Record<string, number> = {};
 
   const generated: LogEntry[] = [];
   const parsedStart = new Date(`${startDate}T12:00:00`);
   if (Number.isNaN(parsedStart.getTime())) return [];
 
-  // الانطلاق من يوم الأحد للأسبوع الدراسي الذي يحوي تاريخ البداية
+  // الانطلاق من يوم الأحد للأسبوع الذي يحوي تاريخ البداية
   const currentSunday = new Date(parsedStart);
   currentSunday.setDate(parsedStart.getDate() - parsedStart.getDay());
 
-  // قائمة الأقسام الأساسية الفريدة
   const uniqueBaseSections = Array.from(new Set(allScheduledSlots.map((s) => s.baseSection)));
 
   let weeksGenerated = 0;
-  let maxLoopIterations = targetWeeksCount * 3 + 10;
+  let maxLoopIterations = targetWeeksCount * 3 + 12;
 
   while (weeksGenerated < targetWeeksCount && maxLoopIterations > 0) {
     maxLoopIterations--;
 
-    // معلومات أيام هذا الأسبوع (الأحد إلى الخميس)
-    const weekDaysMap: Record<string, { dateStr: string; isHoliday: boolean; isBeforeStart: boolean }> = {};
-    let allHolidayCount = 0;
+    // معلومات أيام هذا الأسبوع الدراسي (الأحد إلى الخميس)
+    const weekDaysMap: Record<
+      string,
+      { dateStr: string; isHoliday: boolean; isBeforeStart: boolean; examEvent?: HolidayEntry }
+    > = {};
+
+    let holidaysInWeekCount = 0;
 
     for (let dIdx = 0; dIdx < 5; dIdx++) {
       const d = new Date(currentSunday);
       d.setDate(currentSunday.getDate() + dIdx);
       const dateStr = formatDateToIsoString(d);
       const dayName = days[dIdx];
-      const isHoliday = isDateInHoliday(dateStr);
+      const isHoliday = isDateHoliday(dateStr);
       const isBeforeStart = dateStr < startDate;
+      const examEvent = !isHoliday ? getDateExamEvent(dateStr) : undefined;
 
-      if (isHoliday) allHolidayCount++;
-      weekDaysMap[dayName] = { dateStr, isHoliday, isBeforeStart };
+      if (isHoliday) holidaysInWeekCount++;
+      weekDaysMap[dayName] = { dateStr, isHoliday, isBeforeStart, examEvent };
     }
 
-    // إذا كان الأسبوع بأكمله عطلة (مثل عطلة الشتاء أو الربيع)، نتجاوزه دون تقديم مؤشر التدرج
-    if (allHolidayCount === 5) {
+    // إذا كان الأسبوع بأكمله عطلة مدرسية كاملة، نتجاوزه
+    if (holidaysInWeekCount === 5) {
       currentSunday.setDate(currentSunday.getDate() + 7);
       continue;
     }
@@ -298,15 +367,35 @@ export function generateLogbookEntries({
       if (secSlots.length === 0) continue;
 
       const lvl = secSlots[0].level;
-      const teachingRows = teachingRowsByLevel[lvl] || teachingRowsByLevel['1م'];
-      const weekIdx = sectionWeekProgress[baseSec] || 0;
-      const currentRow = teachingRows[Math.min(weekIdx, teachingRows.length - 1)];
-      const sectionEntriesBefore = currentWeekEntries.length;
+      const steps = stepsByLevel[lvl] || stepsByLevel['1م'];
+      if (!steps || steps.length === 0) continue;
 
-      const groupSlots = secSlots.filter((s) => s.isGroup).sort((a, b) => a.groupNumber - b.groupNumber || a.timeMinutes - b.timeMinutes);
-      const collectiveSlots = secSlots.filter((s) => !s.isGroup).sort((a, b) => a.timeMinutes - b.timeMinutes);
+      if (sectionStepCursor[baseSec] === undefined) {
+        sectionStepCursor[baseSec] = 0;
+      }
 
-      // 1. معالجة حصص الأفواج (دمج الحصص أفواج لكل قسم في حصة مخبرية وتطبيقية واحدة مشتركة)
+      const groupSlots = secSlots
+        .filter((s) => s.isGroup)
+        .sort((a, b) => a.groupNumber - b.groupNumber || a.timeMinutes - b.timeMinutes);
+
+      const collectiveSlots = secSlots
+        .filter((s) => !s.isGroup)
+        .sort((a, b) => a.timeMinutes - b.timeMinutes);
+
+      // دالة مساعدة للحصول على الخطوة الحالية وتحديث المؤشر
+      const consumeCurrentStep = (): PedagogicalStep => {
+        const curIdx = sectionStepCursor[baseSec] || 0;
+        const step = steps[Math.min(curIdx, steps.length - 1)];
+        sectionStepCursor[baseSec] = Math.min(curIdx + 1, steps.length - 1);
+        return step;
+      };
+
+      const peekCurrentStep = (): PedagogicalStep => {
+        const curIdx = sectionStepCursor[baseSec] || 0;
+        return steps[Math.min(curIdx, steps.length - 1)];
+      };
+
+      // 1. معالجة حصص الأفواج المخبرية (دمج ف1 وف2 في حصة مخبرية واحدة بتوقيت مدمج)
       if (groupSlots.length >= 2) {
         const allSameDay = groupSlots.every((g) => g.dayName === groupSlots[0].dayName);
         const dayInfo0 = weekDaysMap[groupSlots[0].dayName];
@@ -339,102 +428,170 @@ export function generateLogbookEntries({
               .join(' / ');
           }
 
-          // محتوى العمل المخبري والتطبيقي للأفواج (كلا الفوجين يأخذان نفس المحتوى المخبري بالضبط)
-          const practicalContent = currentRow.session2 || currentRow.session1 || currentRow.mawrid || 'نشاط مخبري وتطبيقي';
-          const entryId = `${mergedDate.split(' ')[0] || 'date'}-${baseSec.replace(/\s+/g, '')}-groups-${generated.length + currentWeekEntries.length}`;
+          // فحص هل اليوم فترة امتحان أو فرض
+          const activeExamEvent = dayInfo0?.examEvent || weekDaysMap[groupSlots[0].dayName]?.examEvent;
 
-          currentWeekEntries.push({
-            id: entryId,
-            dayName: mergedDay,
-            dateStr: mergedDate,
-            time: mergedTime,
-            section: mergedSection,
-            level: lvl,
-            midan: currentRow.midan || '',
-            maqta: currentRow.maqta || '',
-            mawrid: currentRow.mawrid || '',
-            ta3alom: currentRow.ta3alom || practicalContent,
-            activitiesList: [practicalContent],
-            content: practicalContent,
-            taqwim: currentRow.taqwim || (currentRow.isExam ? 'تقويم تحصيلي وفصلّي رسمي' : 'تقويم تكويني ومتابعة الإنجاز المخبري والتجريبي'),
-            note: `عمل مخبري (${groupNumbers.map((num) => `أفواج ${num}`).join(' + ')})`,
-            lessonType: currentRow.isExam ? 'assessment' : (currentRow.isIntroductory ? 'introductory' : 'curriculum'),
-            resourceIndex: weekIdx + 1,
-            sourceLearningUnitId: currentRow.id,
-          });
+          if (activeExamEvent) {
+            // حصة تقويمية رسمية (لا تستهلك مؤشر المنهاج)
+            const isTest = activeExamEvent.type === 'test' || /فرض/i.test(activeExamEvent.label);
+            const entryId = `${mergedDate.split(' ')[0] || 'date'}-${baseSec.replace(/\s+/g, '')}-exam-${generated.length + currentWeekEntries.length}`;
+
+            currentWeekEntries.push({
+              id: entryId,
+              dayName: mergedDay,
+              dateStr: mergedDate,
+              time: mergedTime,
+              section: mergedSection,
+              level: lvl,
+              midan: 'التقويم والامتحانات',
+              maqta: activeExamEvent.label || (isTest ? 'فروض المراقبة المستمرة' : 'الاختبارات الفصلية الرسمية'),
+              mawrid: activeExamEvent.label || (isTest ? 'فرض محروس رسمي' : 'اختبار الفصل'),
+              ta3alom: activeExamEvent.label || (isTest ? 'إجراء الفرض المحروس في مادة علوم الطبيعة والحياة' : 'إجراء الاختبار الفصلي لمادة علوم الطبيعة والحياة'),
+              activitiesList: [activeExamEvent.label || (isTest ? 'إجراء الفرض المحروس' : 'إجراء الاختبار الفصلي الرسمي')],
+              content: activeExamEvent.label || (isTest ? 'فرض محروس رسمي' : 'اختبار فصلي رسمي'),
+              taqwim: isTest ? 'تقويم تحصيلي مستمر لمراقبة الكفاءات' : 'تقويم تحصيلي فصلي شامل',
+              note: `عمل مخبري وتقويمي (${groupNumbers.map((num) => `أفواج ${num}`).join(' + ')}) — ${activeExamEvent.label}`,
+              lessonType: 'assessment',
+              resourceIndex: sectionStepCursor[baseSec] + 1,
+              sourceLearningUnitId: `exam_${activeExamEvent.startDate}`,
+            });
+          } else {
+            // حصة مخبرية وفق تسلسل خطوات التدرج
+            const step = consumeCurrentStep();
+            const entryId = `${mergedDate.split(' ')[0] || 'date'}-${baseSec.replace(/\s+/g, '')}-groups-${generated.length + currentWeekEntries.length}`;
+
+            currentWeekEntries.push({
+              id: entryId,
+              dayName: mergedDay,
+              dateStr: mergedDate,
+              time: mergedTime,
+              section: mergedSection,
+              level: lvl,
+              midan: step.midan,
+              maqta: step.maqta,
+              mawrid: step.mawrid,
+              ta3alom: step.ta3alom,
+              moshkila: step.moshkila,
+              activitiesList: [step.fullContent],
+              content: step.fullContent,
+              taqwim: step.taqwim || 'تقويم تكويني ومتابعة الإنجاز المخبري والتجريبي',
+              note: `عمل مخبري (${groupNumbers.map((num) => `أفواج ${num}`).join(' + ')})`,
+              lessonType: step.isIntroductory ? 'introductory' : step.isReview ? 'remediation' : 'curriculum',
+              resourceIndex: sectionStepCursor[baseSec],
+              sourceLearningUnitId: step.sourceLearningUnitId,
+            });
+          }
         }
       } else if (groupSlots.length === 1) {
-        // فوج فردي
+        // فوج فردي (إذا لم يكن هناك فوج ثانٍ مبرمج)
         const g = groupSlots[0];
         const dInfo = weekDaysMap[g.dayName];
         if (dInfo && !dInfo.isBeforeStart && !dInfo.isHoliday) {
-          const practicalContent = currentRow.session2 || currentRow.session1 || currentRow.mawrid || 'نشاط مخبري وتطبيقي';
-          const entryId = `${dInfo.dateStr}-${g.section.replace(/\s+/g, '')}-${g.timeMinutes}-${generated.length + currentWeekEntries.length}`;
+          if (dInfo.examEvent) {
+            const isTest = dInfo.examEvent.type === 'test' || /فرض/i.test(dInfo.examEvent.label);
+            const entryId = `${dInfo.dateStr}-${g.section.replace(/\s+/g, '')}-exam-${generated.length + currentWeekEntries.length}`;
 
-          currentWeekEntries.push({
-            id: entryId,
-            dayName: g.dayName,
-            dateStr: dInfo.dateStr,
-            time: `${formatTimeWithArrow(g.time)} (ف${g.groupNumber})`,
-            section: `${baseSec} (فوج ${g.groupNumber})`,
-            level: lvl,
-            midan: currentRow.midan || '',
-            maqta: currentRow.maqta || '',
-            mawrid: currentRow.mawrid || '',
-            ta3alom: currentRow.ta3alom || practicalContent,
-            activitiesList: [practicalContent],
-            content: practicalContent,
-            taqwim: currentRow.isExam ? 'تقويم تحصيلي وفصلّي رسمي' : 'تقويم تكويني ومتابعة الإنجاز المخبري والتجريبي',
-            note: `عمل مخبري (فوج ${g.groupNumber})`,
-            lessonType: currentRow.isExam ? 'assessment' : (currentRow.isIntroductory ? 'introductory' : 'curriculum'),
-            resourceIndex: weekIdx + 1,
-            sourceLearningUnitId: currentRow.id,
-          });
+            currentWeekEntries.push({
+              id: entryId,
+              dayName: g.dayName,
+              dateStr: dInfo.dateStr,
+              time: `${formatTimeWithArrow(g.time)} (ف${g.groupNumber})`,
+              section: `${baseSec} (فوج ${g.groupNumber})`,
+              level: lvl,
+              midan: 'التقويم والامتحانات',
+              maqta: dInfo.examEvent.label || (isTest ? 'فروض المراقبة المستمرة' : 'الاختبارات الفصلية الرسمية'),
+              mawrid: dInfo.examEvent.label || (isTest ? 'فرض محروس رسمي' : 'اختبار الفصل'),
+              ta3alom: dInfo.examEvent.label || (isTest ? 'إجراء الفرض المحروس' : 'إجراء الاختبار الفصلي'),
+              activitiesList: [dInfo.examEvent.label || 'إجراء الامتحان'],
+              content: dInfo.examEvent.label || 'إجراء الامتحان',
+              taqwim: isTest ? 'تقويم تحصيلي مستمر' : 'تقويم تحصيلي فصلي شامل',
+              note: `عمل مخبري (فوج ${g.groupNumber}) — ${dInfo.examEvent.label}`,
+              lessonType: 'assessment',
+              resourceIndex: sectionStepCursor[baseSec] + 1,
+              sourceLearningUnitId: `exam_${dInfo.examEvent.startDate}`,
+            });
+          } else {
+            const step = consumeCurrentStep();
+            const entryId = `${dInfo.dateStr}-${g.section.replace(/\s+/g, '')}-${g.timeMinutes}-${generated.length + currentWeekEntries.length}`;
+
+            currentWeekEntries.push({
+              id: entryId,
+              dayName: g.dayName,
+              dateStr: dInfo.dateStr,
+              time: `${formatTimeWithArrow(g.time)} (ف${g.groupNumber})`,
+              section: `${baseSec} (فوج ${g.groupNumber})`,
+              level: lvl,
+              midan: step.midan,
+              maqta: step.maqta,
+              mawrid: step.mawrid,
+              ta3alom: step.ta3alom,
+              moshkila: step.moshkila,
+              activitiesList: [step.fullContent],
+              content: step.fullContent,
+              taqwim: step.taqwim || 'تقويم تكويني ومتابعة الإنجاز المخبري والتجريبي',
+              note: `عمل مخبري (فوج ${g.groupNumber})`,
+              lessonType: step.isIntroductory ? 'introductory' : step.isReview ? 'remediation' : 'curriculum',
+              resourceIndex: sectionStepCursor[baseSec],
+              sourceLearningUnitId: step.sourceLearningUnitId,
+            });
+          }
         }
       }
 
       // 2. معالجة الحصص الجماعية (القسم كاملاً)
-      collectiveSlots.forEach((cSlot, cIdx) => {
+      collectiveSlots.forEach((cSlot) => {
         const dInfo = weekDaysMap[cSlot.dayName];
         if (!dInfo || dInfo.isBeforeStart || dInfo.isHoliday) return;
 
-        // إذا كان هناك حصة أفواج، تأخذ الحصة الجماعية الدرس الأول (session1) لبناء المفاهيم
-        // إذا لم يكن هناك أفواج، توزع الحصص بين session1 و session2
-        let lessonContent = '';
-        if (groupSlots.length > 0) {
-          lessonContent = currentRow.session1 || currentRow.mawrid || 'حصة تعلمية نظامية';
+        if (dInfo.examEvent) {
+          const isTest = dInfo.examEvent.type === 'test' || /فرض/i.test(dInfo.examEvent.label);
+          const entryId = `${dInfo.dateStr}-${baseSec.replace(/\s+/g, '')}-exam-${cSlot.timeMinutes}-${generated.length + currentWeekEntries.length}`;
+
+          currentWeekEntries.push({
+            id: entryId,
+            dayName: cSlot.dayName,
+            dateStr: dInfo.dateStr,
+            time: formatTimeWithArrow(cSlot.time),
+            section: baseSec,
+            level: lvl,
+            midan: 'التقويم والامتحانات',
+            maqta: dInfo.examEvent.label || (isTest ? 'فروض المراقبة المستمرة' : 'الاختبارات الفصلية الرسمية'),
+            mawrid: dInfo.examEvent.label || (isTest ? 'فرض محروس رسمي' : 'اختبار الفصل'),
+            ta3alom: dInfo.examEvent.label || (isTest ? 'إجراء الفرض المحروس' : 'إجراء الاختبار الفصلي'),
+            activitiesList: [dInfo.examEvent.label || (isTest ? 'إجراء الفرض المحروس' : 'إجراء الاختبار الفصلي')],
+            content: dInfo.examEvent.label || (isTest ? 'فرض محروس رسمي' : 'اختبار فصلي رسمي'),
+            taqwim: isTest ? 'تقويم تحصيلي مستمر لمراقبة الكفاءات' : 'تقويم تحصيلي فصلي شامل',
+            note: `حصة جماعية — ${dInfo.examEvent.label}`,
+            lessonType: 'assessment',
+            resourceIndex: sectionStepCursor[baseSec] + 1,
+            sourceLearningUnitId: `exam_${dInfo.examEvent.startDate}`,
+          });
         } else {
-          lessonContent = (cIdx === 0 ? currentRow.session1 : (currentRow.session2 || currentRow.session1)) || currentRow.mawrid || 'حصة تعلمية نظامية';
+          const step = consumeCurrentStep();
+          const entryId = `${dInfo.dateStr}-${baseSec.replace(/\s+/g, '')}-${cSlot.timeMinutes}-${generated.length + currentWeekEntries.length}`;
+
+          currentWeekEntries.push({
+            id: entryId,
+            dayName: cSlot.dayName,
+            dateStr: dInfo.dateStr,
+            time: formatTimeWithArrow(cSlot.time),
+            section: baseSec,
+            level: lvl,
+            midan: step.midan,
+            maqta: step.maqta,
+            mawrid: step.mawrid,
+            ta3alom: step.ta3alom,
+            moshkila: step.moshkila,
+            activitiesList: [step.fullContent],
+            content: step.fullContent,
+            taqwim: step.taqwim || 'تقويم تكويني ومتابعة الإنجاز الكتابي',
+            note: 'حصة جماعية (القسم كاملاً)',
+            lessonType: step.isIntroductory ? 'introductory' : step.isReview ? 'remediation' : 'curriculum',
+            resourceIndex: sectionStepCursor[baseSec],
+            sourceLearningUnitId: step.sourceLearningUnitId,
+          });
         }
-
-        const entryId = `${dInfo.dateStr}-${baseSec.replace(/\s+/g, '')}-${cSlot.timeMinutes}-${generated.length + currentWeekEntries.length}`;
-
-        currentWeekEntries.push({
-          id: entryId,
-          dayName: cSlot.dayName,
-          dateStr: dInfo.dateStr,
-          time: formatTimeWithArrow(cSlot.time),
-          section: baseSec,
-          level: lvl,
-          midan: currentRow.midan || '',
-          maqta: currentRow.maqta || '',
-          mawrid: currentRow.mawrid || '',
-          ta3alom: currentRow.ta3alom || lessonContent,
-          activitiesList: [lessonContent],
-          content: lessonContent,
-          taqwim: currentRow.isExam ? 'تقويم تحصيلي وفصلّي رسمي' : 'تقويم تكويني ومتابعة الإنجاز الكتابي',
-          note: 'حصة جماعية (القسم كاملاً)',
-          lessonType: currentRow.isExam ? 'assessment' : (currentRow.isIntroductory ? 'introductory' : 'curriculum'),
-          resourceIndex: weekIdx + 1,
-          sourceLearningUnitId: currentRow.id,
-        });
       });
-
-      // لا نتقدم في البرنامج إلا إذا أُدرجت حصة فعلية لهذا القسم هذا الأسبوع.
-      // هذا يمنع تخطي التعارف أو أي مورد بسبب تاريخ البداية أو العطل.
-      if (currentWeekEntries.length > sectionEntriesBefore) {
-        sectionWeekProgress[baseSec] = weekIdx + 1;
-      }
     }
 
     if (currentWeekEntries.length > 0) {
