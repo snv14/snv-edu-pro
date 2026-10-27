@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { generateDistributionDocx } from "../utils/docxExportDistribution";
+import { generateDistributionPdf } from "../utils/pdfExportDistribution";
 import { LessonMemo, MemoConfig } from '../types';
 import { TeacherOfficialStamp } from './TeacherOfficialStamp';
 import { LESSONS_1AM } from '../data/lessons1am';
@@ -391,16 +392,29 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
 
   const handleExportPdf = async () => {
     try {
-      await printAnnualDistribution();
-      showToast("تم فتح معاينة الطباعة: اختر حفظ كـ PDF");
+      showToast("جاري تجهيز وتوليد ملف PDF للتدرج السنوي...");
+      await waitForAnnualPrintFonts();
+      const pageEls = Array.from(document.querySelectorAll<HTMLElement>('.annual-export-page'));
+      if (!pageEls.length) {
+        throw new Error("لا توجد صفحات معروضة للتصدير");
+      }
+      await generateDistributionPdf(pageEls, orientation, `التدرج_السنوي_${level}_${orientation}.pdf`);
+      showToast("✅ تم تنزيل ملف التدرج السنوي PDF بنجاح");
     } catch (error) {
-      console.error(error);
-      showToast("حدث خطأ أثناء تجهيز الطباعة/PDF");
+      console.warn("Direct PDF generation issue, falling back to print dialog:", error);
+      showToast("⚠️ تعذر التوليد المباشر. جاري فتح نافذة الطباعة كبديل لحفظ PDF...");
+      try {
+        await printAnnualDistribution();
+      } catch (printErr) {
+        console.error("Print fallback error:", printErr);
+        showToast("❌ حدث خطأ أثناء تجهيز الطباعة/PDF");
+      }
     }
   };
 
   const handlePrint = async () => {
     try {
+      showToast("جاري فتح نافذة الطباعة...");
       await printAnnualDistribution();
     } catch (error) {
       console.error(error);
@@ -410,6 +424,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
 
   const handleExportWord = async () => {
     try {
+      showToast("جاري تصدير التدرج السنوي إلى Word...");
       const blob = await generateDistributionDocx(pages, config, level, orientation);
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -419,10 +434,10 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
       a.click();
       document.body.removeChild(a);
       setTimeout(() => window.URL.revokeObjectURL(url), 10000);
-      showToast("تم تصدير التدرج السنوي بنجاح (Word)");
+      showToast("✅ تم تصدير التدرج السنوي بنجاح (Word)");
     } catch (error) {
       console.error(error);
-      showToast("حدث خطأ أثناء التصدير");
+      showToast("❌ حدث خطأ أثناء تصدير Word. تحقق من البيانات وحاول ثانية");
     }
   };
 

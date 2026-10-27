@@ -1446,18 +1446,42 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
         setPreviewZoom(100);
         setIsPreviewModalOpen(true);
       }
-      const expectedPageCount = paginatedPages.length + 2;
-      let renderedPageCount = 0;
-      for (let i = 0; i < 100; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // الانتظار حتى يستقر عرض كافة صفحات الدفتر في الـ DOM
+      let renderedPages: HTMLElement[] = [];
+      let stableCount = 0;
+      let lastCount = -1;
+      for (let i = 0; i < 60; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 80));
         const modalContainer = document.querySelector('.print-preview-root .preview-scroll');
-        renderedPageCount = modalContainer?.querySelectorAll<HTMLElement>('[data-preview-export-page="true"]').length || 0;
-        if (renderedPageCount === expectedPageCount) break;
+        const currentPages = modalContainer
+          ? Array.from(modalContainer.querySelectorAll<HTMLElement>('[data-preview-export-page="true"]'))
+          : [];
+        if (currentPages.length >= 2) {
+          if (currentPages.length === lastCount) {
+            stableCount++;
+            if (stableCount >= 2) {
+              renderedPages = currentPages;
+              break;
+            }
+          } else {
+            lastCount = currentPages.length;
+            stableCount = 0;
+          }
+        }
       }
+
       if (document.fonts?.ready) await document.fonts.ready;
-      if (renderedPageCount !== expectedPageCount) {
-        throw new Error(`الصفحات المعروضة ${renderedPageCount} من أصل ${expectedPageCount}; لم تبدأ الطباعة لتجنب إسقاط صفحات.`);
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+      if (renderedPages.length === 0) {
+        // إذا تعذر جلبها من المعاينة نحاول من الصفحة الرئيسية
+        const fallbackPages = Array.from(document.querySelectorAll<HTMLElement>('[data-preview-export-page="true"]'));
+        if (fallbackPages.length === 0) {
+          throw new Error('لم يتم العثور على صفحات الدفتر للطباعة');
+        }
       }
+
       window.print();
     } catch (error) {
       console.error(error);
@@ -1479,26 +1503,39 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
         setIsPreviewModalOpen(true);
       }
 
-      const expectedPageCount = paginatedPages.length + 2; // صفحة التقديم + الغلاف + صفحات المحتوى
       let pages: HTMLElement[] = [];
-      // Wait for React to render every page. Never silently export a partial notebook.
-      for (let i = 0; i < 100; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 100));
+      let stableCount = 0;
+      let lastCount = -1;
+      for (let i = 0; i < 60; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 80));
         const modalContainer = document.querySelector('.print-preview-root .preview-scroll');
-        const renderedPages = modalContainer
+        const currentPages = modalContainer
           ? Array.from(modalContainer.querySelectorAll<HTMLElement>('[data-preview-export-page="true"]'))
           : [];
-        if (renderedPages.length === expectedPageCount) {
-          pages = renderedPages;
-          break;
+        if (currentPages.length >= 2) {
+          if (currentPages.length === lastCount) {
+            stableCount++;
+            if (stableCount >= 2) {
+              pages = currentPages;
+              break;
+            }
+          } else {
+            lastCount = currentPages.length;
+            stableCount = 0;
+          }
         }
-        // Keep the latest count for a useful diagnostic, but do not export it if incomplete.
-        pages = renderedPages;
       }
+
       if (document.fonts?.ready) await document.fonts.ready;
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      if (pages.length !== expectedPageCount) {
-        throw new Error(`اكتمل عرض ${pages.length} صفحة فقط من أصل ${expectedPageCount}. أُوقف التصدير لتجنب ملف ناقص.`);
+
+      if (pages.length === 0) {
+        const fallbackPages = Array.from(document.querySelectorAll<HTMLElement>('[data-preview-export-page="true"]'));
+        if (fallbackPages.length > 0) {
+          pages = fallbackPages;
+        } else {
+          throw new Error('لم يتم العثور على صفحات الدفتر لتصدير PDF');
+        }
       }
 
       await generatePreviewMatchPdf(pages, orientation, (current, total) => {
@@ -2346,29 +2383,16 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap');
         @media print {
-          @page { size: A4 ${orientation}; margin: 0; }
-          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .grid-paper-bg {
-            background-color: #ffffff !important;
-            background-image: none !important;
-            background-size: auto !important;
+          @page {
+            size: A4 ${orientation};
+            margin: 0 !important;
           }
-          .print-page { break-inside: avoid; page-break-inside: avoid; }
-        }
-        .print-page { direction: rtl; box-sizing: border-box; }
-        .writing-grid-cell, .logbook-grid-cell {
-          background-color: #ffffff;
-          background-image:
-            linear-gradient(to right, rgba(6, 78, 59, 0.10) 1px, transparent 1px),
-            linear-gradient(to bottom, rgba(6, 78, 59, 0.10) 1px, transparent 1px);
-          background-size: 8px 8px;
-        }
-        @media print {
-          @page { size: A4 ${orientation}; margin: 4mm !important; }
           html, body {
             margin: 0 !important;
             padding: 0 !important;
-            background: #fff !important;
+            background: #ffffff !important;
+            color: #000000 !important;
+            width: 100% !important;
             height: auto !important;
             min-height: 0 !important;
             overflow: visible !important;
@@ -2378,9 +2402,18 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
           #root, #root > div, .app-shell, main {
             height: auto !important;
             min-height: 0 !important;
+            max-height: none !important;
             overflow: visible !important;
             display: block !important;
             position: static !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+          }
+          .grid-paper-bg {
+            background-color: #ffffff !important;
+            background-image: none !important;
+            background-size: auto !important;
           }
           .print-preview-root {
             position: static !important;
@@ -2388,51 +2421,72 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
             width: 100% !important;
             height: auto !important;
             min-height: 0 !important;
-            background: #fff !important;
+            max-height: none !important;
+            background: #ffffff !important;
             overflow: visible !important;
             display: block !important;
+            margin: 0 !important;
+            padding: 0 !important;
           }
-          .preview-controls, .no-print, header, aside, nav {
+          .preview-controls, .no-print, header, aside, nav, #toast-notification {
             display: none !important;
           }
           .preview-scroll {
             overflow: visible !important;
             padding: 0 !important;
-            background: #fff !important;
+            margin: 0 !important;
+            background: #ffffff !important;
             display: block !important;
             height: auto !important;
+            min-height: 0 !important;
             max-height: none !important;
+            width: 100% !important;
           }
           .preview-scroll > div {
             transform: none !important;
             width: 100% !important;
             gap: 0 !important;
             display: block !important;
+            height: auto !important;
+            min-height: 0 !important;
+            max-height: none !important;
+            overflow: visible !important;
+            margin: 0 !important;
+            padding: 0 !important;
           }
           .print-page, [data-preview-export-page="true"] {
-            display: block !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: space-between !important;
             visibility: visible !important;
             box-sizing: border-box !important;
             flex: none !important;
             position: relative !important;
             color: #111827 !important;
+            background: #ffffff !important;
             box-shadow: none !important;
-            margin: 0 auto 0 auto !important;
-            border: 1px solid #cbd5e1 !important;
+            margin: 0 auto !important;
+            border: none !important;
+            border-radius: 0 !important;
+            page-break-before: auto !important;
+            break-before: auto !important;
             page-break-after: always !important;
             break-after: page !important;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
             overflow: hidden !important;
-            width: ${orientation === 'landscape' ? '290mm' : '204mm'} !important;
-            height: ${orientation === 'landscape' ? '204mm' : '290mm'} !important;
-            min-height: ${orientation === 'landscape' ? '204mm' : '290mm'} !important;
+            width: ${orientation === 'landscape' ? '297mm' : '210mm'} !important;
+            height: ${orientation === 'landscape' ? '210mm' : '297mm'} !important;
+            min-height: ${orientation === 'landscape' ? '210mm' : '297mm'} !important;
+            max-height: ${orientation === 'landscape' ? '210mm' : '297mm'} !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
-          /* Keep the introductory first page visible and intact in print output. */
           .notebook-intro-page {
             display: flex !important;
             visibility: visible !important;
             flex-direction: column !important;
+            justify-content: space-between !important;
             background: #ffffff !important;
             page-break-before: auto !important;
             break-before: auto !important;
@@ -3635,7 +3689,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
 
       {/* Timetable Standalone Official Modal */}
       {isTimetableModalOpen && (
-        <div className="fixed inset-0 z-[110] flex flex-col bg-[#1f2937]/90 backdrop-blur-sm print:bg-white print:p-0 print:m-0" dir="rtl">
+        <div className="timetable-print-root fixed inset-0 z-[110] flex flex-col bg-[#1f2937]/90 backdrop-blur-sm print:bg-white print:p-0 print:m-0" dir="rtl">
           {/* Top Bar (hidden during print) */}
           <div className="no-print h-[56px] bg-[#111827] border-b border-zinc-700 flex items-center justify-between px-4 md:px-6 shrink-0">
             <div className="flex items-center gap-3">

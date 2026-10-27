@@ -10,6 +10,7 @@ const waitForImages = async (root: HTMLElement): Promise<void> => {
     await new Promise<void>((resolve) => {
       img.addEventListener("load", () => resolve(), { once: true });
       img.addEventListener("error", () => resolve(), { once: true });
+      setTimeout(() => resolve(), 2500);
     });
   }));
 };
@@ -23,22 +24,21 @@ const preparePageForExport = (source: HTMLElement, orientation: LogbookOrientati
   page.style.margin = "0";
   page.style.transform = "none";
   page.style.backgroundColor = "#ffffff";
-  // Preserve each page's authored preview dimensions before scaling it onto A4.
-  // The introductory page has its own flex layout; forcing a new width/height here
-  // can change its internal layout and crop its content in the exported PDF.
-  const sourceWidth = source.style.width || (orientation === "landscape" ? "290mm" : "204mm");
-  const sourceHeight = source.style.height || (orientation === "landscape" ? "204mm" : "290mm");
-  page.style.width = sourceWidth;
-  page.style.height = sourceHeight;
-  page.style.minHeight = sourceHeight;
+
+  const targetWidth = orientation === "landscape" ? "297mm" : "210mm";
+  const targetHeight = orientation === "landscape" ? "210mm" : "297mm";
+
+  page.style.width = targetWidth;
+  page.style.height = targetHeight;
+  page.style.minHeight = targetHeight;
+  page.style.maxHeight = targetHeight;
   page.style.maxWidth = "none";
   page.style.setProperty("-webkit-print-color-adjust", "exact");
   page.style.setProperty("print-color-adjust", "exact");
   page.style.setProperty("box-sizing", "border-box");
   page.style.setProperty("direction", "rtl");
   page.style.setProperty("overflow", "hidden");
-  const targetWidth = orientation === "landscape" ? "297mm" : "210mm";
-  const targetHeight = orientation === "landscape" ? "210mm" : "297mm";
+
   const host = document.createElement("div");
   host.style.position = "fixed";
   host.style.left = "0";
@@ -50,6 +50,11 @@ const preparePageForExport = (source: HTMLElement, orientation: LogbookOrientati
   host.style.zIndex = "999999";
   host.style.pointerEvents = "none";
   host.style.opacity = "1";
+  host.style.direction = "rtl";
+  host.style.display = "flex";
+  host.style.flexDirection = "column";
+  host.style.alignItems = "stretch";
+  host.style.justifyContent = "space-between";
   host.setAttribute("aria-hidden", "true");
   host.appendChild(page);
   document.body.appendChild(host);
@@ -69,64 +74,81 @@ export const generatePreviewMatchPdf = async (
   if (document.fonts?.ready) await document.fonts.ready;
   await Promise.all(pageElements.map((page) => waitForImages(page)));
 
-  const pdf = new jsPDF({
-    orientation: orientation === "landscape" ? "landscape" : "portrait",
-    unit: "mm",
-    format: "a4",
-    compress: true,
-    putOnlyUsedFonts: true,
-  });
+  const origScrollX = window.scrollX;
+  const origScrollY = window.scrollY;
+  // Reset window scroll position so html2canvas coordinate math never offsets the captured canvas
+  window.scrollTo(0, 0);
 
-  const pageWidth = orientation === "landscape" ? 297 : 210;
-  const pageHeight = orientation === "landscape" ? 210 : 297;
+  try {
+    const pdf = new jsPDF({
+      orientation: orientation === "landscape" ? "landscape" : "portrait",
+      unit: "mm",
+      format: "a4",
+      compress: true,
+      putOnlyUsedFonts: true,
+    });
 
-  for (let index = 0; index < pageElements.length; index += 1) {
-    if (onProgress) {
-      onProgress(index + 1, pageElements.length);
+    const pageWidth = orientation === "landscape" ? 297 : 210;
+    const pageHeight = orientation === "landscape" ? 210 : 297;
+
+    for (let index = 0; index < pageElements.length; index += 1) {
+      if (onProgress) {
+        onProgress(index + 1, pageElements.length);
+      }
+      const element = pageElements[index];
+      const prepared = preparePageForExport(element, orientation);
+      try {
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+        const rect = prepared.page.getBoundingClientRect();
+        const pixelWidth = Math.round(rect.width) || (orientation === "landscape" ? 1123 : 794);
+        const pixelHeight = Math.round(rect.height) || (orientation === "landscape" ? 794 : 1123);
+
+        const canvas = await safeHtml2Canvas(prepared.page, {
+          scale: 2,
+          useCORS: true,
+          allowTaint: false,
+          backgroundColor: "#ffffff",
+          logging: false,
+          imageTimeout: 15000,
+          scrollX: 0,
+          scrollY: 0,
+          x: 0,
+          y: 0,
+          width: pixelWidth,
+          height: pixelHeight,
+          windowWidth: pixelWidth,
+          windowHeight: pixelHeight,
+          onclone: sanitizeOklchForHtml2Canvas,
+        });
+
+        if (index > 0) {
+          pdf.addPage("a4", orientation === "landscape" ? "landscape" : "portrait");
+        }
+
+        const imageData = canvas.toDataURL("image/png");
+
+        pdf.addImage(
+          imageData,
+          "PNG",
+          0,
+          0,
+          pageWidth,
+          pageHeight,
+          undefined,
+          "FAST"
+        );
+
+        // Clean up canvas memory immediately
+        canvas.width = 1;
+        canvas.height = 1;
+      } finally {
+        prepared.cleanup();
+      }
     }
-    const element = pageElements[index];
-    const prepared = preparePageForExport(element, orientation);
-    try {
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
-      const canvas = await safeHtml2Canvas(prepared.page, {
-        scale: 1.5,
-        useCORS: true,
-        allowTaint: false,
-        backgroundColor: "#ffffff",
-        logging: false,
-        imageTimeout: 10000,
-        scrollX: 0,
-        scrollY: 0,
-        onclone: sanitizeOklchForHtml2Canvas,
-        width: prepared.page.scrollWidth,
-        height: prepared.page.scrollHeight,
-        windowWidth: Math.max(document.documentElement.clientWidth, prepared.page.scrollWidth),
-        windowHeight: Math.max(document.documentElement.clientHeight, prepared.page.scrollHeight),
-      });
-
-      if (index > 0) pdf.addPage();
-
-      const imageData = canvas.toDataURL("image/png");
-
-      pdf.addImage(
-        imageData,
-        "PNG",
-        0,
-        0,
-        pageWidth,
-        pageHeight,
-        undefined,
-        "FAST"
-      );
-
-      // Clean up canvas memory immediately
-      canvas.width = 1;
-      canvas.height = 1;
-    } finally {
-      prepared.cleanup();
-    }
+    pdf.save(`الدفتر-اليومي-${orientation === "landscape" ? "أفقي" : "عمودي"}.pdf`);
+  } finally {
+    window.scrollTo(origScrollX, origScrollY);
   }
-
-  pdf.save(`الدفتر-اليومي-${orientation === "landscape" ? "أفقي" : "عمودي"}.pdf`);
 };

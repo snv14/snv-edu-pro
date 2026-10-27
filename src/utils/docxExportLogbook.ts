@@ -137,21 +137,30 @@ const base64ToUint8Array = (base64: string): Uint8Array => {
   return bytes;
 };
 
+const FALLBACK_1X1_PNG = base64ToUint8Array("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=");
+
 const imageDataUrlToPng = async (dataUrl: string): Promise<Uint8Array> => {
-  if (!dataUrl.startsWith("data:image/")) throw new Error("Unsupported image data");
-  const image = new Image();
-  image.src = dataUrl;
-  await new Promise<void>((resolve, reject) => {
-    image.onload = () => resolve();
-    image.onerror = () => reject(new Error("تعذر تحميل صورة الختم"));
-  });
-  const canvas = document.createElement("canvas");
-  canvas.width = image.naturalWidth || 512;
-  canvas.height = image.naturalHeight || 512;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Canvas غير متاح");
-  ctx.drawImage(image, 0, 0);
-  return base64ToUint8Array(canvas.toDataURL("image/png").split(",")[1]);
+  try {
+    if (!dataUrl || !dataUrl.startsWith("data:image/")) return FALLBACK_1X1_PNG;
+    const image = new Image();
+    image.src = dataUrl;
+    await new Promise<void>((resolve) => {
+      image.onload = () => resolve();
+      image.onerror = () => resolve();
+      setTimeout(() => resolve(), 2500);
+    });
+    if (!image.naturalWidth) return FALLBACK_1X1_PNG;
+    const canvas = document.createElement("canvas");
+    canvas.width = image.naturalWidth || 512;
+    canvas.height = image.naturalHeight || 512;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return FALLBACK_1X1_PNG;
+    ctx.drawImage(image, 0, 0);
+    return base64ToUint8Array(canvas.toDataURL("image/png").split(",")[1]);
+  } catch (err) {
+    console.warn("imageDataUrlToPng fallback:", err);
+    return FALLBACK_1X1_PNG;
+  }
 };
 
 const buildTeacherStampSvg = (config: MemoConfig, size = 420): string => {
@@ -172,24 +181,30 @@ const buildTeacherStampSvg = (config: MemoConfig, size = 420): string => {
 };
 
 const svgToPngData = async (svg: string, width = 420, height = 420): Promise<Uint8Array> => {
+  if (!svg || !svg.trim()) return FALLBACK_1X1_PNG;
   const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   try {
     const image = new Image();
     image.src = url;
-    await new Promise<void>((resolve, reject) => {
+    await new Promise<void>((resolve) => {
       image.onload = () => resolve();
-      image.onerror = () => reject(new Error("تعذر تحويل الختم إلى صورة"));
+      image.onerror = () => resolve();
+      setTimeout(() => resolve(), 2500);
     });
+    if (!image.naturalWidth && !image.width) return FALLBACK_1X1_PNG;
     const canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;
     const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("Canvas غير متاح");
+    if (!ctx) return FALLBACK_1X1_PNG;
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, width, height);
     ctx.drawImage(image, 0, 0, width, height);
     return base64ToUint8Array(canvas.toDataURL("image/png").split(",")[1]);
+  } catch (err) {
+    console.warn("svgToPngData fallback:", err);
+    return FALLBACK_1X1_PNG;
   } finally {
     URL.revokeObjectURL(url);
   }

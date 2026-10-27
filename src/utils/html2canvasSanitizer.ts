@@ -200,33 +200,49 @@ export function patchWindowGetComputedStyleForHtml2Canvas(targetWindow: Window =
   targetWindow.getComputedStyle = function (elt: Element, pseudoElt?: string | null): CSSStyleDeclaration {
     const style = originalGetComputedStyle(elt, pseudoElt);
     return new Proxy(style, {
-      get(target, prop, receiver) {
-        const val = Reflect.get(target, prop, receiver);
-        if (
-          typeof val === 'string' &&
-          (val.includes('oklch') ||
-            val.includes('oklab') ||
-            val.includes('color-mix') ||
-            val.includes('light-dark'))
-        ) {
-          return sanitizeColorString(val);
-        }
+      get(target, prop) {
         if (prop === 'getPropertyValue') {
           return function (propName: string) {
-            const propVal = target.getPropertyValue(propName);
-            if (
-              typeof propVal === 'string' &&
-              (propVal.includes('oklch') ||
-                propVal.includes('oklab') ||
-                propVal.includes('color-mix') ||
-                propVal.includes('light-dark'))
-            ) {
-              return sanitizeColorString(propVal);
+            try {
+              const propVal = target.getPropertyValue(propName);
+              if (
+                typeof propVal === 'string' &&
+                (propVal.includes('oklch') ||
+                  propVal.includes('oklab') ||
+                  propVal.includes('color-mix') ||
+                  propVal.includes('light-dark') ||
+                  propVal.includes('lab(') ||
+                  propVal.includes('lch('))
+              ) {
+                return sanitizeColorString(propVal);
+              }
+              return propVal;
+            } catch {
+              return '';
             }
-            return propVal;
           };
         }
-        return typeof val === 'function' ? val.bind(target) : val;
+
+        try {
+          const val = (target as any)[prop];
+          if (typeof val === 'function') {
+            return val.bind(target);
+          }
+          if (
+            typeof val === 'string' &&
+            (val.includes('oklch') ||
+              val.includes('oklab') ||
+              val.includes('color-mix') ||
+              val.includes('light-dark') ||
+              val.includes('lab(') ||
+              val.includes('lch('))
+          ) {
+            return sanitizeColorString(val);
+          }
+          return val;
+        } catch {
+          return undefined;
+        }
       },
     });
   };

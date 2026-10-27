@@ -9,15 +9,19 @@ const waitForImages = async (root: HTMLElement) => {
     await new Promise<void>(resolve => {
       img.addEventListener("load", () => resolve(), { once: true });
       img.addEventListener("error", () => resolve(), { once: true });
+      // مهلة أمان لمنع أي توقف لا نهائي
+      setTimeout(() => resolve(), 2500);
     });
   }));
 };
 
 export const generateDistributionPdf = async (
   pageElements: HTMLElement[],
-  orientation: DistributionOrientation = "portrait"
+  orientation: DistributionOrientation = "portrait",
+  filename = "التدرج_السنوي.pdf"
 ): Promise<void> => {
-  if (!pageElements.length) throw new Error("لا توجد صفحات للتصدير");
+  const validElements = pageElements.filter(el => el && el.childElementCount > 0);
+  if (!validElements.length) throw new Error("لا توجد صفحات صالحة للتصدير");
   if (document.fonts?.ready) await document.fonts.ready;
 
   const landscape = orientation === "landscape";
@@ -32,8 +36,8 @@ export const generateDistributionPdf = async (
   const pageWidth = landscape ? 297 : 210;
   const pageHeight = landscape ? 210 : 297;
 
-  for (let i = 0; i < pageElements.length; i++) {
-    const source = pageElements[i];
+  for (let i = 0; i < validElements.length; i++) {
+    const source = validElements[i];
     const page = source.cloneNode(true) as HTMLElement;
 
     page.style.width = landscape ? "297mm" : "210mm";
@@ -62,7 +66,7 @@ export const generateDistributionPdf = async (
     host.style.height = page.style.height;
     host.style.overflow = "hidden";
     host.style.background = "#ffffff";
-    host.style.zIndex = "-9999";
+    host.style.zIndex = "99999";
     host.style.pointerEvents = "none";
     host.style.opacity = "1";
     host.appendChild(page);
@@ -75,7 +79,7 @@ export const generateDistributionPdf = async (
       );
 
       const canvas = await safeHtml2Canvas(page, {
-        scale: 2,
+        scale: 1.8,
         useCORS: true,
         allowTaint: false,
         backgroundColor: "#ffffff",
@@ -89,10 +93,14 @@ export const generateDistributionPdf = async (
 
       if (i > 0) pdf.addPage();
       pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, pageWidth, pageHeight, undefined, "FAST");
+
+      // تفريغ الذاكرة
+      canvas.width = 1;
+      canvas.height = 1;
     } finally {
       host.remove();
     }
   }
 
-  pdf.save("التدرج_السنوي.pdf");
+  pdf.save(filename);
 };

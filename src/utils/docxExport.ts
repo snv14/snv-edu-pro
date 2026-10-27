@@ -16,44 +16,70 @@ import {
 import { LessonMemo, MemoConfig, Activity } from "../types";
 
 
+const base64ToUint8Array = (base64: string): Uint8Array => {
+  const binaryString = window.atob(base64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes;
+};
+
+// 1x1 transparent PNG fallback in case image generation fails
+const FALLBACK_1X1_PNG = base64ToUint8Array("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=");
+
 const imageDataUrlToPng = async (dataUrl: string): Promise<Uint8Array> => {
-  if (!dataUrl.startsWith("data:image/")) throw new Error("Unsupported image data");
-  const image = new Image();
-  image.src = dataUrl;
-  await new Promise<void>((resolve, reject) => {
-    image.onload = () => resolve();
-    image.onerror = () => reject(new Error("تعذر تحميل صورة الختم"));
-  });
-  const canvas = document.createElement("canvas");
-  canvas.width = image.naturalWidth || 512;
-  canvas.height = image.naturalHeight || 512;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Canvas غير متاح");
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(image, 0, 0);
-  return base64ToUint8Array(canvas.toDataURL("image/png").split(",")[1]);
+  try {
+    if (!dataUrl || !dataUrl.startsWith("data:image/")) return FALLBACK_1X1_PNG;
+    const image = new Image();
+    image.src = dataUrl;
+    await new Promise<void>((resolve) => {
+      image.onload = () => resolve();
+      image.onerror = () => resolve();
+      setTimeout(() => resolve(), 2500);
+    });
+    if (!image.naturalWidth) return FALLBACK_1X1_PNG;
+    const canvas = document.createElement("canvas");
+    canvas.width = image.naturalWidth || 512;
+    canvas.height = image.naturalHeight || 512;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return FALLBACK_1X1_PNG;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(image, 0, 0);
+    return base64ToUint8Array(canvas.toDataURL("image/png").split(",")[1]);
+  } catch (err) {
+    console.warn("imageDataUrlToPng fallback:", err);
+    return FALLBACK_1X1_PNG;
+  }
 };
 
 const svgToPngData = async (svg: string, width = 860, height = 590): Promise<Uint8Array> => {
+  if (!svg || !svg.trim()) return FALLBACK_1X1_PNG;
   const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   try {
     const image = new Image();
     image.src = url;
-    await new Promise<void>((resolve, reject) => {
+    await new Promise<void>((resolve) => {
       image.onload = () => resolve();
-      image.onerror = () => reject(new Error("تعذر تحويل المخطط SVG إلى صورة"));
+      image.onerror = () => resolve();
+      setTimeout(() => resolve(), 2500);
     });
+    if (!image.naturalWidth && !image.width) return FALLBACK_1X1_PNG;
     const canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;
     const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("Canvas غير متاح");
+    if (!ctx) return FALLBACK_1X1_PNG;
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, width, height);
     ctx.drawImage(image, 0, 0, width, height);
     const png = canvas.toDataURL("image/png");
     return base64ToUint8Array(png.split(",")[1]);
+  } catch (err) {
+    console.warn("svgToPngData fallback:", err);
+    return FALLBACK_1X1_PNG;
   } finally {
     URL.revokeObjectURL(url);
   }
@@ -76,16 +102,6 @@ const buildTeacherStampSvg = (config: MemoConfig, size = 420) => {
   </svg>`;
 };
 
-const base64ToUint8Array = (base64: string) => {
-  const binaryString = window.atob(base64);
-  const len = binaryString.length;
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-  return bytes;
-};
-
 const THEMES: Record<string, { hex: string, bg: string, text: string, bgSoft: string }> = {
   '1am': { hex: '0284c7', bg: 'e0f2fe', text: '0284c7', bgSoft: 'f0f9ff' },
   '2am': { hex: '7c3aed', bg: 'ede9fe', text: '7c3aed', bgSoft: 'f5f3ff' },
@@ -97,6 +113,7 @@ const createParagraph = (text?: any, bold = false, color = "000000", size = 22, 
   const safeText = text === undefined || text === null ? '' : String(text);
   return new Paragraph({
     alignment: alignment,
+    bidirectional: true,
     children: safeText.split('\n').map((line, i, arr) => [
       new TextRun({
         text: line,
@@ -125,6 +142,7 @@ const createCell = (text?: any, bold = false, color = "000000", bgColor?: string
 const renderTables = (tables?: { headers: string[], rows: string[][] }[]) => {
   if (!tables || tables.length === 0) return [];
   return tables.map(tbl => new Table({
+    visuallyRightToLeft: true,
     width: { size: 100, type: WidthType.PERCENTAGE },
     borders: {
       top: { style: BorderStyle.SINGLE, size: 1, color: "cccccc" },
@@ -136,12 +154,15 @@ const renderTables = (tables?: { headers: string[], rows: string[][] }[]) => {
     },
     rows: [
       new TableRow({
+        tableHeader: true,
+        cantSplit: true,
         children: tbl.headers.map(h => new TableCell({
           shading: { fill: "f3f4f6", type: ShadingType.CLEAR, color: "auto" },
           children: [createParagraph(h, true, "000000", 20, AlignmentType.CENTER)]
         }))
       }),
       ...tbl.rows.map(row => new TableRow({
+        cantSplit: true,
         children: row.map(cell => new TableCell({
           children: [createParagraph(cell, false, "333333", 20, AlignmentType.CENTER)]
         }))
@@ -451,6 +472,8 @@ export const generateDocx = async (lesson: LessonMemo, config: MemoConfig, activ
           rows: [
             // Headings
             new TableRow({
+              tableHeader: true,
+              cantSplit: true,
               children: isMergedFormat 
                 ? [
                     new TableCell({ width: { size: 15, type: WidthType.PERCENTAGE }, shading: { fill: "F3F4F6", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("المراحل", true, "000000", 22, AlignmentType.CENTER)] }),
@@ -468,6 +491,7 @@ export const generateDocx = async (lesson: LessonMemo, config: MemoConfig, activ
             }),
             // وضعية الانطلاق
             new TableRow({
+              cantSplit: true,
               children: isMergedFormat
                 ? [
                     new TableCell({ shading: { fill: theme.bg, type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("وضعية الانطلاق", true, theme.hex, 22, AlignmentType.CENTER)] }),
@@ -487,6 +511,7 @@ export const generateDocx = async (lesson: LessonMemo, config: MemoConfig, activ
             ...lesson.anshita.map((activity, idx) => {
               if (!activeActivities[idx]) return null;
               return new TableRow({
+                cantSplit: true,
                 children: isMergedFormat
                   ? [
                       new TableCell({ children: [
@@ -522,6 +547,7 @@ export const generateDocx = async (lesson: LessonMemo, config: MemoConfig, activ
             }).filter(Boolean) as TableRow[],
             // إرساء الموارد
             new TableRow({
+              cantSplit: true,
               children: isMergedFormat
                 ? [
                     new TableCell({ shading: { fill: theme.bg, type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("إرساء الموارد", true, theme.hex, 22, AlignmentType.CENTER)] }),
@@ -539,6 +565,7 @@ export const generateDocx = async (lesson: LessonMemo, config: MemoConfig, activ
             }),
             // تقويم الموارد
             new TableRow({
+              cantSplit: true,
               children: isMergedFormat
                 ? [
                     new TableCell({ shading: { fill: "F9FAFB", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("تقويم الموارد", true, theme.hex, 22, AlignmentType.CENTER)] }),

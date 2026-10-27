@@ -238,7 +238,12 @@ export const App: React.FC = () => {
     }, 3000);
   };
 
-  // 8. Export as real PDF file (not browser print)
+  // 8. طباعة مباشرة عبر المتصفح
+  const handleDirectPrint = () => {
+    window.print();
+  };
+
+  // 9. Export as real PDF file (with graceful print fallback)
   const handlePrint = async () => {
     if (!currentLesson) {
       showToast('الرجاء اختيار مورد تعلمي للتصدير');
@@ -246,13 +251,18 @@ export const App: React.FC = () => {
     }
 
     try {
-      showToast('جاري إنشاء ملف PDF...');
+      showToast('جاري إنشاء وتحميل ملف PDF للمذكرة...');
       const { generateMemoPdf } = await import('./utils/pdfExport');
       await generateMemoPdf(config, currentLesson.ta3alom || 'مذكرة_بيداغوجية');
       showToast('✅ تم تنزيل ملف PDF بنجاح');
     } catch (error) {
-      console.error('PDF export error:', error);
-      showToast('❌ تعذر إنشاء PDF. تحقق من اتصال الإنترنت ثم حاول مرة أخرى');
+      console.warn('PDF export error, offering browser print:', error);
+      showToast('⚠️ تعذر التحميل المباشر. جاري فتح نافذة الطباعة كبديل...');
+      try {
+        window.print();
+      } catch (printErr) {
+        showToast('❌ تعذر إنشاء PDF أو فتح الطباعة');
+      }
     }
   };
 
@@ -586,6 +596,16 @@ export const App: React.FC = () => {
                   معاينة
                 </button>
                 <button
+                  id="btn-direct-print"
+                  type="button"
+                  onClick={handleDirectPrint}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-900 text-white text-[12px] font-bold hover:bg-gray-800 shadow-xs transition cursor-pointer"
+                  title="طباعة عبر نافذة المتصفح"
+                >
+                  <Printer className="w-4 h-4" />
+                  طباعة
+                </button>
+                <button
                   id="btn-export-word"
                   type="button"
                   onClick={handleExportWord}
@@ -600,8 +620,9 @@ export const App: React.FC = () => {
                   onClick={handlePrint}
                   style={{ backgroundColor: midanTheme.accentColor }}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-white text-[12px] font-extrabold hover:opacity-90 shadow-xs transition cursor-pointer"
+                  title="تحميل ملف PDF حقيقي"
                 >
-                  <Printer className="w-4 h-4" />
+                  <FileDown className="w-4 h-4" />
                   PDF
                 </button>
                 <button
@@ -899,6 +920,7 @@ export const App: React.FC = () => {
         activeActivities={activeActivities}
         onPrint={handlePrint}
         onExportWord={handleExportWord}
+        onDirectPrint={handleDirectPrint}
       />
       <FirebaseDataSync />
     </div>

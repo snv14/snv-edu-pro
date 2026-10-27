@@ -11,6 +11,7 @@ interface PreviewModalProps {
   activeActivities: boolean[];
   onPrint: () => void;
   onExportWord: () => void;
+  onDirectPrint?: () => void;
 }
 
 export const PreviewModal: React.FC<PreviewModalProps> = ({
@@ -21,6 +22,7 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
   activeActivities,
   onPrint,
   onExportWord,
+  onDirectPrint,
 }) => {
   
   const previewRef = useRef<HTMLDivElement>(null);
@@ -80,19 +82,34 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
 
           <div className="flex items-center gap-2">
             <button
+              id="modal-btn-direct-print"
+              type="button"
+              onClick={() => {
+                if (onDirectPrint) onDirectPrint();
+                else window.print();
+              }}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-gray-900 text-white text-[13px] font-bold hover:bg-gray-800 shadow-sm transition cursor-pointer"
+              title="طباعة عبر نافذة المتصفح المباشرة"
+            >
+              <Printer className="w-4 h-4" />
+              طباعة
+            </button>
+            <button
               id="modal-btn-print"
               type="button"
               onClick={onPrint}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#c2185b] text-white text-[13px] font-bold hover:bg-[#ad1457] shadow-sm transition"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[#c2185b] text-white text-[13px] font-bold hover:bg-[#ad1457] shadow-sm transition cursor-pointer"
+              title="توليد وتحميل ملف PDF حقيقي"
             >
-              <Printer className="w-4 h-4" />
-              طباعة / PDF
+              <Download className="w-4 h-4" />
+              تحميل PDF
             </button>
             <button
               id="modal-btn-word"
               type="button"
               onClick={onExportWord}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-blue-600 text-white text-[13px] font-bold hover:bg-blue-700 shadow-sm transition"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-blue-600 text-white text-[13px] font-bold hover:bg-blue-700 shadow-sm transition cursor-pointer"
+              title="تصدير كملف Word قابل للتعديل"
             >
               <Download className="w-4 h-4" />
               تصدير Word
@@ -101,7 +118,7 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
               id="modal-btn-close"
               type="button"
               onClick={onClose}
-              className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition mr-1"
+              className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition mr-1 cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>

@@ -10,6 +10,8 @@ const waitForImages = async (root: HTMLElement): Promise<void> => {
       await new Promise<void>((resolve) => {
         img.addEventListener('load', () => resolve(), { once: true });
         img.addEventListener('error', () => resolve(), { once: true });
+        // حد أقصى 2.5 ثانية للانتظار حتى لا يتعطل التصدير عند وجود صور بطيئة أو غير متاحة
+        setTimeout(() => resolve(), 2500);
       });
     })
   );
@@ -17,7 +19,7 @@ const waitForImages = async (root: HTMLElement): Promise<void> => {
 
 const buildSafeFilename = (config: MemoConfig, title: string): string => {
   const raw = `مذكرة_${config.level || 'niveau'}_${config.teacherName || ''}_${title || 'بيداغوجية'}`;
-  return raw.replace(/[^a-zA-Z0-9\\u0600-\\u06FF_-]/g, '_').replace(/_+/g, '_').slice(0, 100) + '.pdf';
+  return raw.replace(/[^a-zA-Z0-9\u0600-\u06FF_-]/g, '_').replace(/_+/g, '_').slice(0, 100) + '.pdf';
 };
 
 const nextFrame = () =>
@@ -93,7 +95,7 @@ const prepareExportPage = (
   host.style.height = pageHeightPx + 'px';
   host.style.overflow = 'hidden';
   host.style.background = '#ffffff';
-  host.style.zIndex = '-9999';
+  host.style.zIndex = '99999';
   host.style.pointerEvents = 'none';
   host.style.opacity = '1';
   host.setAttribute('aria-hidden', 'true');
@@ -228,7 +230,7 @@ const buildSmartPages = (paper: HTMLElement): { children: HTMLElement[]; pageHei
 
   if (current.length) pages.push({ children: current, pageHeightPx });
 
-  return pages;
+  return pages.filter((p) => p.children && p.children.length > 0);
 };
 
 export const generateMemoPdf = async (
@@ -296,6 +298,10 @@ export const generateMemoPdf = async (
         undefined,
         'FAST'
       );
+
+      // تنظيف ذاكرة الكانفاس لمنع أي تسريب في الذاكرة
+      canvas.width = 1;
+      canvas.height = 1;
     } finally {
       prepared.cleanup();
     }
