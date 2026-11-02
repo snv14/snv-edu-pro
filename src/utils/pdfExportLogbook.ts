@@ -20,10 +20,12 @@ const preparePageForExport = (source: HTMLElement, orientation: LogbookOrientati
   const page = source.cloneNode(true) as HTMLElement;
   page.classList.add("export-clean-page");
   page.style.boxShadow = "none";
-  page.style.borderRadius = "0";
   page.style.margin = "0";
   page.style.transform = "none";
   page.style.backgroundColor = "#ffffff";
+  page.style.fontFamily = "'Tajawal', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+  page.style.direction = "rtl";
+  page.style.color = "#18181b";
 
   const targetWidth = orientation === "landscape" ? "297mm" : "210mm";
   const targetHeight = orientation === "landscape" ? "210mm" : "297mm";
@@ -39,6 +41,14 @@ const preparePageForExport = (source: HTMLElement, orientation: LogbookOrientati
   page.style.setProperty("direction", "rtl");
   page.style.setProperty("overflow", "hidden");
 
+  // الحفاظ على الإطار الأزرق الدائري الرسمي لورقة الدفتر اليومي
+  if (source.classList.contains("logbook-content-page") || source.hasAttribute("data-logbook-content-page")) {
+    page.style.border = "2px solid #0284c7";
+    page.style.borderRadius = "14px";
+  } else {
+    page.style.borderRadius = "0";
+  }
+
   const host = document.createElement("div");
   host.style.position = "fixed";
   host.style.left = "0";
@@ -51,6 +61,8 @@ const preparePageForExport = (source: HTMLElement, orientation: LogbookOrientati
   host.style.pointerEvents = "none";
   host.style.opacity = "1";
   host.style.direction = "rtl";
+  host.style.fontFamily = "'Tajawal', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+  host.style.color = "#18181b";
   host.style.display = "flex";
   host.style.flexDirection = "column";
   host.style.alignItems = "stretch";

@@ -209,8 +209,6 @@ button,input,textarea,select{font-family:inherit;}
     max-height: 297mm !important;
     margin: 0 auto !important;
     box-shadow: none !important;
-    border: none !important;
-    border-radius: 0 !important;
     overflow: hidden !important;
     page-break-before: auto !important;
     break-before: auto !important;
@@ -220,6 +218,14 @@ button,input,textarea,select{font-family:inherit;}
     break-inside: avoid !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+    font-family: 'Tajawal', system-ui, sans-serif !important;
+  }
+
+  .print-preview-root .logbook-content-page,
+  .print-page.logbook-content-page,
+  [data-logbook-content-page="true"] {
+    border: 2px solid #0284c7 !important;
+    border-radius: 12px !important;
   }
 
   .print-preview-root [data-preview-export-page="true"]:last-child,

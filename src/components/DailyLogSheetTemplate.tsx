@@ -223,6 +223,8 @@ export const DailyLogSheetTemplate: React.FC<DailyLogSheetProps> = ({
         height: `${pageDimensions.h}mm`,
         minHeight: `${pageDimensions.h}mm`,
         maxWidth: 'none',
+        fontFamily: "'Tajawal', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+        direction: 'rtl',
       }}
     >
       <div className="h-full flex flex-col justify-between p-3.5 md:p-4">

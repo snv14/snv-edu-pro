@@ -1415,7 +1415,8 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
         gridRows,
         holidays,
         assignedLevels,
-        orientation
+        orientation,
+        paginatedPages
       );
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -2466,8 +2467,6 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
             background: #ffffff !important;
             box-shadow: none !important;
             margin: 0 auto !important;
-            border: none !important;
-            border-radius: 0 !important;
             page-break-before: auto !important;
             break-before: auto !important;
             page-break-after: always !important;
@@ -2481,6 +2480,10 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
             max-height: ${orientation === 'landscape' ? '210mm' : '297mm'} !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
+          }
+          .logbook-content-page, [data-logbook-content-page="true"] {
+            border: 2px solid #0284c7 !important;
+            border-radius: 12px !important;
           }
           .notebook-intro-page {
             display: flex !important;

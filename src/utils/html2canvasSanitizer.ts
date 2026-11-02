@@ -42,59 +42,127 @@ function oklabToRgbStringValues(L: number, a: number, b: number, alpha = 1): str
 
 /**
  * تحويل دقيق لصيغة oklch(L C H [/ A]) إلى rgb(r, g, b) أو rgba(r, g, b, a)
+ * يدعم قيم none للألوان المحايدة في Tailwind v4 (مثل zinc-50، zinc-900، الأبيض، الأسود)
  */
 export function oklchToRgbString(oklchStr: string): string {
-  const match = oklchStr.match(
-    /oklch\(\s*([\d.]+%?)\s+([\d.]+%?)\s+([-\d.]+(?:deg|rad|turn)?)\s*(?:\/\s*([\d.]+%?))?\s*\)/i
-  );
-  if (!match) return 'rgb(15, 118, 110)';
+  try {
+    const inner = oklchStr.replace(/^oklch\(\s*/i, '').replace(/\s*\)$/, '').trim();
+    if (!inner) return '#ffffff';
 
-  let L = parseFloat(match[1]);
-  if (match[1].endsWith('%')) L /= 100;
+    const [colorPart, alphaPart] = inner.split(/\s*\/\s*/);
+    const tokens = colorPart.trim().split(/\s+/);
+    if (tokens.length < 3) return '#ffffff';
 
-  let C = parseFloat(match[2]);
-  if (match[2].endsWith('%')) C = (C / 100) * 0.4;
+    // Token 0: Lightness L (0..1 أو نسبة مئوية 0%..100%)
+    let L = 1;
+    if (tokens[0] !== 'none') {
+      L = parseFloat(tokens[0]);
+      if (tokens[0].endsWith('%')) L /= 100;
+    }
+    if (isNaN(L)) L = 1;
 
-  let H = parseFloat(match[3]);
-  if (match[3].endsWith('rad')) H = (H * 180) / Math.PI;
-  else if (match[3].endsWith('turn')) H = H * 360;
+    // Token 1: Chroma C (0..0.4 أو نسبة أو none)
+    let C = 0;
+    if (tokens[1] !== 'none') {
+      C = parseFloat(tokens[1]);
+      if (tokens[1].endsWith('%')) C = (C / 100) * 0.4;
+    }
+    if (isNaN(C) || C < 0) C = 0;
 
-  let alpha = 1;
-  if (match[4]) {
-    alpha = parseFloat(match[4]);
-    if (match[4].endsWith('%')) alpha /= 100;
+    // Token 2: Hue H (درجات زاوية، rad، turn أو none)
+    let H = 0;
+    const isAchromatic = tokens[2] === 'none' || C === 0;
+    if (!isAchromatic) {
+      const hStr = tokens[2];
+      H = parseFloat(hStr);
+      if (hStr.endsWith('rad')) H = (H * 180) / Math.PI;
+      else if (hStr.endsWith('turn')) H = H * 360;
+      if (isNaN(H)) H = 0;
+    }
+
+    // Alpha
+    let alpha = 1;
+    if (alphaPart && alphaPart !== 'none') {
+      alpha = parseFloat(alphaPart);
+      if (alphaPart.endsWith('%')) alpha /= 100;
+      if (isNaN(alpha)) alpha = 1;
+    }
+
+    // تحويل مباشر وسريع للألوان المحايدة (الرماديات، الأسود، الأبيض)
+    if (isAchromatic) {
+      const linear = Math.max(0, Math.min(1, Math.pow(L, 3)));
+      const s = linear <= 0.0031308 ? 12.92 * linear : 1.055 * Math.pow(linear, 1 / 2.4) - 0.055;
+      const val = Math.min(255, Math.max(0, Math.round(s * 255)));
+      if (alpha < 1) {
+        return `rgba(${val}, ${val}, ${val}, ${Math.round(alpha * 100) / 100})`;
+      }
+      return `rgb(${val}, ${val}, ${val})`;
+    }
+
+    const hRad = (H * Math.PI) / 180;
+    const a = C * Math.cos(hRad);
+    const b = C * Math.sin(hRad);
+
+    return oklabToRgbStringValues(L, a, b, alpha);
+  } catch {
+    return '#ffffff';
   }
-
-  const hRad = (H * Math.PI) / 180;
-  const a = C * Math.cos(hRad);
-  const b = C * Math.sin(hRad);
-
-  return oklabToRgbStringValues(L, a, b, alpha);
 }
 
 /**
  * تحويل دقيق لصيغة oklab(L a b [/ A]) إلى rgb(r, g, b) أو rgba(r, g, b, a)
  */
 export function oklabToRgbString(oklabStr: string): string {
-  const match = oklabStr.match(
-    /oklab\(\s*([\d.]+%?)\s+([-\d.]+%?)\s+([-\d.]+%?)\s*(?:\/\s*([\d.]+%?))?\s*\)/i
-  );
-  if (!match) return 'rgb(15, 118, 110)';
+  try {
+    const inner = oklabStr.replace(/^oklab\(\s*/i, '').replace(/\s*\)$/, '').trim();
+    if (!inner) return '#ffffff';
 
-  let L = parseFloat(match[1]);
-  if (match[1].endsWith('%')) L /= 100;
-  let a = parseFloat(match[2]);
-  if (match[2].endsWith('%')) a /= 100;
-  let b = parseFloat(match[3]);
-  if (match[3].endsWith('%')) b /= 100;
+    const [colorPart, alphaPart] = inner.split(/\s*\/\s*/);
+    const tokens = colorPart.trim().split(/\s+/);
+    if (tokens.length < 3) return '#ffffff';
 
-  let alpha = 1;
-  if (match[4]) {
-    alpha = parseFloat(match[4]);
-    if (match[4].endsWith('%')) alpha /= 100;
+    let L = 1;
+    if (tokens[0] !== 'none') {
+      L = parseFloat(tokens[0]);
+      if (tokens[0].endsWith('%')) L /= 100;
+    }
+    if (isNaN(L)) L = 1;
+
+    let a = 0;
+    if (tokens[1] !== 'none') {
+      a = parseFloat(tokens[1]);
+      if (tokens[1].endsWith('%')) a = (a / 100) * 0.4;
+    }
+    if (isNaN(a)) a = 0;
+
+    let b = 0;
+    if (tokens[2] !== 'none') {
+      b = parseFloat(tokens[2]);
+      if (tokens[2].endsWith('%')) b = (b / 100) * 0.4;
+    }
+    if (isNaN(b)) b = 0;
+
+    let alpha = 1;
+    if (alphaPart && alphaPart !== 'none') {
+      alpha = parseFloat(alphaPart);
+      if (alphaPart.endsWith('%')) alpha /= 100;
+      if (isNaN(alpha)) alpha = 1;
+    }
+
+    if (a === 0 && b === 0) {
+      const linear = Math.max(0, Math.min(1, Math.pow(L, 3)));
+      const s = linear <= 0.0031308 ? 12.92 * linear : 1.055 * Math.pow(linear, 1 / 2.4) - 0.055;
+      const val = Math.min(255, Math.max(0, Math.round(s * 255)));
+      if (alpha < 1) {
+        return `rgba(${val}, ${val}, ${val}, ${Math.round(alpha * 100) / 100})`;
+      }
+      return `rgb(${val}, ${val}, ${val})`;
+    }
+
+    return oklabToRgbStringValues(L, a, b, alpha);
+  } catch {
+    return '#ffffff';
   }
-
-  return oklabToRgbStringValues(L, a, b, alpha);
 }
 
 /**
@@ -108,10 +176,10 @@ export function sanitizeColorString(val: string): string {
   return val
     .replace(/oklch\([^)]+\)/gi, (m) => oklchToRgbString(m))
     .replace(/oklab\([^)]+\)/gi, (m) => oklabToRgbString(m))
-    .replace(/color-mix\([^)]+\)/gi, 'rgba(15, 118, 110, 0.5)')
+    .replace(/color-mix\([^)]+\)/gi, 'rgba(2, 132, 199, 0.15)')
     .replace(/light-dark\([^)]+\)/gi, '#ffffff')
-    .replace(/lab\([^)]+\)/gi, 'rgb(15, 118, 110)')
-    .replace(/lch\([^)]+\)/gi, 'rgb(15, 118, 110)');
+    .replace(/lab\([^)]+\)/gi, '#18181b')
+    .replace(/lch\([^)]+\)/gi, '#18181b');
 }
 
 /**
@@ -120,7 +188,7 @@ export function sanitizeColorString(val: string): string {
 function replaceBalancedFunctionCall(
   cssText: string,
   funcName: string,
-  fallback = '#0f766e'
+  fallback = '#ffffff'
 ): string {
   const prefix = funcName.toLowerCase() + '(';
   let result = '';
@@ -167,20 +235,20 @@ export function sanitizeCssString(css: string): string {
   }
 
   let sanitized = css;
-  sanitized = replaceBalancedFunctionCall(sanitized, 'color-mix', 'rgba(15, 118, 110, 0.5)');
-  sanitized = replaceBalancedFunctionCall(sanitized, 'oklch', '#0f766e');
-  sanitized = replaceBalancedFunctionCall(sanitized, 'oklab', '#0f766e');
-  sanitized = replaceBalancedFunctionCall(sanitized, 'lab', '#0f766e');
-  sanitized = replaceBalancedFunctionCall(sanitized, 'lch', '#0f766e');
+  sanitized = replaceBalancedFunctionCall(sanitized, 'color-mix', 'rgba(2, 132, 199, 0.15)');
+  sanitized = replaceBalancedFunctionCall(sanitized, 'oklch', '#ffffff');
+  sanitized = replaceBalancedFunctionCall(sanitized, 'oklab', '#ffffff');
+  sanitized = replaceBalancedFunctionCall(sanitized, 'lab', '#18181b');
+  sanitized = replaceBalancedFunctionCall(sanitized, 'lch', '#18181b');
   sanitized = replaceBalancedFunctionCall(sanitized, 'light-dark', '#ffffff');
 
   sanitized = sanitized
     .replace(/oklch\([^)]+\)/gi, (m) => oklchToRgbString(m))
     .replace(/oklab\([^)]+\)/gi, (m) => oklabToRgbString(m))
-    .replace(/color-mix\([^)]+\)/gi, 'rgba(15, 118, 110, 0.5)')
+    .replace(/color-mix\([^)]+\)/gi, 'rgba(2, 132, 199, 0.15)')
     .replace(/light-dark\([^)]+\)/gi, '#ffffff')
-    .replace(/lab\([^)]+\)/gi, '#0f766e')
-    .replace(/lch\([^)]+\)/gi, '#0f766e')
+    .replace(/lab\([^)]+\)/gi, '#18181b')
+    .replace(/lch\([^)]+\)/gi, '#18181b')
     .replace(/in\s+oklab/gi, 'in srgb')
     .replace(/in\s+oklch/gi, 'in srgb');
 
@@ -364,6 +432,65 @@ export const sanitizeOklchForHtml2Canvas = (clonedDoc: Document): void => {
         '--color-gray-700': '#374151',
         '--color-gray-800': '#1f2937',
         '--color-gray-900': '#111827',
+        // Zinc palette
+        '--color-zinc-50': '#fafafa',
+        '--color-zinc-100': '#f4f4f5',
+        '--color-zinc-200': '#e4e4e7',
+        '--color-zinc-300': '#d4d4d8',
+        '--color-zinc-400': '#a1a1aa',
+        '--color-zinc-500': '#71717a',
+        '--color-zinc-600': '#52525b',
+        '--color-zinc-700': '#3f3f46',
+        '--color-zinc-800': '#27272a',
+        '--color-zinc-900': '#18181b',
+        '--color-zinc-950': '#09090b',
+        // Sky palette (Daily log official template theme)
+        '--color-sky-50': '#f0f9ff',
+        '--color-sky-100': '#e0f2fe',
+        '--color-sky-200': '#bae6fd',
+        '--color-sky-300': '#7dd3fc',
+        '--color-sky-400': '#38bdf8',
+        '--color-sky-500': '#0ea5e9',
+        '--color-sky-600': '#0284c7',
+        '--color-sky-700': '#0369a1',
+        '--color-sky-800': '#075985',
+        '--color-sky-900': '#0c4a6e',
+        '--color-sky-950': '#082f49',
+        // Blue palette
+        '--color-blue-50': '#eff6ff',
+        '--color-blue-100': '#dbeafe',
+        '--color-blue-200': '#bfdbfe',
+        '--color-blue-300': '#93c5fd',
+        '--color-blue-400': '#60a5fa',
+        '--color-blue-500': '#3b82f6',
+        '--color-blue-600': '#2563eb',
+        '--color-blue-700': '#1d4ed8',
+        '--color-blue-800': '#1e40af',
+        '--color-blue-900': '#1e3a8a',
+        // Amber palette
+        '--color-amber-50': '#fffbeb',
+        '--color-amber-100': '#fef3c7',
+        '--color-amber-200': '#fde68a',
+        '--color-amber-300': '#fcd34d',
+        '--color-amber-400': '#fbbf24',
+        '--color-amber-500': '#f59e0b',
+        '--color-amber-600': '#d97706',
+        '--color-amber-700': '#b45309',
+        '--color-amber-800': '#92400e',
+        '--color-amber-900': '#78350f',
+        // Red palette
+        '--color-red-50': '#fef2f2',
+        '--color-red-100': '#fee2e2',
+        '--color-red-200': '#fecaca',
+        '--color-red-300': '#fca5a5',
+        '--color-red-400': '#f87171',
+        '--color-red-500': '#ef4444',
+        '--color-red-600': '#dc2626',
+        '--color-red-700': '#b91c1c',
+        '--color-red-800': '#991b1b',
+        '--color-red-900': '#7f1d1d',
+        '--color-white': '#ffffff',
+        '--color-black': '#000000',
       };
 
       for (const [prop, val] of Object.entries(safeColorPalette)) {

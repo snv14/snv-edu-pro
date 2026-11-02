@@ -52,17 +52,43 @@ const createParagraph = (text: string, bold = false, color = "000000", size = 20
   });
 };
 
-const createCell = (text: string, bold = false, bgColor?: string, columnSpan?: number, rowSpan?: number, size = 20, alignment: any = AlignmentType.CENTER, widthPercent?: number) => {
+const createCell = (
+  text: string | Paragraph[],
+  bold = false,
+  bgColor?: string,
+  columnSpan?: number,
+  rowSpan?: number,
+  size = 20,
+  alignment: any = AlignmentType.CENTER,
+  widthPercent?: number,
+  customTextColor?: string,
+  borders?: any
+) => {
   const fill = bgColor === "000000" ? "064E3B" : (bgColor || "FFFFFF");
-  const textColor = fill === "064E3B" || fill === "006233" ? "FFFFFF" : "000000";
+  let textColor = customTextColor;
+  if (!textColor) {
+    if (fill === "064E3B" || fill === "006233" || fill === "0284C7" || fill === "0369A1" || fill === "1D4ED8") {
+      textColor = "FFFFFF";
+    } else if (fill === "E1F0FA" || fill === "E0F2FE") {
+      textColor = "0369A1";
+    } else {
+      textColor = "18181B";
+    }
+  }
+
+  const children = Array.isArray(text)
+    ? text
+    : [createParagraph(text, bold, textColor, size, alignment)];
+
   return new TableCell({
     columnSpan,
     rowSpan,
     shading: { fill, type: ShadingType.CLEAR, color: "auto" },
-    margins: { top: 100, bottom: 100, left: 100, right: 100 },
+    margins: { top: 80, bottom: 80, left: 80, right: 80 },
     verticalAlign: VerticalAlign.CENTER,
     width: widthPercent ? { size: widthPercent, type: WidthType.PERCENTAGE } : undefined,
-    children: [createParagraph(text, bold, textColor, size, alignment)]
+    borders: borders || undefined,
+    children,
   });
 };
 
@@ -131,7 +157,13 @@ const getExportLessonContent = (log: LogEntry, previous?: LogEntry): string => {
 };
 
 const base64ToUint8Array = (base64: string): Uint8Array => {
-  const binary = window.atob(base64);
+  const binary = typeof atob === 'function'
+    ? atob(base64)
+    : typeof window !== 'undefined' && typeof window.atob === 'function'
+    ? window.atob(base64)
+    : typeof Buffer !== 'undefined'
+    ? Buffer.from(base64, 'base64').toString('binary')
+    : '';
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return bytes;
@@ -182,6 +214,9 @@ const buildTeacherStampSvg = (config: MemoConfig, size = 420): string => {
 
 const svgToPngData = async (svg: string, width = 420, height = 420): Promise<Uint8Array> => {
   if (!svg || !svg.trim()) return FALLBACK_1X1_PNG;
+  if (typeof window === 'undefined' || typeof Image === 'undefined' || typeof document === 'undefined') {
+    return FALLBACK_1X1_PNG;
+  }
   const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   try {
@@ -216,353 +251,464 @@ export const generateLogbookDocx = async (
   gridRows: any[] = [],
   holidays: any[] = [],
   assignedLevels: string[] = [],
-  orientation: 'portrait' | 'landscape' = 'portrait'
+  orientation: 'portrait' | 'landscape' = 'portrait',
+  paginatedPages?: LogEntry[][]
 ): Promise<Blob> => {
+  // 1. استخراج الختم الرسمي كصورة PNG لإدراجه في ترويسة وتوقيعات كل صفحة
+  const stampPngBytes = config.teacherStamp?.startsWith("data:image/")
+    ? await imageDataUrlToPng(config.teacherStamp)
+    : await svgToPngData(buildTeacherStampSvg(config, 200), 200, 200);
 
-  const theme = getLevelTheme(assignedLevels);
-  const rows: TableRow[] = [];
-  let previousWeekKey = '';
-  rows.push(new TableRow({
-    tableHeader: true,
-    children: [
-      createCell("التاريخ واليوم", true, theme.header, 1, 1, 20, AlignmentType.CENTER, 16),
-      createCell("التوقيت", true, theme.header, 1, 1, 20, AlignmentType.CENTER, 15),
-      createCell("القسم", true, theme.header, 1, 1, 20, AlignmentType.CENTER, 13),
-      createCell("المحتوى الدرس", true, theme.header, 1, 1, 20, AlignmentType.CENTER, 41),
-      createCell("الملاحظات", true, theme.header, 1, 1, 20, AlignmentType.CENTER, 15),
-    ]
-  }));
+  // 2. تحديد صفحات الدفتر: إما من paginatedPages أو بتقسيم الحصص بمعدل 10 أسطر
+  const pages: LogEntry[][] = paginatedPages && paginatedPages.length > 0
+    ? paginatedPages
+    : (() => {
+        const chunks: LogEntry[][] = [];
+        for (let i = 0; i < logs.length; i += 10) {
+          chunks.push(logs.slice(i, i + 10));
+        }
+        return chunks.length > 0 ? chunks : [[]];
+      })();
 
-  logs.forEach((log, index) => {
-    const currentWeekKey = (() => {
-      const d = new Date(`${log.dateStr}T12:00:00`);
-      if (Number.isNaN(d.getTime())) return log.dateStr;
-      d.setDate(d.getDate() - d.getDay());
-      return d.toISOString().split('T')[0];
-    })();
+  const totalPages = pages.length;
 
-    if (previousWeekKey && currentWeekKey !== previousWeekKey) {
-      rows.push(new TableRow({
-        cantSplit: true,
-        children: [
-          createCell("— فاصل الأسبوع الدراسي —", true, theme.soft, 5, 1, 14, AlignmentType.CENTER),
-        ]
-      }));
-    }
+  // أبعاد الصفحة بوحدات twips (1 مم ≈ 56.7 twips)
+  const pageWidthTwips = orientation === 'landscape' ? 16838 : 11906;
+  const pageHeightTwips = orientation === 'landscape' ? 11906 : 16838;
+  const pageMargin = { top: 400, bottom: 400, left: 500, right: 500 };
 
-    previousWeekKey = currentWeekKey;
-    const bgColor = index % 2 === 0 ? "FFFFFF" : theme.soft;
-    const timeWithArrow = (log.time || '').replace(/\s*[-–—→←➔]\s*/g, ' ➔ ').replace(/\s*➔\s*/g, ' ➔ ');
-    const fullContent = getExportLessonContent(log, findPreviousComparableCurriculumLog(logs, index, log));
-    rows.push(new TableRow({
-      cantSplit: true,
-      children: [
-        createCell(
-          (log.dateStr || '').includes('/')
-            ? (log.dateStr || '')
-                .split('/')
-                .map((dp, i) => `${((log.dayName || '').split('/')[i] || (log.dayName || '')).trim()} ${dp.trim()}`)
-                .join('\n')
-            : `${log.dayName || ''}\n${log.dateStr || ''}`.trim(),
-          false,
-          bgColor,
-          1,
-          1,
-          18,
-          AlignmentType.CENTER,
-          16
-        ),
-        createCell(timeWithArrow, false, bgColor, 1, 1, 18, AlignmentType.CENTER, 15),
-        createCell(log.section || '', true, bgColor, 1, 1, 18, AlignmentType.CENTER, 13),
-        createCell(fullContent, false, bgColor, 1, 1, 18, AlignmentType.RIGHT, 41),
-        createCell(log.note || '', false, bgColor, 1, 1, 18, AlignmentType.RIGHT, 15),
-      ]
-    }));
-  });
+  const skyBorder = { style: BorderStyle.SINGLE, size: 2, color: "0284C7" };
+  const dashedBorder = { style: BorderStyle.DASHED, size: 1, color: "7DD3FC" };
+  const noneBorder = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
 
-  // Front Page Content
-  const frontPageChildren: any[] = [
-    // Same red/green small header
+  // ==========================================
+  // الصفحة 1: الصفحة التعريفية (Introductory Page)
+  // ==========================================
+  const introChildren: any[] = [
+    // شريط العلم الوطني الجزائري
     new Table({
       visuallyRightToLeft: true,
       width: { size: 100, type: WidthType.PERCENTAGE },
-      borders: {
-        top: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-        bottom: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-        left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-        right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-        insideHorizontal: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-        insideVertical: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-      },
+      borders: { top: noneBorder, bottom: noneBorder, left: noneBorder, right: noneBorder, insideHorizontal: noneBorder, insideVertical: noneBorder },
       rows: [
         new TableRow({
           children: [
-            createCell(`الجمهورية الجزائرية الديمقراطية الشعبية\nوزارة التربية الوطنية`, true, undefined, 1, 1, 18, AlignmentType.RIGHT),
-            createCell(`الدفتر اليومي - الأستاذ(ة): ${config.teacherName}`, true, undefined, 1, 1, 28, AlignmentType.CENTER),
-            createCell(`الموسم: ${config.schoolYear}\nالمتوسطة: ${config.schoolName}`, true, undefined, 1, 1, 18, AlignmentType.LEFT),
+            createCell("", false, "006233", 1, 1, 10, AlignmentType.CENTER, 50),
+            createCell("", false, "D21034", 1, 1, 10, AlignmentType.CENTER, 50),
           ]
         })
       ]
     }),
-    new Paragraph({ text: "", spacing: { after: 600 } }),
-    createParagraph("الدفتر اليومي", true, "000000", 40),
-    new Paragraph({ text: "", spacing: { after: 400 } }),
-    
-    // Info Block (Simple border)
+    new Paragraph({ text: "", spacing: { after: 200 } }),
+    createParagraph("الجمهورية الجزائرية الديمقراطية الشعبية", true, "18181B", 24),
+    createParagraph("وزارة التربية الوطنية", true, "0369A1", 22),
+    new Paragraph({ text: "", spacing: { after: 150 } }),
+    createParagraph("الدفتر اليومي للأستاذ", true, "0369A1", 38),
+    createParagraph("علوم الطبيعة والحياة — التعليم المتوسط", true, "0284C7", 24),
+    createParagraph("صفحة تعريفية رسمية", false, "71717A", 18),
+    new Paragraph({ text: "", spacing: { after: 250 } }),
+
+    // بطاقة معلومات الأستاذ والإسناد التربوي
     new Table({
       visuallyRightToLeft: true,
       width: { size: 100, type: WidthType.PERCENTAGE },
       borders: {
-        top: { style: BorderStyle.SINGLE, size: 2, color: "000000" },
-        bottom: { style: BorderStyle.SINGLE, size: 2, color: "000000" },
-        left: { style: BorderStyle.SINGLE, size: 2, color: "000000" },
-        right: { style: BorderStyle.SINGLE, size: 2, color: "000000" },
-        insideHorizontal: { style: BorderStyle.SINGLE, size: 2, color: "000000" },
-        insideVertical: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+        top: skyBorder, bottom: skyBorder, left: skyBorder, right: skyBorder,
+        insideHorizontal: dashedBorder, insideVertical: dashedBorder
       },
       rows: [
-        new TableRow({ children: [ createCell("الأستاذ(ة):", true, undefined, 1, 1, 20, AlignmentType.RIGHT), createCell(config.teacherName || '—', true, undefined, 1, 1, 20, AlignmentType.RIGHT) ] }),
-        new TableRow({ children: [ createCell("المادة:", true, undefined, 1, 1, 20, AlignmentType.RIGHT), createCell("علوم الطبيعة والحياة", true, undefined, 1, 1, 20, AlignmentType.RIGHT) ] }),
-        new TableRow({ children: [ createCell("المتوسطة:", true, undefined, 1, 1, 20, AlignmentType.RIGHT), createCell(config.schoolName || '—', true, undefined, 1, 1, 20, AlignmentType.RIGHT) ] }),
-        new TableRow({ children: [ createCell("السنة الدراسية:", true, undefined, 1, 1, 20, AlignmentType.RIGHT), createCell(config.schoolYear || '', true, undefined, 1, 1, 20, AlignmentType.RIGHT) ] }),
-        new TableRow({ children: [ createCell("المستويات المسندة:", true, undefined, 1, 1, 20, AlignmentType.RIGHT), createCell(assignedLevels.join(' ، '), true, undefined, 1, 1, 20, AlignmentType.RIGHT) ] }),
+        new TableRow({
+          children: [
+            createCell("الأستاذ(ة):", true, "F0F9FF", 1, 1, 20, AlignmentType.RIGHT, 25, "0369A1"),
+            createCell(config.teacherName || '—', true, "FFFFFF", 1, 1, 20, AlignmentType.RIGHT, 25),
+            createCell("المؤسسة:", true, "F0F9FF", 1, 1, 20, AlignmentType.RIGHT, 25, "0369A1"),
+            createCell(config.schoolName || '—', true, "FFFFFF", 1, 1, 20, AlignmentType.RIGHT, 25),
+          ]
+        }),
+        new TableRow({
+          children: [
+            createCell("مديرية التربية:", true, "F0F9FF", 1, 1, 20, AlignmentType.RIGHT, 25, "0369A1"),
+            createCell(config.directorate || '—', true, "FFFFFF", 1, 1, 20, AlignmentType.RIGHT, 25),
+            createCell("السنة الدراسية:", true, "F0F9FF", 1, 1, 20, AlignmentType.RIGHT, 25, "0369A1"),
+            createCell(config.schoolYear || '2026-2027', true, "FFFFFF", 1, 1, 20, AlignmentType.RIGHT, 25),
+          ]
+        }),
+        new TableRow({
+          children: [
+            createCell("المستويات المسندة:", true, "F0F9FF", 1, 1, 20, AlignmentType.RIGHT, 25, "0369A1"),
+            createCell(assignedLevels.join(' • ') || '1م', true, "FFFFFF", 3, 1, 20, AlignmentType.RIGHT, 75),
+          ]
+        }),
       ]
     }),
-    
-    new Paragraph({ text: "", spacing: { after: 600 } }),
-    createParagraph("جدول استعمال الزمن", true, "000000", 24, AlignmentType.RIGHT),
-    new Paragraph({ text: "", spacing: { after: 100 } }),
+    new Paragraph({ text: "", spacing: { after: 300 } }),
+    createParagraph("وثيقة بيداغوجية لمتابعة إنجاز المنهاج وتوثيق سير الحصص والأنشطة التعلمية", false, "71717A", 16),
   ];
 
-  // Timetable
+  // ==========================================
+  // الصفحة 2: الغلاف واستعمال الزمن الرسمي
+  // ==========================================
+  const coverChildren: any[] = [
+    // شريط العلم الوطني
+    new Table({
+      visuallyRightToLeft: true,
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      borders: { top: noneBorder, bottom: noneBorder, left: noneBorder, right: noneBorder, insideHorizontal: noneBorder, insideVertical: noneBorder },
+      rows: [
+        new TableRow({
+          children: [
+            createCell("", false, "006233", 1, 1, 10, AlignmentType.CENTER, 50),
+            createCell("", false, "D21034", 1, 1, 10, AlignmentType.CENTER, 50),
+          ]
+        })
+      ]
+    }),
+    new Paragraph({ text: "", spacing: { after: 150 } }),
+    createParagraph("الجمهورية الجزائرية الديمقراطية الشعبية", true, "18181B", 22),
+    createParagraph("وزارة التربية الوطنية", true, "0369A1", 20),
+    createParagraph(`مديرية التربية لولاية ${config.directorate || '—'} • متوسطة ${config.schoolName || '—'}`, true, "18181B", 18),
+    new Paragraph({ text: "", spacing: { after: 150 } }),
+
+    // شارة الغلاف
+    new Table({
+      visuallyRightToLeft: true,
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      borders: { top: skyBorder, bottom: skyBorder, left: skyBorder, right: skyBorder, insideHorizontal: noneBorder, insideVertical: noneBorder },
+      rows: [
+        new TableRow({
+          children: [
+            createCell([
+              createParagraph("الدفتر اليومي للأستاذ", true, "0369A1", 32),
+              createParagraph(`مرحلة التعليم المتوسط • مادة علوم الطبيعة والحياة • الموسم ${config.schoolYear || '2026-2027'}`, true, "0284C7", 18),
+            ], false, "E1F0FA", 1, 1, 20, AlignmentType.CENTER, 100)
+          ]
+        })
+      ]
+    }),
+    new Paragraph({ text: "", spacing: { after: 200 } }),
+  ];
+
+  // جدول استعمال الزمن في صفحة الغلاف
   if (gridRows.length > 0) {
     const timetableRows: TableRow[] = [];
     timetableRows.push(new TableRow({
+      tableHeader: true,
       children: [
-        createCell("اليوم \ التوقيت", true, "FFFFFF", 1, 1, 16),
-        ...gridRows.map((r: any) => createCell(r.time, true, "FFFFFF", 1, 1, 14))
+        createCell("اليوم \\ التوقيت", true, "E1F0FA", 1, 1, 17, AlignmentType.CENTER, 15, "0369A1"),
+        ...gridRows.map((r: any) => createCell(r.time, true, "E1F0FA", 1, 1, 15, AlignmentType.CENTER, undefined, "0369A1"))
       ]
     }));
-    
+
+    const WEEK_DAYS = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
     WEEK_DAYS.forEach((day, index) => {
-      const bgColor = index % 2 === 0 ? "FFFFFF" : "FFFFFF";
+      const bgColor = index % 2 === 0 ? "FFFFFF" : "F8FAFC";
       timetableRows.push(new TableRow({
         children: [
-          createCell(day, true, bgColor, 1, 1, 16),
-          ...gridRows.map((r: any) => createCell(r.cells[day] || '', true, bgColor, 1, 1, 14))
+          createCell(day, true, "F0F9FF", 1, 1, 17, AlignmentType.CENTER, 15, "0369A1"),
+          ...gridRows.map((r: any) => {
+            const val = r.cells[day] || '';
+            let cellBg = bgColor;
+            if (val) {
+              if (val.includes('4م')) cellBg = "FEE2E2";
+              else if (val.includes('3م')) cellBg = "FEF3C7";
+              else if (val.includes('2م')) cellBg = "DBEAFE";
+              else cellBg = "E0F2FE";
+            }
+            return createCell(val || '—', !!val, cellBg, 1, 1, 16, AlignmentType.CENTER);
+          })
         ]
       }));
     });
 
-    frontPageChildren.push(
+    coverChildren.push(
+      createParagraph("جدول استعمال الزمن الأسبوعي الرسمي للأستاذ", true, "0369A1", 20, AlignmentType.RIGHT),
+      new Paragraph({ text: "", spacing: { after: 100 } }),
       new Table({
         visuallyRightToLeft: true,
         width: { size: 100, type: WidthType.PERCENTAGE },
         borders: {
-          top: { style: BorderStyle.SINGLE, size: 2, color: "000000" },
-          bottom: { style: BorderStyle.SINGLE, size: 2, color: "000000" },
-          left: { style: BorderStyle.SINGLE, size: 2, color: "000000" },
-          right: { style: BorderStyle.SINGLE, size: 2, color: "000000" },
-          insideHorizontal: { style: BorderStyle.SINGLE, size: 2, color: "000000" },
-          insideVertical: { style: BorderStyle.SINGLE, size: 2, color: "000000" },
+          top: skyBorder, bottom: skyBorder, left: skyBorder, right: skyBorder,
+          insideHorizontal: dashedBorder, insideVertical: dashedBorder
         },
         rows: timetableRows
-      })
+      }),
+      new Paragraph({ text: "", spacing: { after: 200 } })
     );
   }
 
-  // Holidays
-  if (holidays.length > 0) {
-    frontPageChildren.push(new Paragraph({ text: "", spacing: { after: 600 } }));
-    frontPageChildren.push(createParagraph("جدول العطل", true, "000000", 24, AlignmentType.RIGHT));
-    frontPageChildren.push(new Paragraph({ text: "", spacing: { after: 100 } }));
-    
-    const holidayRows: TableRow[] = [];
-    holidayRows.push(new TableRow({
-      children: [
-        createCell("العطلة", true, "FFFFFF", 1, 1, 18),
-        createCell("من", true, "FFFFFF", 1, 1, 18),
-        createCell("إلى", true, "FFFFFF", 1, 1, 18),
+  // التوقيعات الأربعة في صفحة الغلاف
+  coverChildren.push(
+    new Table({
+      visuallyRightToLeft: true,
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      borders: {
+        top: skyBorder, bottom: skyBorder, left: skyBorder, right: skyBorder,
+        insideHorizontal: dashedBorder, insideVertical: dashedBorder
+      },
+      rows: [
+        new TableRow({
+          children: [
+            createCell("توقيع الأستاذ(ة)\n\n\n....................", true, "F8FAFC", 1, 1, 16, AlignmentType.CENTER, 25),
+            createCell([
+              createParagraph("ختم الأستاذ(ة)", true, "18181B", 16),
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                children: [
+                  new ImageRun({
+                    type: "png",
+                    data: stampPngBytes,
+                    transformation: { width: 50, height: 50 },
+                  }),
+                ],
+              }),
+            ], false, "F8FAFC", 1, 1, 16, AlignmentType.CENTER, 25),
+            createCell("تأشيرة مدير المؤسسة\n\n\n....................", true, "F8FAFC", 1, 1, 16, AlignmentType.CENTER, 25),
+            createCell("تأشيرة مفتش المادة\n\n\n....................", true, "F8FAFC", 1, 1, 16, AlignmentType.CENTER, 25),
+          ]
+        })
       ]
-    }));
-    holidays.forEach((h: any, index) => {
-      const bgColor = index % 2 === 0 ? "FFFFFF" : "FFFFFF";
-      holidayRows.push(new TableRow({
-        children: [
-          createCell(h.label, true, bgColor, 1, 1, 16),
-          createCell(h.startDate || h.start || '', false, bgColor, 1, 1, 16),
-          createCell(h.endDate || h.end || '', false, bgColor, 1, 1, 16),
-        ]
-      }));
-    });
-    
-    frontPageChildren.push(
+    })
+  );
+
+  // ==========================================
+  // صفحات الدفتر اليومي (Content Pages)
+  // قسم مستقل لكل صفحة يطابق قالَب المعاينة الرسمي بدقة
+  // ==========================================
+  const contentSections = pages.map((pageRows, pageIdx) => {
+    const pageChildren: any[] = [];
+
+    // 1. الترويسة الرسمية
+    pageChildren.push(
+      createParagraph("الجمهورية الجزائرية الديمقراطية الشعبية", true, "18181B", 18),
+      createParagraph("وزارة التربية الوطنية", true, "0369A1", 16),
+      new Paragraph({ text: "", spacing: { after: 60 } })
+    );
+
+    // 2. الشارة الرسمية: الدفتر اليومي للأستاذ
+    pageChildren.push(
       new Table({
         visuallyRightToLeft: true,
-        width: { size: 80, type: WidthType.PERCENTAGE },
-        alignment: AlignmentType.RIGHT,
+        width: { size: 100, type: WidthType.PERCENTAGE },
         borders: {
-          top: { style: BorderStyle.SINGLE, size: 2, color: "000000" },
-          bottom: { style: BorderStyle.SINGLE, size: 2, color: "000000" },
-          left: { style: BorderStyle.SINGLE, size: 2, color: "000000" },
-          right: { style: BorderStyle.SINGLE, size: 2, color: "000000" },
-          insideHorizontal: { style: BorderStyle.SINGLE, size: 2, color: "000000" },
-          insideVertical: { style: BorderStyle.SINGLE, size: 2, color: "000000" },
+          top: skyBorder, bottom: skyBorder, left: skyBorder, right: skyBorder,
+          insideHorizontal: noneBorder, insideVertical: noneBorder
         },
-        rows: holidayRows
+        rows: [
+          new TableRow({
+            children: [
+              createCell([
+                createParagraph("الدفتر اليومي للأستاذ", true, "0369A1", 24),
+                createParagraph("التعليم المتوسط - علوم الطبيعة والحياة", true, "0284C7", 15),
+              ], false, "E1F0FA", 1, 1, 20, AlignmentType.CENTER, 100)
+            ]
+          })
+        ]
+      }),
+      new Paragraph({ text: "", spacing: { after: 80 } })
+    );
+
+    // 3. شريط معلومات الأستاذ والمؤسسة
+    pageChildren.push(
+      new Table({
+        visuallyRightToLeft: true,
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        borders: {
+          top: { style: BorderStyle.SINGLE, size: 1, color: "BAE6FD" },
+          bottom: { style: BorderStyle.SINGLE, size: 1, color: "BAE6FD" },
+          left: { style: BorderStyle.SINGLE, size: 1, color: "BAE6FD" },
+          right: { style: BorderStyle.SINGLE, size: 1, color: "BAE6FD" },
+          insideHorizontal: noneBorder, insideVertical: noneBorder
+        },
+        rows: [
+          new TableRow({
+            children: [
+              createCell(
+                `الأستاذ(ة): ${config.teacherName || '—'}   |   المتوسطة: ${config.schoolName || '—'}   |   مديرية التربية: ${config.directorate || '—'}   |   الموسم: ${config.schoolYear || '2026-2027'}   |   المستويات: ${assignedLevels.join('، ') || '1م'}`,
+                true,
+                "F0F9FF",
+                1,
+                1,
+                14,
+                AlignmentType.CENTER,
+                100,
+                "0369A1"
+              )
+            ]
+          })
+        ]
+      }),
+      new Paragraph({ text: "", spacing: { after: 100 } })
+    );
+
+    // 4. الجدول الرئيسي بـ 5 أعمدة
+    const tableRows: TableRow[] = [];
+
+    // رأس الجدول
+    tableRows.push(
+      new TableRow({
+        tableHeader: true,
+        children: [
+          createCell("التاريخ واليوم", true, "E1F0FA", 1, 1, 18, AlignmentType.CENTER, 16, "0369A1"),
+          createCell("التوقيت", true, "E1F0FA", 1, 1, 18, AlignmentType.CENTER, 15, "0369A1"),
+          createCell("القسم", true, "E1F0FA", 1, 1, 18, AlignmentType.CENTER, 13, "0369A1"),
+          createCell("المحتوى الدرس", true, "E1F0FA", 1, 1, 18, AlignmentType.CENTER, 41, "0369A1"),
+          createCell("الملاحظات", true, "E1F0FA", 1, 1, 18, AlignmentType.CENTER, 15, "0369A1"),
+        ]
       })
     );
-  }
 
+    // صفوف الحصص لهذه الصفحة
+    pageRows.forEach((log, rowIdx) => {
+      const globalIdx = logs.findIndex((l) => l.id === log.id);
+      const previousLog = findPreviousComparableCurriculumLog(logs, globalIdx >= 0 ? globalIdx : 0, log);
+      const content = getExportLessonContent(log, previousLog);
+      const rowBg = rowIdx % 2 === 0 ? "FFFFFF" : "F8FAFC";
+      const timeWithArrow = (log.time || '').replace(/\s*[-–—→←➔]\s*/g, ' ➔ ').replace(/\s*➔\s*/g, ' ➔ ');
 
+      const dateText = (log.dateStr || '').includes('/')
+        ? (log.dateStr || '')
+            .split('/')
+            .map((dp, i) => `${((log.dayName || '').split('/')[i] || (log.dayName || '')).trim()} ${dp.trim()}`)
+            .join('\n')
+        : `${log.dayName || ''}\n${log.dateStr || ''}`.trim();
 
-  const teacherStampData = config.teacherStamp?.startsWith("data:image/")
-    ? await imageDataUrlToPng(config.teacherStamp)
-    : await svgToPngData(buildTeacherStampSvg(config), 420, 420);
+      tableRows.push(
+        new TableRow({
+          cantSplit: true,
+          children: [
+            createCell(dateText, true, rowBg, 1, 1, 16, AlignmentType.CENTER, 16, "0369A1"),
+            createCell(timeWithArrow, false, rowBg, 1, 1, 15, AlignmentType.CENTER, 15),
+            createCell(log.section || '', true, rowBg, 1, 1, 16, AlignmentType.CENTER, 13, "0284C7"),
+            createCell(content, false, rowBg, 1, 1, 16, AlignmentType.RIGHT, 41),
+            createCell(log.note || '', false, rowBg, 1, 1, 15, AlignmentType.RIGHT, 15),
+          ]
+        })
+      );
+    });
 
-  const teacherStampRun = () => new ImageRun({
-    type: "png",
-    data: teacherStampData,
-    transformation: { width: 82, height: 82 }
+    // صفوف فارغة مكملة حتى 10 صفوف لكل صفحة
+    const emptyCount = Math.max(0, 10 - pageRows.length);
+    for (let e = 0; e < emptyCount; e++) {
+      tableRows.push(
+        new TableRow({
+          cantSplit: true,
+          children: [
+            createCell("", false, "FFFFFF", 1, 1, 16, AlignmentType.CENTER, 16),
+            createCell("", false, "FFFFFF", 1, 1, 16, AlignmentType.CENTER, 15),
+            createCell("", false, "FFFFFF", 1, 1, 16, AlignmentType.CENTER, 13),
+            createCell("", false, "FFFFFF", 1, 1, 16, AlignmentType.CENTER, 41),
+            createCell("", false, "FFFFFF", 1, 1, 16, AlignmentType.CENTER, 15),
+          ]
+        })
+      );
+    }
+
+    pageChildren.push(
+      new Table({
+        visuallyRightToLeft: true,
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        borders: {
+          top: skyBorder, bottom: skyBorder, left: skyBorder, right: skyBorder,
+          insideHorizontal: dashedBorder, insideVertical: skyBorder
+        },
+        rows: tableRows
+      }),
+      new Paragraph({ text: "", spacing: { after: 120 } })
+    );
+
+    // 5. جدول التواقيع الأربعة في كل صفحة
+    pageChildren.push(
+      new Table({
+        visuallyRightToLeft: true,
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        borders: {
+          top: { style: BorderStyle.SINGLE, size: 1, color: "BAE6FD" },
+          bottom: { style: BorderStyle.SINGLE, size: 1, color: "BAE6FD" },
+          left: { style: BorderStyle.SINGLE, size: 1, color: "BAE6FD" },
+          right: { style: BorderStyle.SINGLE, size: 1, color: "BAE6FD" },
+          insideHorizontal: dashedBorder, insideVertical: dashedBorder
+        },
+        rows: [
+          new TableRow({
+            children: [
+              createCell("توقيع الأستاذ(ة)\n\n....................", true, "F8FAFC", 1, 1, 15, AlignmentType.CENTER, 25),
+              createCell([
+                createParagraph("ختم الأستاذ(ة)", true, "18181B", 15),
+                new Paragraph({
+                  alignment: AlignmentType.CENTER,
+                  children: [
+                    new ImageRun({
+                      type: "png",
+                      data: stampPngBytes,
+                      transformation: { width: 45, height: 45 },
+                    }),
+                  ],
+                }),
+              ], false, "F8FAFC", 1, 1, 15, AlignmentType.CENTER, 25),
+              createCell("تأشيرة السيد المدير\n\n....................", true, "F8FAFC", 1, 1, 15, AlignmentType.CENTER, 25),
+              createCell("تأشيرة السيد المفتش\n\n....................", true, "F8FAFC", 1, 1, 15, AlignmentType.CENTER, 25),
+            ]
+          })
+        ]
+      }),
+      new Paragraph({ text: "", spacing: { after: 80 } }),
+      createParagraph(`صفحة ${pageIdx + 1} من ${totalPages} — 🇩🇿`, true, "0369A1", 16)
+    );
+
+    return {
+      properties: {
+        page: {
+          size: {
+            width: pageWidthTwips,
+            height: pageHeightTwips,
+            orientation: orientation === 'landscape' ? PageOrientation.LANDSCAPE : PageOrientation.PORTRAIT,
+          },
+          margin: pageMargin,
+        },
+      },
+      children: pageChildren,
+    };
   });
 
+  // تجميع المستند بالكامل بجميع أقسامه
   const doc = new Document({
     styles: {
       default: {
         document: {
           run: { rightToLeft: true, font: "Tajawal" },
-          paragraph: {  alignment: AlignmentType.RIGHT }
+          paragraph: { alignment: AlignmentType.RIGHT }
         }
       }
     },
     sections: [
       {
-        // First Section: Front Page (Portrait or Landscape, let's keep Landscape to be consistent)
         properties: {
           page: {
             size: {
-            width: orientation === 'landscape' ? 16838 : 11906,
-            height: orientation === 'landscape' ? 11906 : 16838,
-            orientation: orientation === 'landscape' ? PageOrientation.LANDSCAPE : PageOrientation.PORTRAIT
+              width: pageWidthTwips,
+              height: pageHeightTwips,
+              orientation: orientation === 'landscape' ? PageOrientation.LANDSCAPE : PageOrientation.PORTRAIT,
+            },
+            margin: pageMargin,
           },
-            margin: { top: 720, bottom: 900, right: 720, left: 720 }
-          }
         },
-        footers: {
-          default: new Footer({
-            children: [
-              new Paragraph({
-                alignment: AlignmentType.LEFT,
-                children: [
-                  teacherStampRun(),
-                  new TextRun({ text: "   الصفحة ", font: "Arial", rightToLeft: true }),
-                  new TextRun({ children: [PageNumber.CURRENT], font: "Arial" }),
-                  new TextRun({ text: " من ", font: "Arial", rightToLeft: true }),
-                  new TextRun({ children: [PageNumber.TOTAL_PAGES], font: "Arial" })
-                ]
-              })
-            ]
-          })
-        },
-        children: [
-          ...frontPageChildren
-        ]
+        children: introChildren,
       },
       {
-        // Second Section: Main Logbook Entries
         properties: {
           page: {
             size: {
-            width: orientation === 'landscape' ? 16838 : 11906,
-            height: orientation === 'landscape' ? 11906 : 16838,
-            orientation: orientation === 'landscape' ? PageOrientation.LANDSCAPE : PageOrientation.PORTRAIT
+              width: pageWidthTwips,
+              height: pageHeightTwips,
+              orientation: orientation === 'landscape' ? PageOrientation.LANDSCAPE : PageOrientation.PORTRAIT,
+            },
+            margin: pageMargin,
           },
-            margin: { top: 720, bottom: 900, right: 720, left: 720 }
-          }
         },
-        footers: {
-          default: new Footer({
-            children: [
-              new Paragraph({
-                alignment: AlignmentType.LEFT,
-                children: [
-                  teacherStampRun(),
-                  new TextRun({ text: "   الصفحة ", font: "Arial", rightToLeft: true }),
-                  new TextRun({ children: [PageNumber.CURRENT], font: "Arial" }),
-                  new TextRun({ text: " من ", font: "Arial", rightToLeft: true }),
-                  new TextRun({ children: [PageNumber.TOTAL_PAGES], font: "Arial" })
-                ]
-              })
-            ]
-          })
-        },
-        headers: {
-          default: new Header({
-            children: [
-              new Table({
-                visuallyRightToLeft: true,
-                width: { size: 100, type: WidthType.PERCENTAGE },
-                borders: {
-                  top: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-                  bottom: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-                  left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-                  right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-                  insideHorizontal: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-                  insideVertical: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-                },
-                rows: [
-                  new TableRow({
-                    children: [
-                      createCell(`الجمهورية الجزائرية الديمقراطية الشعبية\nوزارة التربية الوطنية`, true, undefined, 1, 1, 18, AlignmentType.RIGHT),
-                      createCell(`الدفتر اليومي - الأستاذ(ة): ${config.teacherName}`, true, undefined, 1, 1, 28, AlignmentType.CENTER),
-                      createCell(`الموسم: ${config.schoolYear}\nالمتوسطة: ${config.schoolName}`, true, undefined, 1, 1, 18, AlignmentType.LEFT),
-                    ]
-                  })
-                ]
-              }),
-              new Paragraph({ text: "", spacing: { after: 200 } }),
-            ]
-          })
-        },
-        children: [
-          new Table({
-            visuallyRightToLeft: true,
-            width: { size: 100, type: WidthType.PERCENTAGE },
-            borders: {
-              top: { style: BorderStyle.SINGLE, size: 2, color: "000000" },
-              bottom: { style: BorderStyle.SINGLE, size: 2, color: "000000" },
-              left: { style: BorderStyle.SINGLE, size: 2, color: "000000" },
-              right: { style: BorderStyle.SINGLE, size: 2, color: "000000" },
-              insideHorizontal: { style: BorderStyle.SINGLE, size: 2, color: "000000" },
-              insideVertical: { style: BorderStyle.SINGLE, size: 2, color: "000000" },
-            },
-            rows: rows
-          }),
-          new Paragraph({ text: "", spacing: { after: 400 } }),
-          new Table({
-            visuallyRightToLeft: true,
-            width: { size: 100, type: WidthType.PERCENTAGE },
-            borders: {
-              top: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-              bottom: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-              left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-              right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-              insideHorizontal: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-              insideVertical: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
-            },
-            rows: [
-              new TableRow({
-                children: [
-                  createCell("إمضاء الأستاذ(ة):", true, undefined, 1, 1, 22, AlignmentType.RIGHT),
-                  createCell("إمضاء المدير(ة):", true, undefined, 1, 1, 22, AlignmentType.CENTER),
-                  createCell("إمضاء المفتش(ة):", true, undefined, 1, 1, 22, AlignmentType.LEFT),
-                ]
-              })
-            ]
-          })
-        ]
-      }
-    ]
+        children: coverChildren,
+      },
+      ...contentSections,
+    ],
   });
 
   return Packer.toBlob(doc);
