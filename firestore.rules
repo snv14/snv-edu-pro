@@ -21,10 +21,22 @@ service cloud.firestore {
         && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
+    function isAllowedDoc(id) {
+      return id in ['config', 'annualDist', 'curriculum', 'logbook', 'timetable'];
+    }
+
+    function hasOnlyAllowedFields() {
+      return request.resource.data.keys().hasOnly(['userId', 'config', 'items', 'lessons', 'data', 'updatedAt']);
+    }
+
     match /users/{userId}/data/{docId} {
-      allow read: if isOwner(userId);
-      allow create, update: if isOwner(userId) && isValidId(docId) && hasValidOwner();
-      allow delete: if isOwner(userId);
+      allow read: if isOwner(userId) && isAllowedDoc(docId);
+      allow create: if isOwner(userId) && isValidId(docId) && isAllowedDoc(docId)
+        && hasValidOwner() && hasOnlyAllowedFields();
+      allow update: if isOwner(userId) && isValidId(docId) && isAllowedDoc(docId)
+        && hasValidOwner() && hasOnlyAllowedFields()
+        && resource.data.userId == request.auth.uid;
+      allow delete: if isOwner(userId) && isAllowedDoc(docId);
     }
 
     match /{document=**} {
