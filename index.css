@@ -223,7 +223,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
     break-inside: avoid !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
-    font-family: 'Tajawal', system-ui, sans-serif !important;
+    font-family: 'Cairo', system-ui, sans-serif !important;
   }
 
   .print-preview-root .logbook-content-page,

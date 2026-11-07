@@ -56,3 +56,4 @@
 - فُحصت 101 ملف TS/TSX تحليليًا: لا أخطاء صياغة.
 - كل الاستيرادات المحلية تُحلّ إلى ملفات موجودة (استيراد `?raw` لملف `sourceMemo1amFullText.md` سليم، والملف موجود).
 - لم يُشغَّل `npm run build` ولا `npm run lint` (لا شبكة). شغّلهما بعد `npm install`.
+- إصلاح إضافي: حُذف `@import` الخاص بخط Tajawal من Google في `DailyLogbook.tsx`، واستُبدل Tajawal بـ Cairo في الواجهة (`DailyLogbook` و`DailyLogSheetTemplate` و`index.css` و`InteractiveMaqta1`). بقي اسم الخط في ملفات تصدير Word فقط لأنه يشير إلى خط مثبّت على جهاز القارئ.
