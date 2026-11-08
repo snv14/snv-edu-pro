@@ -69,6 +69,8 @@ export const generateDistributionPdf = async (
     host.style.zIndex = "99999";
     host.style.pointerEvents = "none";
     host.style.opacity = "1";
+    host.style.direction = "rtl";
+    host.style.fontFamily = "Cairo, Tajawal, 'Noto Sans Arabic', 'Segoe UI', Tahoma, Arial, sans-serif";
     host.appendChild(page);
     document.body.appendChild(host);
 
@@ -91,7 +93,7 @@ export const generateDistributionPdf = async (
         },
       });
 
-      if (i > 0) pdf.addPage();
+      if (i > 0) pdf.addPage("a4", landscape ? "landscape" : "portrait");
       pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, pageWidth, pageHeight, undefined, "FAST");
 
       // تفريغ الذاكرة

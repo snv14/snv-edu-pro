@@ -118,6 +118,94 @@ const findPreviousComparableCurriculumLog = (logs: LogEntry[], currentIndex: num
   return undefined;
 };
 
+const SCIENCE_HEADER_LEFT_SVG = `<svg viewBox="0 0 130 115" width="130" height="115" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="flaskGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.8" />
+      <stop offset="100%" stop-color="#0284c7" stop-opacity="0.95" />
+    </linearGradient>
+    <linearGradient id="bookBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e40af" />
+      <stop offset="100%" stop-color="#2563eb" />
+    </linearGradient>
+    <linearGradient id="bookCyan" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0284c7" />
+      <stop offset="100%" stop-color="#38bdf8" />
+    </linearGradient>
+  </defs>
+  <path d="M22 45 C15 30 25 15 40 18 C38 32 30 42 22 45 Z" fill="#22c55e" opacity="0.85" />
+  <path d="M42 35 C55 22 72 28 68 44 C56 46 46 42 42 35 Z" fill="#16a34a" opacity="0.75" />
+  <path d="M30 60 C18 52 22 38 34 38 C36 48 34 56 30 60 Z" fill="#4ade80" opacity="0.8" />
+  <path d="M12 95 L56 108 L98 96 L54 84 Z" fill="url(#bookBlue)" />
+  <path d="M12 95 L12 101 L56 114 L56 108 Z" fill="#1d4ed8" />
+  <path d="M56 108 L56 114 L98 102 L98 96 Z" fill="#60a5fa" />
+  <path d="M16 88 L58 99 L96 89 L54 78 Z" fill="url(#bookCyan)" />
+  <path d="M16 88 L16 93 L58 104 L58 99 Z" fill="#0369a1" />
+  <path d="M58 99 L58 104 L96 94 L96 89 Z" fill="#93c5fd" />
+  <path d="M22 81 L60 91 L94 82 L56 72 Z" fill="#1e3a8a" />
+  <path d="M22 81 L22 85 L60 95 L60 91 Z" fill="#172554" />
+  <path d="M60 91 L60 95 L94 86 L94 82 Z" fill="#bfdbfe" />
+  <g stroke="#1d4ed8" stroke-width="2.5" stroke-linecap="round">
+    <path d="M48 30 Q54 42 48 54 Q42 66 48 76" fill="none" />
+    <path d="M56 30 Q50 42 56 54 Q62 66 56 76" fill="none" />
+    <line x1="48" y1="34" x2="56" y2="34" stroke="#0284c7" stroke-width="2" />
+    <line x1="49" y1="42" x2="55" y2="42" stroke="#22c55e" stroke-width="2" />
+    <line x1="48" y1="50" x2="56" y2="50" stroke="#0284c7" stroke-width="2" />
+    <line x1="47" y1="58" x2="57" y2="58" stroke="#22c55e" stroke-width="2" />
+    <line x1="49" y1="66" x2="55" y2="66" stroke="#0284c7" stroke-width="2" />
+    <line x1="48" y1="74" x2="56" y2="74" stroke="#22c55e" stroke-width="2" />
+  </g>
+  <path d="M92 48 L100 48 L100 58 L114 86 C116 90 112 94 106 94 L86 94 C80 94 76 90 78 86 L92 58 Z" fill="#f0f9ff" stroke="#0284c7" stroke-width="2.2" stroke-linejoin="round" />
+  <path d="M82 82 L110 82 L113 88 C114 91 111 93 106 93 L86 93 C81 93 78 91 79 88 Z" fill="url(#flaskGrad)" />
+  <path d="M96 50 Q96 38 98 28" stroke="#16a34a" stroke-width="2" fill="none" stroke-linecap="round" />
+  <path d="M98 28 C92 24 92 16 102 18 C102 24 99 27 98 28 Z" fill="#22c55e" />
+  <path d="M97 34 C104 32 108 38 102 42 C99 40 98 36 97 34 Z" fill="#4ade80" />
+  <circle cx="94" cy="74" r="2" fill="#bae6fd" />
+  <circle cx="102" cy="78" r="2.5" fill="#bae6fd" />
+  <circle cx="97" cy="84" r="1.5" fill="#bae6fd" />
+</svg>`;
+
+const SCIENCE_HEADER_RIGHT_SVG = `<svg viewBox="0 0 130 115" width="130" height="115" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="microscopeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0284c7" />
+      <stop offset="100%" stop-color="#1d4ed8" />
+    </linearGradient>
+  </defs>
+  <path d="M108 42 C118 28 108 14 94 16 C95 30 102 40 108 42 Z" fill="#22c55e" opacity="0.85" />
+  <path d="M88 32 C76 20 60 25 63 40 C75 42 84 38 88 32 Z" fill="#16a34a" opacity="0.75" />
+  <path d="M102 58 C112 50 110 36 98 36 C95 45 98 54 102 58 Z" fill="#4ade80" opacity="0.8" />
+  <path d="M115 72 C125 65 120 52 110 54 C108 62 111 69 115 72 Z" fill="#22c55e" opacity="0.7" />
+  <path d="M68 96 C68 88 88 84 96 84 C104 84 124 88 124 96 L68 96 Z" fill="#1e3a8a" />
+  <rect x="74" y="94" width="44" height="4" rx="2" fill="#0284c7" />
+  <path d="M110 86 Q122 62 108 44 Q98 32 86 38" stroke="url(#microscopeGrad)" stroke-width="6.5" stroke-linecap="round" fill="none" />
+  <rect x="76" y="66" width="28" height="4.5" rx="1.5" fill="#1e293b" />
+  <rect x="84" y="64" width="12" height="2" fill="#38bdf8" />
+  <g transform="rotate(24 82 42)">
+    <rect x="76" y="14" width="10" height="12" rx="2" fill="#0284c7" />
+    <rect x="74" y="11" width="14" height="3" rx="1" fill="#1e3a8a" />
+    <rect x="78" y="26" width="6.5" height="24" fill="#1d4ed8" />
+    <ellipse cx="81" cy="52" rx="7" ry="3.5" fill="#0f172a" />
+    <rect x="76" y="55" width="4" height="9" fill="#0284c7" />
+    <rect x="83" y="55" width="3.5" height="7" fill="#38bdf8" />
+  </g>
+  <circle cx="110" cy="62" r="5" fill="#38bdf8" stroke="#1d4ed8" stroke-width="2" />
+  <g stroke="#0284c7" stroke-width="1.5" fill="none" opacity="0.85">
+    <ellipse cx="36" cy="80" rx="22" ry="7" />
+    <ellipse cx="36" cy="80" rx="22" ry="7" transform="rotate(60 36 80)" />
+    <ellipse cx="36" cy="80" rx="22" ry="7" transform="rotate(120 36 80)" />
+    <circle cx="36" cy="80" r="3.5" fill="#0284c7" />
+  </g>
+</svg>`;
+
+const CORNER_LEAVES_SVG = `<svg viewBox="0 0 65 65" width="65" height="65" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M12 54 C10 38 24 24 40 26 C41 42 27 54 12 54 Z" fill="#0284c7" />
+  <path d="M26 56 C26 44 38 34 50 36 C50 48 38 58 26 56 Z" fill="#0369a1" />
+  <path d="M10 40 C6 26 18 14 30 16 C30 28 20 38 10 40 Z" fill="#38bdf8" />
+  <path d="M4 26 C4 16 14 8 22 10 C22 18 14 26 4 26 Z" fill="#0284c7" opacity="0.85" />
+  <circle cx="14" cy="52" r="2.5" fill="#0369a1" />
+</svg>`;
+
 const getExportLessonContent = (log: LogEntry, previous?: LogEntry): string => {
   const clean = (value?: string) => String(value || '').trim();
   const content = clean(log.manualContent || log.content);
@@ -130,27 +218,28 @@ const getExportLessonContent = (log: LogEntry, previous?: LogEntry): string => {
   const previousMidan = clean(previous?.midan);
   const currentMaqta = clean(log.maqta);
   const previousMaqta = clean(previous?.maqta);
+  const currentMawrid = clean(log.mawrid);
+  const currentTa3alom = clean(log.ta3alom);
 
-  // Keep the hierarchy readable without repeating the field and segment on every row.
-  if (currentMidan && (!previous || currentMidan !== previousMidan)) parts.push(`الميدان: ${currentMidan}`);
-  if (currentMaqta && (currentMidan !== previousMidan || !previous || currentMaqta !== previousMaqta)) {
-    parts.push(`المقطع: ${currentMaqta}`);
-  }
-  if (clean(log.mawrid)) parts.push(`المورد التعلمي: ${clean(log.mawrid)}`);
+  const isNewMidan = !!currentMidan && (!previous || !previousMidan || previousMidan !== currentMidan);
+  const isNewMaqta = !!currentMaqta && (isNewMidan || !previous || !previousMaqta || previousMaqta !== currentMaqta);
+
+  if (isNewMidan) parts.push(`<u>الميدان:</u> ${currentMidan}`);
+  if (isNewMaqta) parts.push(`<u>المقطع:</u> ${currentMaqta}`);
+  if (currentMawrid) parts.push(`<u>المورد التعلمي:</u> ${currentMawrid}`);
+  if (currentTa3alom) parts.push(`<u>تعلم المورد:</u> ${currentTa3alom}`);
+  if (log.moshkila) parts.push(`<u>المشكلة المطروحة:</u> ${clean(log.moshkila)}`);
 
   const activities = Array.from(new Set([
     ...(log.activitiesList || []),
     content,
   ].map(clean).filter(Boolean)));
 
-  if (learningOutcome && !activities.includes(learningOutcome)) {
-    parts.push(`تعلم المورد: ${learningOutcome}`);
-  }
-  if (activities.length) parts.push(`الأنشطة: ${activities.join(' + ')}`);
+  if (activities.length) parts.push(`<u>الأنشطة:</u> ${activities.join(' + ')}`);
 
   const assessment = clean(log.taqwim);
   if (assessment && !activities.includes(assessment) && assessment !== learningOutcome) {
-    parts.push(`التقويم: ${assessment}`);
+    parts.push(`<u>التقويم:</u> ${assessment}`);
   }
 
   return parts.join('\n') || content || learningOutcome || clean(log.mawrid);
@@ -198,17 +287,19 @@ const imageDataUrlToPng = async (dataUrl: string): Promise<Uint8Array> => {
 const buildTeacherStampSvg = (config: MemoConfig, size = 420): string => {
   const name = (config.teacherName || "").replace(/[<>&"]/g, "");
   const school = (config.schoolName || "").slice(0, 30).replace(/[<>&"]/g, "");
-  const grade = (config.teacherGrade || "أستاذ المادة").replace("للتعليم المتوسط", "").trim().replace(/[<>&"]/g, "");
+  const grade = (config.teacherGrade || "أستاذ التعليم المتوسط").replace("للتعليم المتوسط", "").trim().replace(/[<>&"]/g, "");
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
     <rect width="100%" height="100%" fill="white"/>
-    <circle cx="210" cy="210" r="170" fill="white" fill-opacity=".55" stroke="#000000" stroke-width="7" stroke-dasharray="12 6"/>
-    <circle cx="210" cy="210" r="132" fill="none" stroke="#000000" stroke-width="3"/>
-    <text x="210" y="105" text-anchor="middle" font-family="Arial" font-size="25" font-weight="bold" fill="#000000">الجمهورية الجزائرية الديمقراطية الشعبية</text>
-    <text x="210" y="150" text-anchor="middle" font-family="Arial" font-size="23" font-weight="bold" fill="#000000">وزارة التربية الوطنية</text>
-    <text x="210" y="200" text-anchor="middle" font-family="Arial" font-size="22" font-weight="bold" fill="#000000">علوم الطبيعة والحياة</text>
-    <text x="210" y="245" text-anchor="middle" font-family="Arial" font-size="30" font-weight="900" fill="#000000">${name}</text>
-    <text x="210" y="285" text-anchor="middle" font-family="Arial" font-size="20" font-weight="bold" fill="#000000">${grade}</text>
-    <text x="210" y="320" text-anchor="middle" font-family="Arial" font-size="17" fill="#000000">${school}</text>
+    <circle cx="210" cy="210" r="185" fill="#eff6ff" fill-opacity=".7" stroke="#1d4ed8" stroke-width="7" stroke-dasharray="14 6"/>
+    <circle cx="210" cy="210" r="148" fill="none" stroke="#1d4ed8" stroke-width="3"/>
+    <text x="210" y="85" text-anchor="middle" font-family="Arial, Tahoma, sans-serif" font-size="21" font-weight="900" fill="#1e40af">الجمهورية الجزائرية الديمقراطية الشعبية</text>
+    <text x="210" y="125" text-anchor="middle" font-family="Arial, Tahoma, sans-serif" font-size="19" font-weight="bold" fill="#0369a1">★ وزارة التربية الوطنية ★</text>
+    <text x="210" y="170" text-anchor="middle" font-family="Arial, Tahoma, sans-serif" font-size="20" font-weight="bold" fill="#0284c7">علوم الطبيعة والحياة</text>
+    <line x1="80" y1="185" x2="340" y2="185" stroke="#1d4ed8" stroke-width="1.5" stroke-dasharray="4 2"/>
+    <text x="210" y="235" text-anchor="middle" font-family="Arial, Tahoma, sans-serif" font-size="28" font-weight="900" fill="#1e3a8a">${name}</text>
+    <text x="210" y="275" text-anchor="middle" font-family="Arial, Tahoma, sans-serif" font-size="20" font-weight="bold" fill="#1d4ed8">${grade}</text>
+    <text x="210" y="315" text-anchor="middle" font-family="Arial, Tahoma, sans-serif" font-size="18" font-weight="bold" fill="#475569">${school}</text>
+    <text x="210" y="350" text-anchor="middle" font-family="Arial, Tahoma, sans-serif" font-size="15" fill="#64748b">تأشيرة الأستاذ(ة) وختمه الرقمي</text>
   </svg>`;
 };
 
@@ -245,6 +336,7 @@ const svgToPngData = async (svg: string, width = 420, height = 420): Promise<Uin
   }
 };
 
+
 export const generateLogbookDocx = async (
   logs: LogEntry[],
   config: MemoConfig,
@@ -254,10 +346,15 @@ export const generateLogbookDocx = async (
   orientation: 'portrait' | 'landscape' = 'portrait',
   paginatedPages?: LogEntry[][]
 ): Promise<Blob> => {
-  // 1. استخراج الختم الرسمي كصورة PNG لإدراجه في ترويسة وتوقيعات كل صفحة
-  const stampPngBytes = config.teacherStamp?.startsWith("data:image/")
-    ? await imageDataUrlToPng(config.teacherStamp)
-    : await svgToPngData(buildTeacherStampSvg(config, 200), 200, 200);
+  // 1. استخراج الختم الرسمي وكافة الرسومات البيداغوجية والزخارف كصور PNG عالية الدقة
+  const [stampPngBytes, scienceLeftPngBytes, scienceRightPngBytes, cornerLeavesPngBytes] = await Promise.all([
+    config.teacherStamp?.startsWith("data:image/")
+      ? imageDataUrlToPng(config.teacherStamp)
+      : svgToPngData(buildTeacherStampSvg(config, 220), 220, 220),
+    svgToPngData(SCIENCE_HEADER_LEFT_SVG, 130, 115),
+    svgToPngData(SCIENCE_HEADER_RIGHT_SVG, 130, 115),
+    svgToPngData(CORNER_LEAVES_SVG, 65, 65),
+  ]);
 
   // 2. تحديد صفحات الدفتر: إما من paginatedPages أو بتقسيم الحصص بمعدل 10 أسطر
   const pages: LogEntry[][] = paginatedPages && paginatedPages.length > 0
@@ -275,7 +372,7 @@ export const generateLogbookDocx = async (
   // أبعاد الصفحة بوحدات twips (1 مم ≈ 56.7 twips)
   const pageWidthTwips = orientation === 'landscape' ? 16838 : 11906;
   const pageHeightTwips = orientation === 'landscape' ? 11906 : 16838;
-  const pageMargin = { top: 400, bottom: 400, left: 500, right: 500 };
+  const pageMargin = { top: 380, bottom: 380, left: 450, right: 450 };
 
   const skyBorder = { style: BorderStyle.SINGLE, size: 2, color: "0284C7" };
   const dashedBorder = { style: BorderStyle.DASHED, size: 1, color: "7DD3FC" };
@@ -299,16 +396,17 @@ export const generateLogbookDocx = async (
         })
       ]
     }),
-    new Paragraph({ text: "", spacing: { after: 200 } }),
+    new Paragraph({ text: "", spacing: { after: 180 } }),
     createParagraph("الجمهورية الجزائرية الديمقراطية الشعبية", true, "18181B", 24),
     createParagraph("وزارة التربية الوطنية", true, "0369A1", 22),
-    new Paragraph({ text: "", spacing: { after: 150 } }),
+    createParagraph("◆", true, "0284C7", 18),
+    new Paragraph({ text: "", spacing: { after: 120 } }),
     createParagraph("الدفتر اليومي للأستاذ", true, "0369A1", 38),
-    createParagraph("علوم الطبيعة والحياة — التعليم المتوسط", true, "0284C7", 24),
-    createParagraph("صفحة تعريفية رسمية", false, "71717A", 18),
-    new Paragraph({ text: "", spacing: { after: 250 } }),
+    createParagraph("علوم الطبيعة والحياة — مرحلة التعليم المتوسط", true, "0284C7", 24),
+    createParagraph("وثيقة بيداغوجية رسمية معتمدة", false, "71717A", 18),
+    new Paragraph({ text: "", spacing: { after: 220 } }),
 
-    // بطاقة معلومات الأستاذ والإسناد التربوي
+    // بطاقة معلومات الأستاذ والإسناد التربوي باللون السماوي الرسمي
     new Table({
       visuallyRightToLeft: true,
       width: { size: 100, type: WidthType.PERCENTAGE },
@@ -321,13 +419,13 @@ export const generateLogbookDocx = async (
           children: [
             createCell("الأستاذ(ة):", true, "F0F9FF", 1, 1, 20, AlignmentType.RIGHT, 25, "0369A1"),
             createCell(config.teacherName || '—', true, "FFFFFF", 1, 1, 20, AlignmentType.RIGHT, 25),
-            createCell("المؤسسة:", true, "F0F9FF", 1, 1, 20, AlignmentType.RIGHT, 25, "0369A1"),
+            createCell("المؤسسة التعليمية:", true, "F0F9FF", 1, 1, 20, AlignmentType.RIGHT, 25, "0369A1"),
             createCell(config.schoolName || '—', true, "FFFFFF", 1, 1, 20, AlignmentType.RIGHT, 25),
           ]
         }),
         new TableRow({
           children: [
-            createCell("مديرية التربية:", true, "F0F9FF", 1, 1, 20, AlignmentType.RIGHT, 25, "0369A1"),
+            createCell("مديرية التربية لولاية:", true, "F0F9FF", 1, 1, 20, AlignmentType.RIGHT, 25, "0369A1"),
             createCell(config.directorate || '—', true, "FFFFFF", 1, 1, 20, AlignmentType.RIGHT, 25),
             createCell("السنة الدراسية:", true, "F0F9FF", 1, 1, 20, AlignmentType.RIGHT, 25, "0369A1"),
             createCell(config.schoolYear || '2026-2027', true, "FFFFFF", 1, 1, 20, AlignmentType.RIGHT, 25),
@@ -336,13 +434,13 @@ export const generateLogbookDocx = async (
         new TableRow({
           children: [
             createCell("المستويات المسندة:", true, "F0F9FF", 1, 1, 20, AlignmentType.RIGHT, 25, "0369A1"),
-            createCell(assignedLevels.join(' • ') || '1م', true, "FFFFFF", 3, 1, 20, AlignmentType.RIGHT, 75),
+            createCell(assignedLevels.join(' • ') || '1م', true, "FFFFFF", 3, 1, 20, AlignmentType.RIGHT, 75, "0284C7"),
           ]
         }),
       ]
     }),
-    new Paragraph({ text: "", spacing: { after: 300 } }),
-    createParagraph("وثيقة بيداغوجية لمتابعة إنجاز المنهاج وتوثيق سير الحصص والأنشطة التعلمية", false, "71717A", 16),
+    new Paragraph({ text: "", spacing: { after: 240 } }),
+    createParagraph("وثيقة لمتابعة وتوثيق سير الحصص اليومية والأنشطة التعلمية وفق التدرج السنوي الرسمي", false, "71717A", 16),
   ];
 
   // ==========================================
@@ -363,13 +461,13 @@ export const generateLogbookDocx = async (
         })
       ]
     }),
-    new Paragraph({ text: "", spacing: { after: 150 } }),
+    new Paragraph({ text: "", spacing: { after: 120 } }),
     createParagraph("الجمهورية الجزائرية الديمقراطية الشعبية", true, "18181B", 22),
     createParagraph("وزارة التربية الوطنية", true, "0369A1", 20),
     createParagraph(`مديرية التربية لولاية ${config.directorate || '—'} • متوسطة ${config.schoolName || '—'}`, true, "18181B", 18),
-    new Paragraph({ text: "", spacing: { after: 150 } }),
+    new Paragraph({ text: "", spacing: { after: 140 } }),
 
-    // شارة الغلاف
+    // شارة الغلاف الرسمية
     new Table({
       visuallyRightToLeft: true,
       width: { size: 100, type: WidthType.PERCENTAGE },
@@ -379,13 +477,13 @@ export const generateLogbookDocx = async (
           children: [
             createCell([
               createParagraph("الدفتر اليومي للأستاذ", true, "0369A1", 32),
-              createParagraph(`مرحلة التعليم المتوسط • مادة علوم الطبيعة والحياة • الموسم ${config.schoolYear || '2026-2027'}`, true, "0284C7", 18),
+              createParagraph(`مرحلة التعليم المتوسط • مادة علوم الطبيعة والحياة • الموسم الدراسي ${config.schoolYear || '2026-2027'}`, true, "0284C7", 18),
             ], false, "E1F0FA", 1, 1, 20, AlignmentType.CENTER, 100)
           ]
         })
       ]
     }),
-    new Paragraph({ text: "", spacing: { after: 200 } }),
+    new Paragraph({ text: "", spacing: { after: 160 } }),
   ];
 
   // جدول استعمال الزمن في صفحة الغلاف
@@ -422,7 +520,7 @@ export const generateLogbookDocx = async (
 
     coverChildren.push(
       createParagraph("جدول استعمال الزمن الأسبوعي الرسمي للأستاذ", true, "0369A1", 20, AlignmentType.RIGHT),
-      new Paragraph({ text: "", spacing: { after: 100 } }),
+      new Paragraph({ text: "", spacing: { after: 80 } }),
       new Table({
         visuallyRightToLeft: true,
         width: { size: 100, type: WidthType.PERCENTAGE },
@@ -432,7 +530,7 @@ export const generateLogbookDocx = async (
         },
         rows: timetableRows
       }),
-      new Paragraph({ text: "", spacing: { after: 200 } })
+      new Paragraph({ text: "", spacing: { after: 160 } })
     );
   }
 
@@ -472,42 +570,96 @@ export const generateLogbookDocx = async (
 
   // ==========================================
   // صفحات الدفتر اليومي (Content Pages)
-  // قسم مستقل لكل صفحة يطابق قالَب المعاينة الرسمي بدقة
+  // قسم مستقل لكل صفحة يطابق قالَب المعاينة الرسمي بدقة طبق الأصل
   // ==========================================
   const contentSections = pages.map((pageRows, pageIdx) => {
     const pageChildren: any[] = [];
 
-    // 1. الترويسة الرسمية
-    pageChildren.push(
-      createParagraph("الجمهورية الجزائرية الديمقراطية الشعبية", true, "18181B", 18),
-      createParagraph("وزارة التربية الوطنية", true, "0369A1", 16),
-      new Paragraph({ text: "", spacing: { after: 60 } })
-    );
-
-    // 2. الشارة الرسمية: الدفتر اليومي للأستاذ
+    // 1. الترويسة العلوية الرسمية متضمنة الرسومات البيداغوجية والشعارات العلمية
     pageChildren.push(
       new Table({
         visuallyRightToLeft: true,
         width: { size: 100, type: WidthType.PERCENTAGE },
         borders: {
-          top: skyBorder, bottom: skyBorder, left: skyBorder, right: skyBorder,
+          top: noneBorder, bottom: noneBorder, left: noneBorder, right: noneBorder,
           insideHorizontal: noneBorder, insideVertical: noneBorder
         },
         rows: [
           new TableRow({
             children: [
-              createCell([
-                createParagraph("الدفتر اليومي للأستاذ", true, "0369A1", 24),
-                createParagraph("التعليم المتوسط - علوم الطبيعة والحياة", true, "0284C7", 15),
-              ], false, "E1F0FA", 1, 1, 20, AlignmentType.CENTER, 100)
+              // رسم المجهر والذرة والشتلات على اليمين (Science Header Right)
+              new TableCell({
+                width: { size: 18, type: WidthType.PERCENTAGE },
+                borders: { top: noneBorder, bottom: noneBorder, left: noneBorder, right: noneBorder },
+                verticalAlign: VerticalAlign.CENTER,
+                children: [
+                  new Paragraph({
+                    alignment: AlignmentType.CENTER,
+                    children: [
+                      new ImageRun({
+                        type: "png",
+                        data: scienceRightPngBytes,
+                        transformation: { width: 75, height: 65 },
+                      }),
+                    ],
+                  }),
+                ],
+              }),
+              // العنوان المركزي والشارة الرسمية المزدوجة
+              new TableCell({
+                width: { size: 64, type: WidthType.PERCENTAGE },
+                borders: { top: noneBorder, bottom: noneBorder, left: noneBorder, right: noneBorder },
+                verticalAlign: VerticalAlign.CENTER,
+                children: [
+                  createParagraph("الجمهورية الجزائرية الديمقراطية الشعبية", true, "18181B", 18),
+                  createParagraph("وزارة التربية الوطنية", true, "0369A1", 16),
+                  createParagraph("◆", true, "0284C7", 13),
+                  new Table({
+                    visuallyRightToLeft: true,
+                    width: { size: 100, type: WidthType.PERCENTAGE },
+                    borders: {
+                      top: skyBorder, bottom: skyBorder, left: skyBorder, right: skyBorder,
+                      insideHorizontal: noneBorder, insideVertical: noneBorder
+                    },
+                    rows: [
+                      new TableRow({
+                        children: [
+                          createCell([
+                            createParagraph("الدفتر اليومي للأستاذ", true, "0369A1", 24),
+                            createParagraph("التعليم المتوسط - علوم الطبيعة والحياة", true, "0284C7", 15),
+                          ], false, "E1F0FA", 1, 1, 20, AlignmentType.CENTER, 100)
+                        ]
+                      })
+                    ]
+                  }),
+                ],
+              }),
+              // رسم الكتب والـ DNA والأنبوب والشتلة على اليسار (Science Header Left)
+              new TableCell({
+                width: { size: 18, type: WidthType.PERCENTAGE },
+                borders: { top: noneBorder, bottom: noneBorder, left: noneBorder, right: noneBorder },
+                verticalAlign: VerticalAlign.CENTER,
+                children: [
+                  new Paragraph({
+                    alignment: AlignmentType.CENTER,
+                    children: [
+                      new ImageRun({
+                        type: "png",
+                        data: scienceLeftPngBytes,
+                        transformation: { width: 75, height: 65 },
+                      }),
+                    ],
+                  }),
+                ],
+              }),
             ]
           })
         ]
       }),
-      new Paragraph({ text: "", spacing: { after: 80 } })
+      new Paragraph({ text: "", spacing: { after: 60 } })
     );
 
-    // 3. شريط معلومات الأستاذ والمؤسسة
+    // 2. شريط معلومات الأستاذ والمؤسسة باللون السماوي الهادئ
     pageChildren.push(
       new Table({
         visuallyRightToLeft: true,
@@ -537,22 +689,22 @@ export const generateLogbookDocx = async (
           })
         ]
       }),
-      new Paragraph({ text: "", spacing: { after: 100 } })
+      new Paragraph({ text: "", spacing: { after: 90 } })
     );
 
-    // 4. الجدول الرئيسي بـ 5 أعمدة
+    // 3. الجدول الرئيسي بـ 5 أعمدة مع الرموز والأيقونات
     const tableRows: TableRow[] = [];
 
-    // رأس الجدول
+    // رأس الجدول مع الأيقونات الرسمية
     tableRows.push(
       new TableRow({
         tableHeader: true,
         children: [
-          createCell("التاريخ واليوم", true, "E1F0FA", 1, 1, 18, AlignmentType.CENTER, 16, "0369A1"),
-          createCell("التوقيت", true, "E1F0FA", 1, 1, 18, AlignmentType.CENTER, 15, "0369A1"),
-          createCell("القسم", true, "E1F0FA", 1, 1, 18, AlignmentType.CENTER, 13, "0369A1"),
-          createCell("المحتوى الدرس", true, "E1F0FA", 1, 1, 18, AlignmentType.CENTER, 41, "0369A1"),
-          createCell("الملاحظات", true, "E1F0FA", 1, 1, 18, AlignmentType.CENTER, 15, "0369A1"),
+          createCell("📅 التاريخ واليوم", true, "E1F0FA", 1, 1, 18, AlignmentType.CENTER, 16, "0369A1"),
+          createCell("⏰ التوقيت", true, "E1F0FA", 1, 1, 18, AlignmentType.CENTER, 15, "0369A1"),
+          createCell("👥 القسم", true, "E1F0FA", 1, 1, 18, AlignmentType.CENTER, 13, "0369A1"),
+          createCell("📖 المحتوى الدرس", true, "E1F0FA", 1, 1, 18, AlignmentType.CENTER, 41, "0369A1"),
+          createCell("📝 الملاحظات", true, "E1F0FA", 1, 1, 18, AlignmentType.CENTER, 15, "0369A1"),
         ]
       })
     );
@@ -561,16 +713,49 @@ export const generateLogbookDocx = async (
     pageRows.forEach((log, rowIdx) => {
       const globalIdx = logs.findIndex((l) => l.id === log.id);
       const previousLog = findPreviousComparableCurriculumLog(logs, globalIdx >= 0 ? globalIdx : 0, log);
-      const content = getExportLessonContent(log, previousLog);
+      let content = getExportLessonContent(log, previousLog);
+      if (log.note && log.note.includes('مخبري')) {
+        content = `<u>عمل مخبري (أفواج):</u>\n${content}`;
+      }
+
       const rowBg = rowIdx % 2 === 0 ? "FFFFFF" : "F8FAFC";
       const timeWithArrow = (log.time || '').replace(/\s*[-–—→←➔]\s*/g, ' ➔ ').replace(/\s*➔\s*/g, ' ➔ ');
 
       const dateText = (log.dateStr || '').includes('/')
         ? (log.dateStr || '')
             .split('/')
-            .map((dp, i) => `${((log.dayName || '').split('/')[i] || (log.dayName || '')).trim()} ${dp.trim()}`)
+            .map((dp, i) => `${((log.dayName || '').split('/')[i] || (log.dayName || '')).trim()}\n${dp.trim()}`)
             .join('\n')
         : `${log.dayName || ''}\n${log.dateStr || ''}`.trim();
+
+      // سطر فاصل عند بداية أسبوع دراسي جديد
+      if (rowIdx > 0 && pageRows[rowIdx - 1]?.dateStr && log.dateStr) {
+        const prevWeek = pageRows[rowIdx - 1].dateStr.slice(0, 10);
+        const currWeek = log.dateStr.slice(0, 10);
+        // فحص تقريبي لتغير الأسبوع إذا اختلفت التواريخ بأكثر من يومين
+        const prevD = new Date(prevWeek).getTime();
+        const currD = new Date(currWeek).getTime();
+        if (currD - prevD > 2 * 24 * 3600 * 1000) {
+          tableRows.push(
+            new TableRow({
+              cantSplit: true,
+              children: [
+                createCell(
+                  `بداية أسبوع دراسي جديد`,
+                  true,
+                  "F0F9FF",
+                  5,
+                  1,
+                  15,
+                  AlignmentType.RIGHT,
+                  100,
+                  "0369A1"
+                )
+              ]
+            })
+          );
+        }
+      }
 
       tableRows.push(
         new TableRow({
@@ -578,7 +763,7 @@ export const generateLogbookDocx = async (
           children: [
             createCell(dateText, true, rowBg, 1, 1, 16, AlignmentType.CENTER, 16, "0369A1"),
             createCell(timeWithArrow, false, rowBg, 1, 1, 15, AlignmentType.CENTER, 15),
-            createCell(log.section || '', true, rowBg, 1, 1, 16, AlignmentType.CENTER, 13, "0284C7"),
+            createCell(log.section || '', true, "0284C7", 1, 1, 16, AlignmentType.CENTER, 13, "FFFFFF"),
             createCell(content, false, rowBg, 1, 1, 16, AlignmentType.RIGHT, 41),
             createCell(log.note || '', false, rowBg, 1, 1, 15, AlignmentType.RIGHT, 15),
           ]
@@ -586,7 +771,7 @@ export const generateLogbookDocx = async (
       );
     });
 
-    // صفوف فارغة مكملة حتى 10 صفوف لكل صفحة
+    // صفوف فارغة منقطة مكملة حتى 10 صفوف لكل صفحة كأوراق الدفتر المدرسي
     const emptyCount = Math.max(0, 10 - pageRows.length);
     for (let e = 0; e < emptyCount; e++) {
       tableRows.push(
@@ -613,10 +798,66 @@ export const generateLogbookDocx = async (
         },
         rows: tableRows
       }),
-      new Paragraph({ text: "", spacing: { after: 120 } })
+      new Paragraph({ text: "", spacing: { after: 80 } })
     );
 
-    // 5. جدول التواقيع الأربعة في كل صفحة
+    // 4. الزخرفة السفلية النباتية والمقسّم الجمالي
+    pageChildren.push(
+      new Table({
+        visuallyRightToLeft: true,
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        borders: { top: noneBorder, bottom: noneBorder, left: noneBorder, right: noneBorder, insideHorizontal: noneBorder, insideVertical: noneBorder },
+        rows: [
+          new TableRow({
+            children: [
+              new TableCell({
+                width: { size: 15, type: WidthType.PERCENTAGE },
+                borders: { top: noneBorder, bottom: noneBorder, left: noneBorder, right: noneBorder },
+                children: [
+                  new Paragraph({
+                    alignment: AlignmentType.RIGHT,
+                    children: [
+                      new ImageRun({
+                        type: "png",
+                        data: cornerLeavesPngBytes,
+                        transformation: { width: 32, height: 32 },
+                      }),
+                    ],
+                  }),
+                ],
+              }),
+              new TableCell({
+                width: { size: 70, type: WidthType.PERCENTAGE },
+                borders: { top: noneBorder, bottom: noneBorder, left: noneBorder, right: noneBorder },
+                verticalAlign: VerticalAlign.CENTER,
+                children: [
+                  createParagraph("―――――― ◆ ――――――", true, "0284C7", 14, AlignmentType.CENTER),
+                ],
+              }),
+              new TableCell({
+                width: { size: 15, type: WidthType.PERCENTAGE },
+                borders: { top: noneBorder, bottom: noneBorder, left: noneBorder, right: noneBorder },
+                children: [
+                  new Paragraph({
+                    alignment: AlignmentType.LEFT,
+                    children: [
+                      new ImageRun({
+                        type: "png",
+                        data: cornerLeavesPngBytes,
+                        transformation: { width: 32, height: 32 },
+                      }),
+                    ],
+                  }),
+                ],
+              }),
+            ],
+          }),
+        ],
+      }),
+      new Paragraph({ text: "", spacing: { after: 60 } })
+    );
+
+    // 5. جدول التواقيع الأربعة الرسمية مدمجاً بها الختم الرقمي للأستاذ
     pageChildren.push(
       new Table({
         visuallyRightToLeft: true,
@@ -651,7 +892,8 @@ export const generateLogbookDocx = async (
           })
         ]
       }),
-      new Paragraph({ text: "", spacing: { after: 80 } }),
+      new Paragraph({ text: "", spacing: { after: 60 } }),
+      // 6. شارة ترقيم الصفحة الوطنية
       createParagraph(`صفحة ${pageIdx + 1} من ${totalPages} — 🇩🇿`, true, "0369A1", 16)
     );
 

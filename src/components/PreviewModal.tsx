@@ -80,7 +80,7 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2 flex-wrap justify-end">
             <button
               id="modal-btn-direct-print"
               type="button"
@@ -88,37 +88,38 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
                 if (onDirectPrint) onDirectPrint();
                 else window.print();
               }}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-gray-900 text-white text-[13px] font-bold hover:bg-gray-800 shadow-sm transition cursor-pointer"
+              className="inline-flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-lg bg-gray-900 text-white text-[11px] sm:text-[13px] font-bold hover:bg-gray-800 shadow-sm transition cursor-pointer"
               title="طباعة عبر نافذة المتصفح المباشرة"
             >
-              <Printer className="w-4 h-4" />
-              طباعة
+              <Printer className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span>طباعة</span>
             </button>
             <button
               id="modal-btn-print"
               type="button"
               onClick={onPrint}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[#c2185b] text-white text-[13px] font-bold hover:bg-[#ad1457] shadow-sm transition cursor-pointer"
+              className="inline-flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-lg bg-[#c2185b] text-white text-[11px] sm:text-[13px] font-bold hover:bg-[#ad1457] shadow-sm transition cursor-pointer"
               title="توليد وتحميل ملف PDF حقيقي"
             >
-              <Download className="w-4 h-4" />
-              تحميل PDF
+              <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span>PDF</span>
             </button>
             <button
               id="modal-btn-word"
               type="button"
               onClick={onExportWord}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-blue-600 text-white text-[13px] font-bold hover:bg-blue-700 shadow-sm transition cursor-pointer"
+              className="inline-flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-lg bg-blue-600 text-white text-[11px] sm:text-[13px] font-bold hover:bg-blue-700 shadow-sm transition cursor-pointer"
               title="تصدير كملف Word قابل للتعديل"
             >
-              <Download className="w-4 h-4" />
-              تصدير Word
+              <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span>Word</span>
             </button>
             <button
               id="modal-btn-close"
               type="button"
               onClick={onClose}
-              className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition mr-1 cursor-pointer"
+              className="p-1.5 sm:p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition cursor-pointer"
+              title="إغلاق"
             >
               <X className="w-5 h-5" />
             </button>

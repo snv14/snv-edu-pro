@@ -590,40 +590,32 @@ export const App: React.FC = () => {
                   id="btn-preview-memo"
                   type="button"
                   onClick={() => setIsPreviewOpen(true)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-gray-300 text-gray-700 text-[12px] font-bold hover:bg-gray-50 shadow-2xs transition cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-white border border-gray-300 text-gray-800 text-[12px] font-black hover:bg-gray-50 shadow-2xs transition cursor-pointer"
+                  title="معاينة المذكرة والطباعة"
                 >
-                  <Eye className="w-4 h-4 text-gray-600" />
-                  معاينة
-                </button>
-                <button
-                  id="btn-direct-print"
-                  type="button"
-                  onClick={handleDirectPrint}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-900 text-white text-[12px] font-bold hover:bg-gray-800 shadow-xs transition cursor-pointer"
-                  title="طباعة عبر نافذة المتصفح"
-                >
-                  <Printer className="w-4 h-4" />
-                  طباعة
-                </button>
-                <button
-                  id="btn-export-word"
-                  type="button"
-                  onClick={handleExportWord}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 text-white text-[12px] font-bold hover:bg-blue-700 shadow-xs transition cursor-pointer"
-                >
-                  <FileDown className="w-4 h-4" />
-                  Word
+                  <Eye className="w-4 h-4 text-emerald-700" />
+                  <span>معاينة وطباعة</span>
                 </button>
                 <button
                   id="btn-print-memo"
                   type="button"
                   onClick={handlePrint}
                   style={{ backgroundColor: midanTheme.accentColor }}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-white text-[12px] font-extrabold hover:opacity-90 shadow-xs transition cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-white text-[12px] font-extrabold hover:opacity-90 shadow-xs transition cursor-pointer"
                   title="تحميل ملف PDF حقيقي"
                 >
-                  <FileDown className="w-4 h-4" />
-                  PDF
+                  <FileDown className="w-3.5 h-3.5" />
+                  <span>PDF</span>
+                </button>
+                <button
+                  id="btn-export-word"
+                  type="button"
+                  onClick={handleExportWord}
+                  className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-blue-600 text-white text-[12px] font-bold hover:bg-blue-700 shadow-xs transition cursor-pointer"
+                  title="تصدير كملف Word"
+                >
+                  <FileDown className="w-3.5 h-3.5" />
+                  <span>Word</span>
                 </button>
                 <button
                   id="btn-reset-defaults"

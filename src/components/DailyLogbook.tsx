@@ -36,7 +36,7 @@ import {
 import { LessonMemo, MemoConfig, Activity } from '../types';
 import { TeacherOfficialStamp } from './TeacherOfficialStamp';
 import { generateLogbookEntries } from '../utils/dailyLogbookGenerator';
-import { DailyLogSheetTemplate } from './DailyLogSheetTemplate';
+import { DailyLogSheetTemplate, ScienceHeaderLeft, ScienceHeaderRight, CornerLeaves } from './DailyLogSheetTemplate';
 import { DAILY_LOGBOOK_PROGRAM_1AM } from '../data/dailyLogbookProgram1am';
 import { DAILY_LOGBOOK_PROGRAM_2AM } from '../data/dailyLogbookProgram2am';
 import { DAILY_LOGBOOK_PROGRAM_3AM } from '../data/dailyLogbookProgram3am';
@@ -169,7 +169,7 @@ const EMPTY_TIMETABLE_ROWS: TimetableGridRow[] = Array.from({ length: 8 }, (_, i
 }));
 
 // Default rows used by the automatic timetable-fill action (15-hour standard Algerian middle school science schedule: 5 classes × 3h = 15h)
-const AUTO_FILLED_TIMETABLE_ROWS: TimetableGridRow[] = [
+export const AUTO_FILLED_TIMETABLE_ROWS: TimetableGridRow[] = [
   { id: 'r1', time: '08:00 - 09:00', cells: { الأحد: '1م1', الإثنين: '1م1 ف1', الثلاثاء: '1م2 ف1', الأربعاء: '1م3 ف1', الخميس: '1م4 ف1' } },
   { id: 'r2', time: '09:00 - 10:00', cells: { الأحد: '1م2', الإثنين: '1م1 ف2', الثلاثاء: '1م2 ف2', الأربعاء: '1م3 ف2', الخميس: '1م4 ف2' } },
   { id: 'r3', time: '10:00 - 11:00', cells: { الأحد: '1م5 ف1', الإثنين: '1م3', الثلاثاء: '1م4', الأربعاء: '1م5', الخميس: '' } },
@@ -188,15 +188,18 @@ const PAGE_INNER_PADDING = '12px';
 const NOTEBOOK_CONTENT_MIN_HEIGHT = '58px';
 
 function getSchoolWeekKey(dateStr: string): string {
-  const d = new Date(`${dateStr}T12:00:00`);
+  const clean = (dateStr || '').split(' ')[0];
+  const d = new Date(`${clean}T12:00:00`);
   if (Number.isNaN(d.getTime())) return dateStr;
   d.setDate(d.getDate() - d.getDay());
   return formatDateToIsoString(d);
 }
 
 function getSchoolWeekNumber(dateStr: string, startDate: string): number {
-  const start = new Date(startDate + 'T12:00:00');
-  const current = new Date(dateStr + 'T12:00:00');
+  const cleanStart = (startDate || '').split(' ')[0];
+  const cleanDate = (dateStr || '').split(' ')[0];
+  const start = new Date(cleanStart + 'T12:00:00');
+  const current = new Date(cleanDate + 'T12:00:00');
   if (Number.isNaN(start.getTime()) || Number.isNaN(current.getTime())) return 1;
   start.setDate(start.getDate() - start.getDay());
   const diff = Math.floor((current.getTime() - start.getTime()) / 86400000);
@@ -469,10 +472,11 @@ const normalizeDailyLogbookRows = (
   return mergeConsecutiveGroupEntries(savedRows);
 };
 
-/** Keep teacher-entered or manually changed rows when regenerating the automatic sequence. */
+/** Keep teacher-entered or manually changed rows when regenerating the automatic sequence, strictly on or after startDate. */
 const mergeGeneratedWithPreservedRows = (
   generatedRows: LogEntry[],
-  savedRows: unknown
+  savedRows: unknown,
+  startDate?: string
 ): LogEntry[] => {
   if (!Array.isArray(savedRows)) return generatedRows;
 
@@ -480,28 +484,37 @@ const mergeGeneratedWithPreservedRows = (
     `${row.dateStr || ''}|${row.time || ''}|${(row.section || '').trim()}`;
   const merged = new Map<string, LogEntry>(generatedRows.map((row) => [rowKey(row), row]));
 
-  const preservedRows = (savedRows as LogEntry[]).filter((row) =>
-    Boolean(
-      row &&
-      (
-        String(row.id || '').startsWith('manual-') ||
-        !row.sourceLearningUnitId ||
-        row.manualContent ||
-        row.attendance
-      )
-    )
-  );
+  const preservedRows = (savedRows as LogEntry[]).filter((row) => {
+    if (!row) return false;
+    const rowDate = (row.dateStr || '').split(' ')[0];
+    if (startDate && rowDate && rowDate < startDate) return false;
+    return Boolean(
+      String(row.id || '').startsWith('manual-') ||
+      !row.sourceLearningUnitId ||
+      row.manualContent ||
+      row.attendance
+    );
+  });
 
   preservedRows.forEach((row) => {
     // A manual absence/change overrides the generated lesson at the same date, time and class.
     merged.set(rowKey(row), row);
   });
 
-  return Array.from(merged.values()).sort((a, b) =>
-    (a.dateStr || '').localeCompare(b.dateStr || '') ||
-    (a.time || '').localeCompare(b.time || '') ||
-    (a.section || '').localeCompare(b.section || '')
-  );
+  return Array.from(merged.values())
+    .filter((row) => {
+      const rowDate = (row.dateStr || '').split(' ')[0];
+      return !startDate || !rowDate || rowDate >= startDate;
+    })
+    .sort((a, b) => {
+      const dateA = (a.dateStr || '').split(' ')[0] || (a.dateStr || '');
+      const dateB = (b.dateStr || '').split(' ')[0] || (b.dateStr || '');
+      return (
+        dateA.localeCompare(dateB) ||
+        (a.time || '').localeCompare(b.time || '') ||
+        (a.section || '').localeCompare(b.section || '')
+      );
+    });
 };
 
 interface DailyLogbookAudit {
@@ -720,7 +733,15 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
           parsed.rows.length > 0 &&
           hasFresh1Am(parsed.rows)
         ) {
-          return normalizeDailyLogbookRows(parsed.rows, CURRICULUM_DATABASE);
+          const normalized = normalizeDailyLogbookRows(parsed.rows, CURRICULUM_DATABASE);
+          const effectiveStart = parsed.startDate || startDate;
+          if (effectiveStart) {
+            return normalized.filter((r) => {
+              const rDate = (r.dateStr || '').split(' ')[0];
+              return !rDate || rDate >= effectiveStart;
+            });
+          }
+          return normalized;
         }
       }
     } catch {}
@@ -898,7 +919,12 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
           parsed.rows.length > 0 &&
           hasFresh1Am(parsed.rows)
         ) {
-          setRows(normalizeDailyLogbookRows(parsed.rows, CURRICULUM_DATABASE));
+          const normalized = normalizeDailyLogbookRows(parsed.rows, CURRICULUM_DATABASE);
+          const effectiveStart = parsed.startDate || startDate;
+          setRows(effectiveStart ? normalized.filter((r) => {
+            const rDate = (r.dateStr || '').split(' ')[0];
+            return !rDate || rDate >= effectiveStart;
+          }) : normalized);
           hasValidRows = true;
         }
 
@@ -919,7 +945,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
             holidays: parsed.holidays || holidays,
             curriculumDb: CURRICULUM_DATABASE,
           });
-          const fresh = mergeGeneratedWithPreservedRows(generatedRows, parsed.rows);
+          const fresh = mergeGeneratedWithPreservedRows(generatedRows, parsed.rows, effectiveStart);
           if (fresh.length > 0) {
             setRows(fresh);
             const dataToSave = {
@@ -972,7 +998,10 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
   // Save to localStorage on change
   useEffect(() => {
     // Only persist rows that are on or after startDate to prevent orphan rows from prior dates
-    const filteredRows = startDate ? rows.filter((r) => r.dateStr >= startDate) : rows;
+    const filteredRows = startDate ? rows.filter((r) => {
+      const rDate = (r.dateStr || '').split(' ')[0];
+      return !rDate || rDate >= startDate;
+    }) : rows;
     const dataToSave = {
       logbookDataVersion: LOGBOOK_DATA_VERSION,
       wilaya,
@@ -1194,22 +1223,28 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
 
 
 
-  // توليد الدفتر اليومي من البرنامج المستقل الخاص بكل مستوى، مع احترام المدة المحددة
-  const handleGenerateSmartLogbook = () => {
-    const effectiveStart = startDate || getDefaultNotebookStartDate(config.schoolYear || '2026-2027');
-    const isGridEmpty = gridRows.every(r => Object.values(r.cells).every((cell: any) => !cell || !cell.trim()));
-    const effectiveGrid = isGridEmpty ? AUTO_FILLED_TIMETABLE_ROWS : gridRows;
+  // دالة مركزية لتوليد وتطبيق وحفظ الدفتر انطلاقاً من التاريخ المختار بالضبط
+  const generateAndApplyLogbook = (
+    targetStartDate: string,
+    targetPeriod: string = period,
+    targetSessionsPerActivity: number = sessionsPerActivity,
+    targetGrid: TimetableGridRow[] = gridRows
+  ): LogEntry[] => {
+    if (!targetStartDate) return [];
 
-    if (!startDate) setStartDate(effectiveStart);
+    const isGridEmpty = targetGrid.every((r) =>
+      Object.values(r.cells || {}).every((cell: any) => !cell || !String(cell).trim())
+    );
+    const effectiveGrid = isGridEmpty ? AUTO_FILLED_TIMETABLE_ROWS : targetGrid;
     if (isGridEmpty) setGridRows(effectiveGrid);
 
     const fresh = generateLogbookEntries({
-      startDate: effectiveStart,
+      startDate: targetStartDate,
       gridRows: effectiveGrid,
-      period: period || 'سنة',
+      period: targetPeriod || 'سنة',
       holidays,
       curriculumDb: CURRICULUM_DATABASE,
-      sessionsPerActivity,
+      sessionsPerActivity: targetSessionsPerActivity,
     });
 
     if (fresh.length > 0) {
@@ -1226,14 +1261,27 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
           gridRows: effectiveGrid,
           holidays,
           rows: fresh,
-          startDate: effectiveStart,
-          period: period || 'سنة',
-          sessionsPerActivity,
+          startDate: targetStartDate,
+          period: targetPeriod || 'سنة',
+          sessionsPerActivity: targetSessionsPerActivity,
           orientation,
         };
         localStorage.setItem('daftar_table_v2027', JSON.stringify(dataToSave));
       } catch {}
-      showToast(`تم توليد الدفتر: ${fresh.length} حصة وفق البرنامج المستقل لمدة ${period || 'سنة'} بنجاح 🇩🇿`);
+      return fresh;
+    } else {
+      setRows([]);
+      return [];
+    }
+  };
+
+  // توليد الدفتر اليومي من البرنامج المستقل الخاص بكل مستوى، مع احترام المدة المحددة
+  const handleGenerateSmartLogbook = () => {
+    const effectiveStart = startDate || getDefaultNotebookStartDate(config.schoolYear || '2026-2027');
+    if (!startDate) setStartDate(effectiveStart);
+    const fresh = generateAndApplyLogbook(effectiveStart, period, sessionsPerActivity);
+    if (fresh.length > 0) {
+      showToast(`تم توليد الدفتر انطلاقاً من ${effectiveStart} (${fresh.length} حصة) بنجاح 🇩🇿`);
       setTimeout(() => {
         document.getElementById('pages-start')?.scrollIntoView({ behavior: 'smooth' });
       }, 100);
@@ -1786,9 +1834,18 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
     showToast('✅ تم تحميل الرزنامة الرسمية (العطل، الفروض، والاختبارات) بنجاح');
   };
 
+  const calculateOptimalFitZoom = (targetOrientation: 'portrait' | 'landscape' = orientation) => {
+    if (typeof window === 'undefined') return 85;
+    const screenW = window.innerWidth;
+    const targetPx = targetOrientation === 'landscape' ? 1123 : 794;
+    const availableW = screenW < 640 ? screenW - 24 : screenW < 1024 ? screenW - 48 : screenW - 96;
+    const calculated = Math.floor((availableW / targetPx) * 100);
+    return Math.min(100, Math.max(30, calculated));
+  };
+
   const handleOpenPreview = (mode: 'all' | 'single') => {
     setPreviewMode(mode);
-    setPreviewZoom(85);
+    setPreviewZoom(calculateOptimalFitZoom());
     setIsPreviewModalOpen(true);
     setShowEmptyWarning(false);
   };
@@ -1826,95 +1883,130 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
     const totalAssignedHours = levelStats.reduce((sum, item) => sum + item.slots, 0);
 
     return (
-    <div
-      data-preview-export-page="true"
-      className={isPreview ? "print-page notebook-intro-page shadow-[0_25px_80px_rgba(0,0,0,0.5)] bg-white overflow-hidden mx-auto mb-8 flex flex-col" : "print-page notebook-intro-page shadow-[0_20px_60px_rgba(0,0,0,0.12)] bg-white overflow-hidden mx-auto mb-8 flex flex-col"}
-      style={{ width: pageDimensions.w + 'mm', height: pageDimensions.h + 'mm', minHeight: pageDimensions.h + 'mm' }}
-      dir="rtl"
-    >
-      <div className="h-2 flex shrink-0">
-        <div className="flex-1 bg-[#006233]" />
-        <div className="flex-1 bg-[#D21034]" />
-      </div>
-      <div className="flex-1 flex flex-col justify-between px-12 py-12">
-        <div className="text-center">
-          <div className="text-[13px] font-bold text-zinc-700 mb-3">الجمهورية الجزائرية الديمقراطية الشعبية</div>
-          <div className="text-[12px] font-semibold text-zinc-600">وزارة التربية الوطنية</div>
-          <div className="mx-auto mt-8 w-28 h-1 rounded-full bg-[#064e3b]" />
-          <h1 className="mt-8 text-[30px] font-black text-[#064e3b]">الدفتر اليومي للأستاذ</h1>
-          <div className="mt-3 text-[15px] font-bold text-zinc-700">علوم الطبيعة والحياة — التعليم المتوسط</div>
-          <div className="mt-5 text-[12px] text-zinc-500">صفحة تعريفية</div>
-        </div>
+      <div
+        id={isPreview ? "preview-page-intro" : "page-intro"}
+        data-preview-export-page="true"
+        className={isPreview ? "print-page notebook-intro-page shadow-[0_25px_80px_rgba(0,0,0,0.5)] bg-white overflow-hidden mx-auto mb-8 flex flex-col justify-between" : "print-page notebook-intro-page shadow-[0_20px_60px_rgba(0,0,0,0.12)] bg-white overflow-hidden mx-auto mb-8 flex flex-col justify-between"}
+        style={{ width: `${pageDimensions.w}mm`, height: `${pageDimensions.h}mm`, minHeight: `${pageDimensions.h}mm`, maxWidth: '100%' }}
+        dir="rtl"
+      >
+        <div>
+          {/* Top Algerian Flag Ribbon */}
+          <div className="h-2 flex shrink-0">
+            <div className="flex-1 bg-[#006233]" />
+            <div className="flex-1 bg-[#D21034]" />
+          </div>
 
-        <div className="grid grid-cols-2 gap-4 max-w-[155mm] mx-auto w-full text-[12px]">
-          <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-5 py-4">
-            <div className="font-bold text-zinc-500 mb-1">الأستاذ(ة)</div>
-            <div className="font-extrabold text-zinc-900 min-h-[22px]">{teacher || '........................................'}</div>
-          </div>
-          <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-5 py-4">
-            <div className="font-bold text-zinc-500 mb-1">المؤسسة</div>
-            <div className="font-extrabold text-zinc-900 min-h-[22px]">{school || '........................................'}</div>
-          </div>
-          <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-5 py-4">
-            <div className="font-bold text-zinc-500 mb-1">المديرية</div>
-            <div className="font-extrabold text-zinc-900 min-h-[22px]">{wilaya || '........................................'}</div>
-          </div>
-          <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-5 py-4">
-            <div className="font-bold text-zinc-500 mb-1">السنة الدراسية</div>
-            <div className="font-extrabold text-zinc-900 min-h-[22px]">{config.schoolYear || '........................................'}</div>
-          </div>
-          <div className="col-span-2 rounded-2xl border border-emerald-200 bg-emerald-50/50 px-5 py-4 text-center">
-            <div className="font-bold text-[#064e3b] mb-1">المستويات المسندة</div>
-            <div className="font-extrabold text-zinc-900 text-[14px]">{assignedLevels.join(' • ') || 'لم تُحدد بعد'}</div>
-          </div>
-          <div className="col-span-2 rounded-2xl border border-zinc-200 bg-white px-5 py-4 text-center">
-            <div className="font-bold text-zinc-500 mb-1">تاريخ الدخول المدرسي / بداية الدفتر</div>
-            <div className="font-extrabold text-zinc-900">{startDate || '........................................'}</div>
-          </div>
-        </div>
-
-        <div className="w-full max-w-[170mm] mx-auto mt-5">
-          <div className="flex items-center justify-between mb-2">
-            <div className="text-[12px] font-black text-zinc-800">ملخص الاستعمال الزمني للمستويات المسندة</div>
-            <div className="text-[10px] font-bold text-[#064e3b] bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-full">
-              {totalAssignedHours} حصة/ساعة أسبوعياً
-            </div>
-          </div>
-          <div className="grid grid-cols-4 gap-2">
-            {levelStats.map((item) => (
-              <div key={item.level} className={`rounded-xl border px-2 py-2 text-center ${levelColors[item.level] || 'border-zinc-200 bg-zinc-50 text-zinc-700'}`}>
-                <div className="text-[15px] font-black">{item.level}</div>
-                <div className="text-[10px] font-bold mt-1">{item.slots} ساعة/أسبوع</div>
-                <div className="text-[9px] mt-0.5">{item.sections} قسم</div>
+          <div className="px-10 pt-6">
+            {/* Header with Science Graphics and Official Republic text */}
+            <div className="flex items-center justify-between pb-3 border-b-2 border-[#bae6fd]">
+              <ScienceHeaderRight />
+              <div className="text-center px-4 space-y-1">
+                <div className="text-[14px] font-extrabold text-zinc-900 flex items-center justify-center gap-1.5">
+                  <span>🇩🇿</span> الجمهورية الجزائرية الديمقراطية الشعبية <span>🇩🇿</span>
+                </div>
+                <div className="text-[12px] font-extrabold text-[#0369a1]">وزارة التربية الوطنية</div>
+                <div className="text-[11px] font-bold text-zinc-600">
+                  مديرية التربية لولاية {wilaya || '—'} • متوسطة: {school || '—'}
+                </div>
+                <div className="text-[#0284c7] text-[13px] tracking-widest">◆ ◆ ◆</div>
               </div>
-            ))}
-          </div>
-          <div className="mt-3 rounded-xl border border-zinc-200 bg-white overflow-hidden">
-            <div className="bg-[#064e3b] text-white px-3 py-1.5 text-[10px] font-extrabold text-center">استعمال الزمن الأسبوعي — المستويات المسندة</div>
-            <div className="grid grid-cols-5 text-[9px] text-center">
-              {WEEK_DAYS.map((day) => (
-                <div key={day} className="border-l border-b border-zinc-200 px-1 py-1 font-bold text-zinc-700">{day}</div>
-              ))}
+              <ScienceHeaderLeft />
             </div>
-            <div className="grid grid-cols-5 text-[8px] text-center">
-              {WEEK_DAYS.map((day) => {
-                const count = gridRows.reduce((sum, row) => sum + (row.cells[day] ? 1 : 0), 0);
-                return <div key={day} className="border-l border-zinc-200 px-1 py-1.5 text-zinc-600">{count} حصة</div>;
-              })}
+
+            {/* Title Banner */}
+            <div className="my-6 text-center">
+              <div className="inline-block bg-gradient-to-r from-[#0369a1] via-[#0284c7] to-[#0369a1] text-white px-10 py-3 rounded-2xl shadow-sm border border-[#38bdf8]">
+                <h1 className="text-[28px] font-black tracking-tight leading-tight">الدفتر اليومي للأستاذ</h1>
+                <div className="text-[13px] font-bold opacity-95 mt-1 flex items-center justify-center gap-2">
+                  <span>علوم الطبيعة والحياة</span>
+                  <span>◆</span>
+                  <span>مرحلة التعليم المتوسط</span>
+                </div>
+              </div>
+              <div className="mt-2 text-[11px] font-bold text-zinc-500">
+                وثيقة بيداغوجية رسمية معتمدة لتدوين ومتابعة سير الحصص وفق التدرج السنوي
+              </div>
+            </div>
+
+            {/* Teacher and School Info Cards */}
+            <div className="grid grid-cols-2 gap-3.5 max-w-[170mm] mx-auto text-[12px]">
+              <div className="rounded-xl border border-[#bae6fd] bg-[#f0f9ff] px-4 py-3 flex items-center justify-between shadow-2xs">
+                <span className="font-bold text-[#0369a1]">الأستاذ(ة):</span>
+                <span className="font-extrabold text-zinc-900">{teacher || '—'}</span>
+              </div>
+              <div className="rounded-xl border border-[#bae6fd] bg-[#f0f9ff] px-4 py-3 flex items-center justify-between shadow-2xs">
+                <span className="font-bold text-[#0369a1]">المتوسطة:</span>
+                <span className="font-extrabold text-zinc-900">{school || '—'}</span>
+              </div>
+              <div className="rounded-xl border border-[#bae6fd] bg-[#f0f9ff] px-4 py-3 flex items-center justify-between shadow-2xs">
+                <span className="font-bold text-[#0369a1]">المديرية الولائية:</span>
+                <span className="font-extrabold text-zinc-900">ولاية {wilaya || '—'}</span>
+              </div>
+              <div className="rounded-xl border border-[#bae6fd] bg-[#f0f9ff] px-4 py-3 flex items-center justify-between shadow-2xs">
+                <span className="font-bold text-[#0369a1]">السنة الدراسية:</span>
+                <span className="font-extrabold text-zinc-900 font-mono">{config.schoolYear || '2026-2027'}</span>
+              </div>
+              <div className="col-span-2 rounded-xl border-2 border-[#0284c7] bg-[#e1f0fa] px-4 py-3 flex items-center justify-between shadow-2xs">
+                <span className="font-extrabold text-[#0369a1]">المستويات المسندة:</span>
+                <div className="flex gap-2">
+                  {assignedLevels.length > 0 ? (
+                    assignedLevels.map((lvl) => (
+                      <span key={lvl} className="bg-white border border-[#0284c7] text-[#0369a1] px-3 py-1 rounded-full font-black text-[11px] shadow-2xs">
+                        {lvl}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-zinc-500 font-bold">لم تُحدد بعد</span>
+                  )}
+                </div>
+              </div>
+              <div className="col-span-2 rounded-xl border border-zinc-200 bg-white px-4 py-2.5 flex items-center justify-between text-[11px]">
+                <span className="font-bold text-zinc-500">تاريخ بداية الدفتر:</span>
+                <span className="font-extrabold text-zinc-800 font-mono">{startDate || '—'}</span>
+              </div>
+            </div>
+
+            {/* Timetable summary */}
+            <div className="max-w-[170mm] mx-auto mt-6">
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-[12px] font-black text-zinc-800">ملخص الحجم الساعي الأسبوعي للمستويات المسندة:</div>
+                <div className="text-[10px] font-bold text-[#0369a1] bg-[#f0f9ff] border border-[#bae6fd] px-2.5 py-1 rounded-full">
+                  {totalAssignedHours} حصة/ساعة أسبوعياً
+                </div>
+              </div>
+              <div className="grid grid-cols-4 gap-2">
+                {levelStats.map((item) => (
+                  <div key={item.level} className={`rounded-xl border px-2 py-2 text-center ${levelColors[item.level] || 'border-zinc-200 bg-zinc-50 text-zinc-700'}`}>
+                    <div className="text-[15px] font-black">{item.level}</div>
+                    <div className="text-[10px] font-bold mt-1">{item.slots} ساعة/أسبوع</div>
+                    <div className="text-[9px] mt-0.5">{item.sections} قسم</div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
 
-        <div className="text-center text-[10px] text-zinc-500 leading-5">
-          <div>دفتر لتدوين محتوى الدرس وسير الحصص اليومية وفق التدرج الرسمي.</div>
-          <div className="mt-2 font-bold text-zinc-700">صفحة 1</div>
+        {/* Footer with botanical ornaments and numbering */}
+        <div className="px-10 pb-4">
+          <div className="flex items-center justify-between border-t border-zinc-200 pt-3">
+            <CornerLeaves />
+            <div className="text-center text-[10px] text-zinc-500 space-y-1">
+              <div>دفتر بيداغوجي لتدوين محتوى الدرس وسير الحصص اليومية وفق التدرج الرسمي</div>
+              <div className="inline-block bg-[#f0f9ff] border border-[#bae6fd] text-[#0369a1] px-3 py-0.5 rounded-full font-bold">
+                الصفحة التعريفية — 🇩🇿
+              </div>
+            </div>
+            <CornerLeaves flip={true} />
+          </div>
+
+          <div className="h-1 flex shrink-0 mt-3 -mx-10">
+            <div className="flex-1 bg-[#006233]" />
+            <div className="flex-1 bg-[#D21034]" />
+          </div>
         </div>
       </div>
-      <div className="h-2 flex shrink-0">
-        <div className="flex-1 bg-[#006233]" />
-        <div className="flex-1 bg-[#D21034]" />
-      </div>
-    </div>
     );
   };
 
@@ -1922,56 +2014,60 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
   const renderCoverFirstPage = () => (
     <div
       data-preview-export-page="true"
-      className="print-page cover-page shadow-[0_20px_60px_rgba(0,0,0,0.12)] rounded-[2px] border border-zinc-200 overflow-hidden mx-auto mb-8"
+      className="print-page cover-page shadow-[0_20px_60px_rgba(0,0,0,0.12)] rounded-[2px] border border-zinc-200 overflow-hidden mx-auto mb-8 flex flex-col justify-between"
       style={{
         width: `${pageDimensions.w}mm`,
         height: `${pageDimensions.h}mm`,
         minHeight: `${pageDimensions.h}mm`,
-        maxWidth: 'none',
+        maxWidth: '100%',
       }}
     >
-      <div style={{ padding: '16px' }} className="h-full flex flex-col justify-between">
-        <div>
-          {/* Header Flag */}
-          <div className="h-1 flex -mx-[1px] mb-3">
-            <div className="flex-1 bg-[#006233]" />
-            <div className="flex-1 bg-[#D21034]" />
-          </div>
+      <div>
+        {/* Header Flag */}
+        <div className="h-1.5 flex -mx-[1px] mb-3">
+          <div className="flex-1 bg-[#006233]" />
+          <div className="flex-1 bg-[#D21034]" />
+        </div>
 
-          {/* Official Republic Header */}
-          <div className="text-center pb-4 border-b border-zinc-300">
-            <div className="text-[13px] font-extrabold flex items-center justify-center gap-2 text-zinc-900">
-              <span className="text-[18px]">🇩🇿</span> الجمهورية الجزائرية الديمقراطية الشعبية
+        <div style={{ padding: '0 16px' }}>
+          {/* Header with Science Graphics and Official Republic text */}
+          <div className="flex items-center justify-between pb-3 border-b-2 border-[#bae6fd]">
+            <ScienceHeaderRight />
+            <div className="text-center px-4 space-y-1">
+              <div className="text-[13px] font-extrabold flex items-center justify-center gap-1.5 text-zinc-900">
+                <span>🇩🇿</span> الجمهورية الجزائرية الديمقراطية الشعبية <span>🇩🇿</span>
+              </div>
+              <div className="text-[12px] font-bold text-[#0369a1]">وزارة التربية الوطنية</div>
+              <div className="text-[11px] font-semibold text-zinc-600">مديرية التربية لولاية {wilaya || '—'}</div>
+              <div className="text-[12px] font-extrabold text-zinc-800">متوسطة: {school || '—'}</div>
             </div>
-            <div className="text-[12px] font-bold text-zinc-700 mt-0.5">وزارة التربية الوطنية</div>
-            <div className="text-[12px] font-semibold text-zinc-600">مديرية التربية لولاية {wilaya}</div>
-            <div className="text-[13px] font-extrabold text-zinc-800 mt-1">متوسطة: {school}</div>
+            <ScienceHeaderLeft />
           </div>
 
           {/* Cover Title */}
-          <div className="my-5 text-center bg-gradient-to-b from-[#064e3b] to-[#042f24] text-white py-4 rounded-xl shadow-xs">
-            <div className="text-[10px] tracking-widest uppercase opacity-80 mb-0.5">وثيقة بيداغوجية رسمية</div>
-            <h1 className="text-[24px] font-[800] tracking-tight">الدفتر اليومي للأستاذ</h1>
-            <div className="text-[13px] font-medium opacity-95 mt-1">
+          <div className="my-4 text-center bg-gradient-to-r from-[#0369a1] via-[#0284c7] to-[#0369a1] text-white py-3 rounded-xl shadow-xs border border-[#38bdf8]">
+            <div className="text-[10px] tracking-widest uppercase opacity-85 mb-0.5">وثيقة بيداغوجية رسمية معتمدة</div>
+            <h1 className="text-[22px] font-[800] tracking-tight">الدفتر اليومي للأستاذ</h1>
+            <div className="text-[12px] font-medium opacity-95 mt-1">
               مرحلة التعليم المتوسط {showSubjectInHeader && subject ? `• مادة ${subject}` : ''}
             </div>
             {showYearInHeader && config.schoolYear && (
-              <div className="inline-block mt-2 bg-white/20 px-3 py-0.5 rounded-full text-[11px] font-bold">
+              <div className="inline-block mt-1 bg-white/20 px-3 py-0.5 rounded-full text-[10px] font-bold">
                 السنة الدراسية: {config.schoolYear}
               </div>
             )}
           </div>
 
-          {/* Teacher & Assignment Info Grid */}
-          <div className="grid grid-cols-2 gap-3 mb-5 text-[11px]">
-            <div className="bg-[#f9fdfb] border border-zinc-200 rounded-xl p-3.5 space-y-2">
-              <div className="text-[12px] font-extrabold text-[#0b625b] border-b border-zinc-200 pb-1.5 flex items-center gap-1.5">
-                <GraduationCap className="w-4 h-4" />
+          {/* Teacher & Assignment Info Grid in Sky Blue */}
+          <div className="grid grid-cols-2 gap-3 mb-4 text-[11px]">
+            <div className="bg-[#f0f9ff] border border-[#bae6fd] rounded-xl p-3 space-y-1.5">
+              <div className="text-[11.5px] font-extrabold text-[#0369a1] border-b border-[#bae6fd] pb-1 flex items-center gap-1.5">
+                <GraduationCap className="w-3.5 h-3.5" />
                 <span>معلومات الأستاذ(ة) والإسناد التربوي:</span>
               </div>
-              <div className="grid grid-cols-[80px_1fr] gap-1.5 text-zinc-800">
+              <div className="grid grid-cols-[75px_1fr] gap-1 text-zinc-800">
                 <span className="text-zinc-500 font-medium">الأستاذ(ة):</span>
-                <span className="font-bold">{teacher}</span>
+                <span className="font-bold">{teacher || '—'}</span>
 
                 {showSubjectInHeader && subject && (
                   <>
@@ -1988,32 +2084,32 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                 )}
 
                 <span className="text-zinc-500 font-medium">المستويات:</span>
-                <span className="font-extrabold text-[#064e3b]">
+                <span className="font-extrabold text-[#0284c7]">
                   {assignedLevels.length > 0 ? assignedLevels.join(' ، ') : '—'}
                 </span>
 
-                <span className="text-zinc-500 font-medium">الأقسام المسندة:</span>
+                <span className="text-zinc-500 font-medium">الأقسام:</span>
                 <span className="font-bold">
                   {assignedSectionsList.length > 0 ? assignedSectionsList.join(' • ') : '—'}
                 </span>
               </div>
             </div>
 
-            <div className="bg-[#e8f7f3] border border-emerald-200 rounded-xl p-3.5 space-y-2">
-              <div className="text-[12px] font-extrabold text-[#064e3b] border-b border-emerald-200 pb-1.5 flex items-center gap-1.5">
-                <Layers className="w-4 h-4 text-[#16a34a]" />
+            <div className="bg-[#e1f0fa] border border-[#7dd3fc] rounded-xl p-3 space-y-1.5">
+              <div className="text-[11.5px] font-extrabold text-[#0369a1] border-b border-[#7dd3fc] pb-1 flex items-center gap-1.5">
+                <Layers className="w-3.5 h-3.5 text-[#0284c7]" />
                 <span>ملخص الحجم الساعي والسنوات المسندة:</span>
               </div>
-              <div className="space-y-1.5 text-[11px] text-zinc-800">
-                <div className="flex justify-between items-center bg-white px-2 py-1 rounded border border-emerald-100">
+              <div className="space-y-1 text-[11px] text-zinc-800">
+                <div className="flex justify-between items-center bg-white px-2 py-1 rounded border border-[#bae6fd]">
                   <span>إجمالي الحصص الأسبوعية:</span>
-                  <b className="text-[#064e3b] font-mono text-[12px]">{totalFilledTimetableSlots} حصة/أسبوع</b>
+                  <b className="text-[#0369a1] font-mono text-[11px]">{totalFilledTimetableSlots} حصة/أسبوع</b>
                 </div>
                 <div className="flex flex-wrap gap-1 mt-1">
                   {assignedLevels.map((lvl) => (
                     <span
                       key={lvl}
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                      className={`text-[9.5px] font-bold px-2 py-0.5 rounded-full border ${
                         lvl === '4م'
                           ? 'bg-red-50 text-red-800 border-red-200'
                           : lvl === '3م'
@@ -2027,31 +2123,31 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                     </span>
                   ))}
                 </div>
-                <div className="text-[10px] text-zinc-500 leading-tight pt-1">
-                  • يتم تدوين حصص المستويات المسندة حصراً وفق التدرج السنوي المعتمد.
+                <div className="text-[9.5px] text-zinc-500 leading-tight pt-0.5">
+                  • تُدون حصص المستويات المسندة حصراً وفق التدرج السنوي المعتمد.
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Official Weekly Timetable (استعمال الزمن الأسبوعي الرسمي) */}
-          <div className="rounded-xl border border-zinc-300 overflow-hidden mb-4">
-            <div className="bg-[#064e3b] text-white px-3 py-2 flex items-center justify-between text-[11px] font-bold">
+          {/* Official Weekly Timetable */}
+          <div className="rounded-xl border border-[#bae6fd] overflow-hidden mb-3">
+            <div className="bg-[#0284c7] text-white px-3 py-1.5 flex items-center justify-between text-[11px] font-bold">
               <span className="flex items-center gap-1.5">
                 <TableIcon className="w-3.5 h-3.5" />
                 جدول استعمال الزمن الأسبوعي للأستاذ (من الأحد إلى الخميس)
               </span>
-              <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full">
+              <span className="text-[9.5px] bg-white/20 px-2 py-0.5 rounded-full font-bold">
                 نظام الدوام بفترتين: صباحية ومسائية
               </span>
             </div>
 
             <table className="w-full border-collapse text-[10px] leading-4 text-center">
               <thead>
-                <tr className="bg-zinc-100 text-zinc-800 font-bold border-b border-zinc-300">
-                  <th className="border border-zinc-200 px-2 py-1.5 w-[90px]">التوقيت</th>
+                <tr className="bg-[#f0f9ff] text-[#0369a1] font-bold border-b border-[#bae6fd]">
+                  <th className="border border-[#bae6fd] px-2 py-1.5 w-[90px]">التوقيت</th>
                   {WEEK_DAYS.map((day) => (
-                    <th key={day} className="border border-zinc-200 px-2 py-1.5 font-bold">
+                    <th key={day} className="border border-[#bae6fd] px-2 py-1.5 font-bold">
                       {day}
                     </th>
                   ))}
@@ -2061,7 +2157,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                 {/* Morning Shift */}
                 {morningRows.map((row) => (
                   <tr key={row.id} className="hover:bg-amber-50/30">
-                    <td className="border border-zinc-200 px-1.5 py-1 font-mono font-bold bg-zinc-50 text-zinc-700">
+                    <td className="border border-zinc-200 px-1.5 py-1 font-mono font-bold bg-[#f8fafc] text-zinc-700">
                       {row.time}
                     </td>
                     {WEEK_DAYS.map((day) => {
@@ -2095,14 +2191,14 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                 {/* Lunch break */}
                 <tr className="bg-[#fffbeb] text-amber-900 font-bold text-[9px]">
                   <td colSpan={6} className="border border-amber-200 py-1 text-center">
-                    استراحة الغداء 12:00 - 13:30
+                    🍽️ استراحة الغداء 12:00 - 13:30 (فترة راحة رسمية)
                   </td>
                 </tr>
 
                 {/* Afternoon Shift */}
                 {afternoonRows.map((row) => (
                   <tr key={row.id} className="hover:bg-indigo-50/30">
-                    <td className="border border-zinc-200 px-1.5 py-1 font-mono font-bold bg-zinc-50 text-zinc-700">
+                    <td className="border border-zinc-200 px-1.5 py-1 font-mono font-bold bg-[#f8fafc] text-zinc-700">
                       {row.time}
                     </td>
                     {WEEK_DAYS.map((day) => {
@@ -2136,40 +2232,40 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
             </table>
           </div>
         </div>
+      </div>
 
-        {/* Cover Page Footer with Stamps */}
-        <div className="mt-auto pt-3 border-t border-zinc-200 relative pb-2">
-          <div className="grid grid-cols-4 gap-3 text-[10px] text-center mb-3">
-            <div>
-              <div className="font-bold text-zinc-800">توقيع الأستاذ(ة)</div>
-              <div className="mt-5 border-t border-dashed border-zinc-400 h-8" />
-            </div>
-            <div>
-              <div className="font-bold text-zinc-800">ختم الأستاذ(ة)</div>
-              <div className="absolute left-3 bottom-2 flex justify-start">
-                <TeacherOfficialStamp config={config} size="md" />
-              </div>
-            </div>
-            <div>
-              <div className="font-bold text-zinc-800">تأشيرة مدير المؤسسة</div>
-              <div className="mt-5 border-t border-dashed border-zinc-400 h-8" />
-            </div>
-            <div>
-              <div className="font-bold text-zinc-800">تأشيرة مفتش المادة</div>
-              <div className="mt-5 border-t border-dashed border-zinc-400 h-8" />
-            </div>
+      {/* Cover Page Footer with 4 Signatures & Official Teacher Stamp */}
+      <div style={{ padding: '0 16px' }} className="mt-auto pt-2 border-t-2 border-[#bae6fd]">
+        <div className="grid grid-cols-4 gap-3 text-[10px] text-center mb-2">
+          <div className="border border-dashed border-zinc-300 rounded-lg p-2 bg-[#f8fafc]">
+            <div className="font-bold text-zinc-800">توقيع الأستاذ(ة)</div>
+            <div className="mt-4 border-t border-dashed border-zinc-400 h-6" />
           </div>
+          <div className="border border-dashed border-[#bae6fd] rounded-lg p-1 bg-[#f0f9ff] flex flex-col items-center justify-center">
+            <div className="font-bold text-[#0369a1] text-[9.5px] mb-0.5">الختم الرسمي للأستاذ</div>
+            <TeacherOfficialStamp config={config} size="sm" />
+          </div>
+          <div className="border border-dashed border-zinc-300 rounded-lg p-2 bg-[#f8fafc]">
+            <div className="font-bold text-zinc-800">تأشيرة مدير المؤسسة</div>
+            <div className="mt-4 border-t border-dashed border-zinc-400 h-6" />
+          </div>
+          <div className="border border-dashed border-zinc-300 rounded-lg p-2 bg-[#f8fafc]">
+            <div className="font-bold text-zinc-800">تأشيرة مفتش المادة</div>
+            <div className="mt-4 border-t border-dashed border-zinc-400 h-6" />
+          </div>
+        </div>
 
-          <div className="flex justify-between items-center text-[9px] text-zinc-500 pt-2 border-t border-zinc-100">
-            <span>الصفحة الأولى (الغلاف واستعمال الزمن الرسمي)</span>
-            <span className="font-bold text-zinc-700">صفحة 1 من {paginatedPages.length}</span>
-            <span>الجمهورية الجزائرية الديمقراطية الشعبية 🇩🇿</span>
-          </div>
+        <div className="flex justify-between items-center text-[9px] text-zinc-500 pt-1 border-t border-zinc-100">
+          <span>الغلاف الرسمي واستعمال الزمن</span>
+          <span className="font-bold text-[#0369a1] bg-[#f0f9ff] border border-[#bae6fd] px-2.5 py-0.5 rounded-full">
+            صفحة الغلاف — 🇩🇿
+          </span>
+          <span>الجمهورية الجزائرية الديمقراطية الشعبية 🇩🇿</span>
+        </div>
 
-          <div className="h-1 flex -mx-[1px] mt-2">
-            <div className="flex-1 bg-[#006233]" />
-            <div className="flex-1 bg-[#D21034]" />
-          </div>
+        <div className="h-1.5 flex -mx-4 mt-2">
+          <div className="flex-1 bg-[#006233]" />
+          <div className="flex-1 bg-[#D21034]" />
         </div>
       </div>
     </div>
@@ -2506,6 +2602,19 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
           .logbook-table { border-collapse: collapse !important; }
           .writing-grid-cell, .logbook-grid-cell { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
         }
+        @media screen and (max-width: 820px) {
+          .print-page {
+            max-width: 100% !important;
+            height: auto !important;
+            min-height: 0 !important;
+          }
+          .logbook-content-page, .notebook-intro-page, .cover-page {
+            width: 100% !important;
+            max-width: 100% !important;
+            min-height: auto !important;
+            height: auto !important;
+          }
+        }
         .cover-page { background-color: #fffdf7; background-image: radial-gradient(circle at 15% 10%, rgba(6,78,59,.08), transparent 28%), radial-gradient(circle at 85% 20%, rgba(210,16,52,.06), transparent 25%); }
         .logbook-table { border-collapse: collapse !important; }
         .logbook-table th, .logbook-table td { border: 1.5px solid #64748b !important; }
@@ -2592,7 +2701,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       </header>
 
       {/* Main Grid: Sidebar + Printable Pages */}
-      <div className="max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-[480px_1fr] gap-0">
+      <div className="max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-[380px_1fr] xl:grid-cols-[420px_1fr] gap-0">
         {/* Sidebar Controls */}
         <aside className="no-print bg-white lg:border-l border-zinc-200 lg:min-h-[calc(100vh-120px)]">
           <div className="p-4 md:p-5 space-y-6">
@@ -2912,110 +3021,52 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                   </div>
                 </div>
 
-                {/* Quick Level Preset Buttons */}
-                <div className="p-2 bg-emerald-50/70 border-t border-emerald-100 flex flex-wrap items-center gap-1.5 text-[11px]">
-                  <span className="font-bold text-emerald-900 flex items-center gap-1">
-                    <ListFilter className="w-3.5 h-3.5" />
-                    نماذج إسناد سريعة:
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleAutoFillGrid}
-                    className="bg-emerald-700 hover:bg-emerald-800 text-white font-black px-2.5 py-0.5 rounded-full text-[10px] transition cursor-pointer shadow-xs flex items-center gap-1"
-                  >
-                    <span>⭐ نموذج 15 ساعة (جماعي + أفواج)</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleQuickAssignPreset(['1م', '4م'])}
-                    className="bg-white hover:bg-emerald-100 border border-emerald-300 text-emerald-900 font-bold px-2 py-0.5 rounded-full text-[10px] transition cursor-pointer"
-                  >
-                    1م + 4م فقط
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleQuickAssignPreset(['2م', '3م'])}
-                    className="bg-white hover:bg-emerald-100 border border-emerald-300 text-emerald-900 font-bold px-2 py-0.5 rounded-full text-[10px] transition cursor-pointer"
-                  >
-                    2م + 3م فقط
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleQuickAssignPreset(['4م'])}
-                    className="bg-white hover:bg-emerald-100 border border-emerald-300 text-emerald-900 font-bold px-2 py-0.5 rounded-full text-[10px] transition cursor-pointer"
-                  >
-                    4م (BEM) فقط
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleQuickAssignPreset(['1م', '2م', '3م', '4م'])}
-                    className="bg-white hover:bg-emerald-100 border border-emerald-300 text-emerald-900 font-bold px-2 py-0.5 rounded-full text-[10px] transition cursor-pointer"
-                  >
-                    الكل (1م-4م)
-                  </button>
-                </div>
+                {/* Streamlined Quick Level Presets & Timetable Utilities */}
+                <div className="p-2.5 bg-emerald-50/70 border-t border-emerald-100 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                  <div className="flex items-center gap-1.5 flex-1 min-w-[210px]">
+                    <ListFilter className="w-3.5 h-3.5 text-emerald-800 shrink-0" />
+                    <span className="font-bold text-emerald-900 shrink-0">نماذج إسناد:</span>
+                    <select
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === 'auto15') handleAutoFillGrid();
+                        else if (val === '1-4') handleQuickAssignPreset(['1م', '4م']);
+                        else if (val === '2-3') handleQuickAssignPreset(['2م', '3م']);
+                        else if (val === '4') handleQuickAssignPreset(['4م']);
+                        else if (val === 'all') handleQuickAssignPreset(['1م', '2م', '3م', '4م']);
+                        e.target.value = '';
+                      }}
+                      defaultValue=""
+                      className="bg-white border border-emerald-300 rounded-lg px-2 py-1 text-[11px] font-bold text-emerald-900 outline-none w-full cursor-pointer focus:ring-1 focus:ring-emerald-500"
+                    >
+                      <option value="" disabled>⚡ اختر نموذج إسناد لتعبئة سريعة...</option>
+                      <option value="auto15">⭐ نموذج 15 ساعة رسمي (جماعي + أفواج)</option>
+                      <option value="1-4">1م + 4م فقط</option>
+                      <option value="2-3">2م + 3م فقط</option>
+                      <option value="4">4م (شهادة التعليم المتوسط) فقط</option>
+                      <option value="all">كافة المستويات (1م إلى 4م)</option>
+                    </select>
+                  </div>
 
-                {/* Timetable Buttons */}
-                <div className="p-2.5 bg-zinc-50 border-t border-zinc-200 flex flex-wrap gap-2 items-center">
-                  <button
-                    type="button"
-                    onClick={handleSaveTimetable}
-                    className="inline-flex items-center gap-1.5 bg-[#064e3b] hover:bg-[#042f24] text-white px-3.5 py-1.5 rounded-full text-[11px] font-black shadow-sm transition cursor-pointer"
-                  >
-                    <Save className="w-3.5 h-3.5" />
-                    <span>حفظ استعمال الزمن</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleExportTimetablePdf}
-                    className="inline-flex items-center gap-1.5 bg-[#006233] hover:bg-[#0f7f74] text-white px-3 py-1.5 rounded-full text-[11px] font-bold shadow-sm transition cursor-pointer"
-                  >
-                    <FileText className="w-3.5 h-3.5" />
-                    <span>تصدير PDF</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleExportTimetableWord}
-                    className="inline-flex items-center gap-1.5 bg-blue-700 hover:bg-blue-800 text-white px-3 py-1.5 rounded-full text-[11px] font-bold shadow-sm transition cursor-pointer"
-                  >
-                    <FileText className="w-3.5 h-3.5" />
-                    <span>تصدير Word</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handlePrintTimetable}
-                    className="inline-flex items-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-white px-3 py-1.5 rounded-full text-[11px] font-bold shadow-sm transition cursor-pointer"
-                  >
-                    <Printer className="w-3.5 h-3.5" />
-                    <span>طباعة</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleAutoFillGrid}
-                    className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-full text-[11px] font-bold shadow-sm transition cursor-pointer"
-                  >
-                    <Grid3x3 className="w-3.5 h-3.5" />
-                    <span>تعبئة شاملة</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleClearGrid}
-                    className="inline-flex items-center gap-1.5 bg-white border border-zinc-200 hover:bg-zinc-50 text-zinc-700 px-3 py-1.5 rounded-full text-[11px] font-bold transition cursor-pointer"
-                  >
-                    <Eraser className="w-3.5 h-3.5" />
-                    <span>مسح الجدول</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleResetDefaultGrid}
-                    className="inline-flex items-center gap-1.5 bg-white border border-zinc-200 hover:bg-zinc-50 text-zinc-600 px-3 py-1.5 rounded-full text-[11px] font-bold transition cursor-pointer"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    <span>افتراضي</span>
-                  </button>
-                  <div className="mr-auto text-[10px] text-zinc-500 flex items-center gap-1">
-                    <span className="w-2 h-2 bg-emerald-500 rounded-full inline-block" />
-                    <span>الجمعة مستثناة تلقائياً</span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={handleClearGrid}
+                      className="inline-flex items-center gap-1 bg-white border border-zinc-200 hover:bg-zinc-50 text-zinc-700 px-2.5 py-1 rounded-lg text-[10.5px] font-bold transition cursor-pointer"
+                      title="مسح جدول استعمال الزمن"
+                    >
+                      <Eraser className="w-3.5 h-3.5 text-zinc-400" />
+                      <span>مسح</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleResetDefaultGrid}
+                      className="inline-flex items-center gap-1 bg-white border border-zinc-200 hover:bg-zinc-50 text-zinc-600 px-2.5 py-1 rounded-lg text-[10.5px] font-bold transition cursor-pointer"
+                      title="استعادة الجدول الافتراضي"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5 text-zinc-400" />
+                      <span>افتراضي</span>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -3131,7 +3182,16 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                     <label className="block text-[10px] font-bold text-zinc-600 mb-1">المدة المطلوبة</label>
                     <select
                       value={period}
-                      onChange={(e) => setPeriod(e.target.value)}
+                      onChange={(e) => {
+                        const newPeriod = e.target.value;
+                        setPeriod(newPeriod);
+                        if (startDate) {
+                          const fresh = generateAndApplyLogbook(startDate, newPeriod, sessionsPerActivity);
+                          if (fresh.length > 0) {
+                            showToast(`تم تحديث الدفتر لمدة ${newPeriod} انطلاقاً من ${startDate} 🇩🇿`);
+                          }
+                        }
+                      }}
                       className="w-full border border-zinc-200 rounded-lg px-2 py-2 text-[12px] font-bold bg-white outline-none"
                     >
                       <option>أسبوع</option>
@@ -3151,6 +3211,12 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                       onChange={(e) => {
                         const val = Number(e.target.value) || 1;
                         setSessionsPerActivity(val);
+                        if (startDate) {
+                          const fresh = generateAndApplyLogbook(startDate, period, val);
+                          if (fresh.length > 0) {
+                            showToast(`تم توزيع النشاط على ${val} حصة انطلاقاً من ${startDate} 🇩🇿`);
+                          }
+                        }
                       }}
                       className="w-full border border-zinc-200 rounded-lg px-2 py-2 text-[12px] font-bold bg-white outline-none"
                     >
@@ -3166,57 +3232,29 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-[10px] font-bold text-zinc-600 mb-1">تاريخ بداية الدفتر (الدخول المدرسي)</label>
+                    <label className="block text-[10px] font-bold text-zinc-700 mb-1">
+                      📅 تاريخ بداية الدفتر (تاريخ الانطلاق الفعلي)
+                    </label>
                     <input
                       type="date"
                       value={startDate}
                       onChange={(e) => {
-                        const newStart = e.target.value;
-                        setStartDate(newStart);
-                        if (newStart) {
-                          const isGridEmpty = gridRows.every((r) =>
-                            Object.values(r.cells || {}).every((cell: any) => !cell || !String(cell).trim())
-                          );
-                          const effectiveGrid = isGridEmpty ? AUTO_FILLED_TIMETABLE_ROWS : gridRows;
-                          const fresh = generateLogbookEntries({
-                            startDate: newStart,
-                            gridRows: effectiveGrid,
-                            period: period || 'سنة',
-                            holidays,
-                            curriculumDb: CURRICULUM_DATABASE,
-                            sessionsPerActivity,
-                          });
-
+                        const selectedDate = e.target.value;
+                        setStartDate(selectedDate);
+                        if (selectedDate) {
+                          const fresh = generateAndApplyLogbook(selectedDate, period, sessionsPerActivity);
                           if (fresh.length > 0) {
-                            setRows(fresh);
-                            if (isGridEmpty) setGridRows(effectiveGrid);
-                            try {
-                              localStorage.setItem('daftar_table_v2027', JSON.stringify({
-                                logbookDataVersion: LOGBOOK_DATA_VERSION,
-                                wilaya,
-                                school,
-                                teacher,
-                                subject,
-                                showSubjectInHeader,
-                                showYearInHeader,
-                                gridRows: effectiveGrid,
-                                holidays,
-                                rows: fresh,
-                                startDate: newStart,
-                                period: period || 'سنة',
-                                sessionsPerActivity,
-                                orientation,
-                              }));
-                            } catch {}
-                            showToast('تم تحديث الدفتر انطلاقاً من التاريخ المحدد.');
+                            showToast(`تم توليد الدفتر انطلاقاً من: ${selectedDate} (${fresh.length} حصة) بنجاح 🇩🇿`);
                           } else {
-                            setRows([]);
-                            showToast('لم تُولّد حصص. تحقق من استعمال الزمن والعطل.');
+                            showToast('لم تُولّد حصص لهذا التاريخ. تحقق من استعمال الزمن أو الرزنامة.');
                           }
                         }
                       }}
-                      className="w-full border border-zinc-200 rounded-lg px-2 py-2 text-[12px] bg-white outline-none font-medium focus:border-emerald-600"
+                      className="w-full border border-emerald-300 rounded-lg px-2 py-2 text-[12px] bg-white outline-none font-bold text-[#064e3b] focus:ring-2 focus:ring-emerald-400"
                     />
+                    <p className="text-[10px] text-zinc-500 mt-1">
+                      يبدأ الدفتر وصفحاته من هذا التاريخ بالضبط ({startDate || 'غير محدد'})
+                    </p>
                   </div>
                   <div>
                     <label className="block text-[10px] font-bold text-zinc-600 mb-1">وضعية الصفحة</label>
@@ -3231,63 +3269,86 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                   </div>
                 </div>
 
-                <div className="rounded-xl border border-emerald-200 bg-white p-2.5 space-y-2">
-                  <div className="text-[11px] font-extrabold text-[#064e3b] px-1 flex items-center gap-1.5">
-                    <FileStack className="w-3.5 h-3.5" />
-                    <span>إجراءات الدفتر</span>
+                <div className="rounded-xl border border-emerald-200 bg-white p-3 space-y-2.5">
+                  <div className="flex items-center justify-between px-1">
+                    <div className="text-[12px] font-extrabold text-[#064e3b] flex items-center gap-1.5">
+                      <FileStack className="w-3.5 h-3.5" />
+                      <span>إجراءات الدفتر</span>
+                    </div>
+                    {rows.length > 0 && (
+                      <span className="text-[10px] bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full font-bold">
+                        {rows.length} حصة • {paginatedPages.length} صفحة
+                      </span>
+                    )}
                   </div>
-                  <button type="button" onClick={() => { setManualLessonDate(startDate || getDefaultNotebookStartDate(config.schoolYear || '2026-2027')); setIsAddLessonModalOpen(true); }} className="w-full bg-white hover:bg-emerald-50 text-[#064e3b] border border-emerald-300 rounded-lg py-2.5 text-[12px] font-extrabold flex items-center justify-center gap-2 shadow-sm transition cursor-pointer">
-                    <Plus className="w-4 h-4" /><span>أضف حصة / سجّل غياباً أو تغييراً</span>
-                  </button>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button type="button" onClick={handleGenerateSmartLogbook} className="bg-[#064e3b] hover:bg-[#042f24] text-white rounded-lg py-2.5 text-[12px] font-extrabold flex items-center justify-center gap-2 shadow-sm transition cursor-pointer">
-                      <Sparkles className="w-4 h-4" /><span>توليد الدفتر</span>
+
+                  {/* Primary Generation & Preview Buttons */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={handleGenerateSmartLogbook}
+                      className="bg-gradient-to-r from-[#064e3b] to-emerald-800 hover:from-[#042f24] hover:to-emerald-900 text-white rounded-xl py-2.5 px-3 text-[12px] font-black flex items-center justify-center gap-2 shadow-sm transition cursor-pointer"
+                    >
+                      <Sparkles className="w-4 h-4 text-emerald-300" />
+                      <span>توليد الدفتر الذكي</span>
                     </button>
-                    <button type="button" onClick={() => handleOpenPreview('all')} className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg py-2.5 text-[12px] font-extrabold flex items-center justify-center gap-2 shadow-sm transition cursor-pointer">
-                      <Eye className="w-4 h-4" /><span>المعاينة</span>
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    <button type="button" onClick={handlePrintLogbook} className="bg-zinc-900 hover:bg-zinc-800 text-white rounded-lg py-2 text-[11px] font-bold flex items-center justify-center gap-1.5 transition cursor-pointer">
-                      <Printer className="w-3.5 h-3.5" /><span>طباعة</span>
-                    </button>
-                    <button type="button" onClick={handleExportPdf} className="bg-[#006233] hover:bg-[#0f7f74] text-white rounded-lg py-2 text-[11px] font-bold flex items-center justify-center gap-1.5 transition cursor-pointer">
-                      <FileText className="w-3.5 h-3.5" /><span>PDF</span>
-                    </button>
-                    <button type="button" onClick={handleExportWord} className="bg-blue-700 hover:bg-blue-800 text-white rounded-lg py-2 text-[11px] font-bold flex items-center justify-center gap-1.5 transition cursor-pointer">
-                      <FileText className="w-3.5 h-3.5" /><span>Word</span>
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 pt-1 border-t border-zinc-100">
-                    <button type="button" onClick={() => handleOpenPreview('single')} className="bg-white hover:bg-zinc-50 border border-zinc-200 rounded-lg py-2 text-[11px] font-bold flex items-center justify-center gap-1.5 transition cursor-pointer">
-                      <FileText className="w-3.5 h-3.5 text-zinc-500" /><span>صفحة عينة</span>
-                    </button>
-                    <button type="button" onClick={() => { setRows([]); showToast('تم مسح سجلات الدفتر اليومي'); }} className="bg-white border border-zinc-200 hover:bg-zinc-50 rounded-lg py-2 text-[11px] font-bold flex items-center justify-center gap-1.5 transition cursor-pointer">
-                      <Eraser className="w-3.5 h-3.5 text-zinc-500" /><span>مسح الدفتر</span>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenPreview('all')}
+                      className="bg-[#0284c7] hover:bg-[#0369a1] text-white rounded-xl py-2.5 px-3 text-[12px] font-black flex items-center justify-center gap-2 shadow-sm transition cursor-pointer"
+                    >
+                      <Eye className="w-4 h-4 text-sky-200" />
+                      <span>المعاينة والتصدير (A4)</span>
                     </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!rows.length) {
-                        showToast('الدفتر فارغ حالياً.');
-                        return;
-                      }
-                      const beforeCount = rows.length;
-                      const merged = mergeConsecutiveGroupEntries(rows);
-                      setRows(merged);
-                      const diff = beforeCount - merged.length;
-                      if (diff > 0) {
-                        showToast(`تم بنجاح دمج ${diff} حصة للأفواج (ف1 + ف2) في خانة واحدة! ✅`);
-                      } else {
-                        showToast('الحصص مدمجة بالفعل وفق نظام الأفواج ✅');
-                      }
-                    }}
-                    className="w-full bg-teal-50 hover:bg-teal-100 text-teal-900 border border-teal-300 rounded-lg py-2 text-[11px] font-extrabold flex items-center justify-center gap-1.5 transition cursor-pointer"
-                  >
-                    <TableIcon className="w-3.5 h-3.5 text-teal-700" />
-                    <span>دمج حصص الأفواج (ف1 + ف2)</span>
-                  </button>
+
+                  {/* Secondary Tools: Add manual, Merge labs, Clear */}
+                  <div className="grid grid-cols-3 gap-1.5 pt-1 border-t border-zinc-100 text-[11px]">
+                    <button
+                      type="button"
+                      onClick={() => { setManualLessonDate(startDate || getDefaultNotebookStartDate(config.schoolYear || '2026-2027')); setIsAddLessonModalOpen(true); }}
+                      className="bg-zinc-50 hover:bg-emerald-50 text-zinc-700 hover:text-emerald-900 border border-zinc-200 rounded-lg py-1.5 font-bold flex items-center justify-center gap-1 transition cursor-pointer"
+                      title="إضافة حصة يدوية أو تسجيل غياب الأستاذ أو تغيير"
+                    >
+                      <Plus className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>+ حصة / غياب</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!rows.length) {
+                          showToast('الدفتر فارغ حالياً.');
+                          return;
+                        }
+                        const beforeCount = rows.length;
+                        const merged = mergeConsecutiveGroupEntries(rows);
+                        setRows(merged);
+                        const diff = beforeCount - merged.length;
+                        if (diff > 0) showToast(`تم دمج ${diff} حصة للأفواج (ف1+ف2) ✅`);
+                        else showToast('الحصص مدمجة بالفعل وفق نظام الأفواج ✅');
+                      }}
+                      className="bg-zinc-50 hover:bg-teal-50 text-zinc-700 hover:text-teal-900 border border-zinc-200 rounded-lg py-1.5 font-bold flex items-center justify-center gap-1 transition cursor-pointer"
+                      title="دمج حصص الأفواج ف1 وف2 في خانة واحدة"
+                    >
+                      <TableIcon className="w-3.5 h-3.5 text-teal-600" />
+                      <span>دمج الأفواج</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!rows.length) return;
+                        if (window.confirm('هل تريد مسح سجلات الدفتر اليومي الحالية؟')) {
+                          setRows([]);
+                          showToast('تم مسح سجلات الدفتر اليومي');
+                        }
+                      }}
+                      className="bg-zinc-50 hover:bg-red-50 text-zinc-500 hover:text-red-700 border border-zinc-200 rounded-lg py-1.5 font-bold flex items-center justify-center gap-1 transition cursor-pointer"
+                      title="مسح سجلات الدفتر"
+                    >
+                      <Eraser className="w-3.5 h-3.5 text-zinc-400" />
+                      <span>مسح الدفتر</span>
+                    </button>
+                  </div>
                 </div>
 
                 {showEmptyWarning && (
@@ -3400,26 +3461,29 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
           )}
 
           {/* Render Pages */}
-          <div className="space-y-8">
-            {renderCoverFirstPage()}
-            {paginatedPages.map((pageRows, pageIdx) => (
-              <DailyLogSheetTemplate
-                key={`page-${pageIdx}`}
-                pageRows={pageRows}
-                allRows={rows}
-                pageIndex={pageIdx}
-                totalPages={paginatedPages.length}
-                config={config}
-                assignedLevels={assignedLevels}
-                startDate={startDate}
-                pageDimensions={pageDimensions}
-                buildHierarchicalContent={buildHierarchicalContent}
-                findPreviousComparableCurriculumRow={findPreviousComparableCurriculumRow}
-                getSchoolWeekKey={getSchoolWeekKey}
-                getSchoolWeekNumber={getSchoolWeekNumber}
-                formatLogbookDateLabel={formatLogbookDateLabel}
-              />
-            ))}
+          <div className="w-full overflow-x-auto flex flex-col items-center py-2 px-0 sm:px-2">
+            <div className="w-full flex flex-col items-center space-y-6 sm:space-y-8 max-w-[210mm]">
+              {renderNotebookIntroPage(false)}
+              {renderCoverFirstPage()}
+              {paginatedPages.map((pageRows, pageIdx) => (
+                <DailyLogSheetTemplate
+                  key={`page-${pageIdx}`}
+                  pageRows={pageRows}
+                  allRows={rows}
+                  pageIndex={pageIdx}
+                  totalPages={paginatedPages.length}
+                  config={config}
+                  assignedLevels={assignedLevels}
+                  startDate={startDate}
+                  pageDimensions={pageDimensions}
+                  buildHierarchicalContent={buildHierarchicalContent}
+                  findPreviousComparableCurriculumRow={findPreviousComparableCurriculumRow}
+                  getSchoolWeekKey={getSchoolWeekKey}
+                  getSchoolWeekNumber={getSchoolWeekNumber}
+                  formatLogbookDateLabel={formatLogbookDateLabel}
+                />
+              ))}
+            </div>
           </div>
         </main>
       </div>
@@ -3587,15 +3651,16 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
               <button
                 type="button"
                 onClick={handleExportWord}
-                className="inline-flex items-center gap-1.5 bg-gray-800 hover:bg-gray-700 text-white px-3 py-1.5 rounded-full text-[11px] font-bold transition shadow-sm cursor-pointer ml-2"
+                className="inline-flex items-center gap-1.5 bg-gray-800 hover:bg-gray-700 text-white px-2.5 sm:px-3 py-1.5 rounded-full text-[11px] font-bold transition shadow-sm cursor-pointer"
+                title="تصدير كملف Word كامل وطبق الأصل"
               >
                 <FileText className="w-3.5 h-3.5" />
-                <span>تصدير Word</span>
+                <span className="hidden sm:inline">تصدير</span> Word
               </button>
               <button
                 type="button"
                 onClick={handlePrintLogbook}
-                className="inline-flex items-center gap-1.5 bg-white hover:bg-zinc-100 text-[#064e3b] px-3 py-1.5 rounded-full text-[11px] font-bold transition shadow-sm cursor-pointer"
+                className="inline-flex items-center gap-1.5 bg-white hover:bg-zinc-100 text-[#064e3b] px-2.5 sm:px-3 py-1.5 rounded-full text-[11px] font-bold transition shadow-sm cursor-pointer"
                 title="طباعة الدفتر مباشرة"
               >
                 <Printer className="w-3.5 h-3.5" />
@@ -3604,36 +3669,49 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
               <button
                 type="button"
                 onClick={handleExportPdf}
-                className="inline-flex items-center gap-1.5 bg-[#006233] hover:bg-[#0f7f74] text-white px-3 py-1.5 rounded-full text-[11px] font-bold transition shadow-sm cursor-pointer"
+                className="inline-flex items-center gap-1.5 bg-[#006233] hover:bg-[#0f7f74] text-white px-2.5 sm:px-3 py-1.5 rounded-full text-[11px] font-bold transition shadow-sm cursor-pointer"
+                title="تصدير كملف PDF عالي الجودة"
               >
-                <Printer className="w-3.5 h-3.5" />
-                <span>تصدير PDF</span>
+                <FileText className="w-3.5 h-3.5" />
+                <span>PDF</span>
               </button>
 
               <div className="flex items-center bg-[#1f2937] border border-zinc-600 rounded-full p-0.5">
                 <button
                   type="button"
-                  onClick={() => setPreviewZoom((v) => Math.max(50, v - 10))}
-                  className="w-7 h-7 grid place-items-center rounded-full hover:bg-zinc-700 text-white transition cursor-pointer"
+                  onClick={() => setPreviewZoom((v) => Math.max(25, v - 10))}
+                  className="w-6 h-6 sm:w-7 sm:h-7 grid place-items-center rounded-full hover:bg-zinc-700 text-white transition cursor-pointer"
+                  title="تصغير"
                 >
-                  <ZoomOut className="w-4 h-4" />
+                  <ZoomOut className="w-3.5 h-3.5" />
                 </button>
-                <span className="text-[11px] font-bold text-white min-w-[42px] text-center font-mono">
+                <span className="text-[10.5px] font-bold text-white min-w-[36px] text-center font-mono">
                   {previewZoom}%
                 </span>
                 <button
                   type="button"
                   onClick={() => setPreviewZoom((v) => Math.min(150, v + 10))}
-                  className="w-7 h-7 grid place-items-center rounded-full hover:bg-zinc-700 text-white transition cursor-pointer"
+                  className="w-6 h-6 sm:w-7 sm:h-7 grid place-items-center rounded-full hover:bg-zinc-700 text-white transition cursor-pointer"
+                  title="تكبير"
                 >
-                  <ZoomIn className="w-4 h-4" />
+                  <ZoomIn className="w-3.5 h-3.5" />
                 </button>
               </div>
 
               <button
                 type="button"
+                onClick={() => setPreviewZoom(calculateOptimalFitZoom())}
+                className="hidden xs:inline-flex items-center text-[10.5px] bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-600 px-2 py-1 rounded-full font-bold transition cursor-pointer"
+                title="ملاءمة حجم الصفحة تلقائياً مع شاشة جهازك"
+              >
+                ملاءمة
+              </button>
+
+              <button
+                type="button"
                 onClick={() => setIsPreviewModalOpen(false)}
-                className="w-8 h-8 grid place-items-center bg-zinc-700 hover:bg-zinc-600 text-white rounded-full transition cursor-pointer"
+                className="w-7 h-7 sm:w-8 sm:h-8 grid place-items-center bg-zinc-700 hover:bg-zinc-600 text-white rounded-full transition cursor-pointer"
+                title="إغلاق المعاينة"
               >
                 <X className="w-4 h-4" />
               </button>

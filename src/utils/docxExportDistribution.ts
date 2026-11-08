@@ -20,7 +20,13 @@ import { MemoConfig } from "../types";
 import { GeneratedSession as CurriculumSession } from "./annualDistributionGenerator";
 
 const base64ToUint8Array = (base64: string) => {
-  const binaryString = window.atob(base64);
+  const binaryString = typeof atob === 'function'
+    ? atob(base64)
+    : typeof window !== 'undefined' && typeof window.atob === 'function'
+    ? window.atob(base64)
+    : typeof Buffer !== 'undefined'
+    ? Buffer.from(base64, 'base64').toString('binary')
+    : '';
   const bytes = new Uint8Array(binaryString.length);
   for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
   return bytes;
@@ -31,6 +37,9 @@ const FALLBACK_1X1_PNG = base64ToUint8Array("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQ
 const imageDataUrlToPng = async (dataUrl: string): Promise<Uint8Array> => {
   try {
     if (!dataUrl || !dataUrl.startsWith("data:image/")) return FALLBACK_1X1_PNG;
+    if (typeof window === 'undefined' || typeof Image === 'undefined' || typeof document === 'undefined') {
+      return FALLBACK_1X1_PNG;
+    }
     const image = new Image();
     image.src = dataUrl;
     await new Promise<void>((resolve) => {
@@ -54,6 +63,9 @@ const imageDataUrlToPng = async (dataUrl: string): Promise<Uint8Array> => {
 
 const svgToPngData = async (svg: string, width = 420, height = 420): Promise<Uint8Array> => {
   if (!svg || !svg.trim()) return FALLBACK_1X1_PNG;
+  if (typeof window === 'undefined' || typeof Image === 'undefined' || typeof document === 'undefined') {
+    return FALLBACK_1X1_PNG;
+  }
   const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   try {

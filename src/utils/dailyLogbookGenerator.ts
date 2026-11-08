@@ -396,45 +396,46 @@ export function generateLogbookEntries({
       };
 
       // 1. معالجة حصص الأفواج المخبرية (دمج ف1 وف2 في حصة مخبرية واحدة بتوقيت مدمج)
-      if (groupSlots.length >= 2) {
-        const allSameDay = groupSlots.every((g) => g.dayName === groupSlots[0].dayName);
-        const dayInfo0 = weekDaysMap[groupSlots[0].dayName];
-        const isAnyValid = groupSlots.some((g) => {
-          const dInfo = weekDaysMap[g.dayName];
-          return dInfo && !dInfo.isBeforeStart && !dInfo.isHoliday;
-        });
+      // تصفية الأفواج الصالحة فقط لهذا الأسبوع (التي لا تسبق تاريخ البداية المختار وليست عطلة)
+      const validGroupSlots = groupSlots.filter((g) => {
+        const dInfo = weekDaysMap[g.dayName];
+        return dInfo && !dInfo.isBeforeStart && !dInfo.isHoliday;
+      });
 
-        if (isAnyValid) {
-          const groupNumbers = groupSlots.map((g) => g.groupNumber);
-          const mergedSection = `${baseSec} (${groupNumbers.map((num) => `فوج ${num}`).join(' + ')})`;
+      if (validGroupSlots.length >= 2) {
+        const allSameDay = validGroupSlots.every((g) => g.dayName === validGroupSlots[0].dayName);
+        const dayInfo0 = weekDaysMap[validGroupSlots[0].dayName];
+        const groupNumbers = validGroupSlots.map((g) => g.groupNumber);
+        const mergedSection = `${baseSec} (${groupNumbers.map((num) => `فوج ${num}`).join(' + ')})`;
 
-          let mergedDay = '';
-          let mergedDate = '';
-          let mergedTime = '';
+        let mergedDay = '';
+        let mergedDate = '';
+        let mergedTime = '';
 
-          if (allSameDay) {
-            mergedDay = groupSlots[0].dayName;
-            mergedDate = dayInfo0?.dateStr || '';
-            mergedTime = groupSlots
-              .map((g) => `${formatTimeWithArrow(g.time)} (ف${g.groupNumber})`)
-              .join(' / ');
-          } else {
-            mergedDay = groupSlots.map((g) => g.dayName).join(' / ');
-            mergedDate = groupSlots
-              .map((g) => `${weekDaysMap[g.dayName]?.dateStr || ''} (ف${g.groupNumber})`)
-              .join(' / ');
-            mergedTime = groupSlots
-              .map((g) => `${formatTimeWithArrow(g.time)} (ف${g.groupNumber})`)
-              .join(' / ');
-          }
+        if (allSameDay) {
+          mergedDay = validGroupSlots[0].dayName;
+          mergedDate = dayInfo0?.dateStr || '';
+          mergedTime = validGroupSlots
+            .map((g) => `${formatTimeWithArrow(g.time)} (ف${g.groupNumber})`)
+            .join(' / ');
+        } else {
+          mergedDay = validGroupSlots.map((g) => g.dayName).join(' / ');
+          mergedDate = validGroupSlots
+            .map((g) => `${weekDaysMap[g.dayName]?.dateStr || ''} (ف${g.groupNumber})`)
+            .join(' / ');
+          mergedTime = validGroupSlots
+            .map((g) => `${formatTimeWithArrow(g.time)} (ف${g.groupNumber})`)
+            .join(' / ');
+        }
 
           // فحص هل اليوم فترة امتحان أو فرض
-          const activeExamEvent = dayInfo0?.examEvent || weekDaysMap[groupSlots[0].dayName]?.examEvent;
+          const activeExamEvent = dayInfo0?.examEvent || weekDaysMap[validGroupSlots[0].dayName]?.examEvent;
 
           if (activeExamEvent) {
             // حصة تقويمية رسمية (لا تستهلك مؤشر المنهاج)
             const isTest = activeExamEvent.type === 'test' || /فرض/i.test(activeExamEvent.label);
-            const entryId = `${mergedDate.split(' ')[0] || 'date'}-${baseSec.replace(/\s+/g, '')}-exam-${generated.length + currentWeekEntries.length}`;
+            const firstDate = mergedDate.split(' ')[0] || startDate;
+            const entryId = `${firstDate}-${baseSec.replace(/\s+/g, '')}-exam-${generated.length + currentWeekEntries.length}`;
 
             currentWeekEntries.push({
               id: entryId,
@@ -458,7 +459,8 @@ export function generateLogbookEntries({
           } else {
             // حصة مخبرية وفق تسلسل خطوات التدرج
             const step = consumeCurrentStep();
-            const entryId = `${mergedDate.split(' ')[0] || 'date'}-${baseSec.replace(/\s+/g, '')}-groups-${generated.length + currentWeekEntries.length}`;
+            const firstDate = mergedDate.split(' ')[0] || startDate;
+            const entryId = `${firstDate}-${baseSec.replace(/\s+/g, '')}-groups-${generated.length + currentWeekEntries.length}`;
 
             currentWeekEntries.push({
               id: entryId,
@@ -481,10 +483,9 @@ export function generateLogbookEntries({
               sourceLearningUnitId: step.sourceLearningUnitId,
             });
           }
-        }
-      } else if (groupSlots.length === 1) {
-        // فوج فردي (إذا لم يكن هناك فوج ثانٍ مبرمج)
-        const g = groupSlots[0];
+        } else if (validGroupSlots.length === 1) {
+        // فوج فردي (إذا وُجد فوج واحد فقط صالح في هذا الأسبوع بعد تاريخ البداية)
+        const g = validGroupSlots[0];
         const dInfo = weekDaysMap[g.dayName];
         if (dInfo && !dInfo.isBeforeStart && !dInfo.isHoliday) {
           if (dInfo.examEvent) {
@@ -597,7 +598,9 @@ export function generateLogbookEntries({
     if (currentWeekEntries.length > 0) {
       // ترتيب حصص الأسبوع زمنياً حسب التاريخ ثم وقت الحصة
       currentWeekEntries.sort((a, b) => {
-        const dateCmp = a.dateStr.localeCompare(b.dateStr);
+        const dateA = a.dateStr.split(' ')[0] || a.dateStr;
+        const dateB = b.dateStr.split(' ')[0] || b.dateStr;
+        const dateCmp = dateA.localeCompare(dateB);
         if (dateCmp !== 0) return dateCmp;
         return getTimeMinutes(a.time) - getTimeMinutes(b.time);
       });
@@ -609,5 +612,12 @@ export function generateLogbookEntries({
     currentSunday.setDate(currentSunday.getDate() + 7);
   }
 
-  return generated;
+  // فلترة نهائية حاسمة: ضمان عدم وجود أي حصة قبل تاريخ البداية المختار
+  return generated.filter((entry) => {
+    const parts = (entry.dateStr || '').split('/');
+    return parts.every((p) => {
+      const match = p.trim().match(/^(\d{4}-\d{2}-\d{2})/);
+      return match ? match[1] >= startDate : true;
+    });
+  });
 }

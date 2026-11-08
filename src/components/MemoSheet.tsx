@@ -123,7 +123,7 @@ export const MemoSheet: React.FC<MemoSheetProps> = ({
   return (
     <div
       id="memo-paper"
-      className="print-document bg-[#fffdf8]/96 backdrop-blur-[2px] text-gray-900 shadow-[0_14px_45px_rgba(20,110,100,0.10)] rounded-sm mx-auto p-7 md:p-9 max-w-[960px] border border-[#d8eee9] font-sans leading-relaxed text-[13.5px] print:shadow-none print:border-none print:p-0 print:m-0 print:max-w-none print:w-full"
+      className="print-document bg-[#fffdf8]/96 backdrop-blur-[2px] text-gray-900 shadow-[0_14px_45px_rgba(20,110,100,0.10)] rounded-sm mx-auto p-3 sm:p-6 md:p-9 w-full max-w-[960px] border border-[#d8eee9] font-sans leading-relaxed text-[13.5px] print:shadow-none print:border-none print:p-0 print:m-0 print:max-w-none print:w-full box-border"
       style={{ minHeight: '1120px' }}
       dir="rtl"
     >
@@ -629,7 +629,7 @@ export const MemoSheet: React.FC<MemoSheetProps> = ({
       )}
 
       {/* 6. التوقيعات والختم وأسفل الصفحة */}
-      <div className="mt-8 pt-4 border-t-2 border-gray-300 flex items-center justify-between page-break-inside-avoid break-inside-avoid">
+      <div className="mt-8 pt-4 border-t-2 border-gray-300 flex flex-col sm:flex-row items-center justify-between gap-4 sm:gap-2 page-break-inside-avoid break-inside-avoid">
         <div className="text-right flex items-center gap-4">
           <div>
             <div className="font-extrabold text-[13px] text-gray-800 mb-0.5">
@@ -655,7 +655,7 @@ export const MemoSheet: React.FC<MemoSheetProps> = ({
         <div className="memo-page-number text-center font-bold text-[12.5px] text-gray-500 editable-cell print:hidden" contentEditable="plaintext-only" suppressContentEditableWarning>الصفحة 1 / 1</div>
 
         <div className="text-left">
-          <div className="font-extrabold text-[13px] text-gray-800 mb-1">
+          <div className="font-extrabold text-[13px] text-gray-800 mb-1 text-center sm:text-left">
             تأشيرة الإدارة / المفتش:
           </div>
           <div className="w-32 h-16 border border-dashed border-gray-300 rounded-lg flex items-center justify-center text-[10.5px] text-gray-400">

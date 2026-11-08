@@ -47,6 +47,8 @@ const prepareExportPage = (
   page.style.overflow = 'hidden';
   page.style.transform = 'none';
   page.style.backgroundColor = '#ffffff';
+  page.style.direction = 'rtl';
+  page.style.fontFamily = "'Tajawal', 'Cairo', system-ui, sans-serif";
   page.style.setProperty('-webkit-print-color-adjust', 'exact');
   page.style.setProperty('print-color-adjust', 'exact');
 
@@ -95,6 +97,8 @@ const prepareExportPage = (
   host.style.height = pageHeightPx + 'px';
   host.style.overflow = 'hidden';
   host.style.background = '#ffffff';
+  host.style.direction = 'rtl';
+  host.style.fontFamily = "'Tajawal', 'Cairo', system-ui, sans-serif";
   host.style.zIndex = '99999';
   host.style.pointerEvents = 'none';
   host.style.opacity = '1';

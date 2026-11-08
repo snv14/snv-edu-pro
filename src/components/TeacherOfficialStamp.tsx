@@ -71,6 +71,10 @@ export const TeacherOfficialStamp: React.FC<TeacherOfficialStampProps> = ({
   const directorate = config.directorate ? config.directorate.replace('مديرية التربية لولاية', 'م.ت.و.').slice(0, 24) : '';
 
   const center = dimensions.width / 2;
+  const rawId = React.useId();
+  const stampInstanceId = rawId.replace(/[^a-zA-Z0-9]/g, '_');
+  const topArcId = `top-arc-${size}-${stampInstanceId}`;
+  const bottomArcId = `bottom-arc-${size}-${stampInstanceId}`;
 
   return (
     <div
@@ -83,18 +87,19 @@ export const TeacherOfficialStamp: React.FC<TeacherOfficialStampProps> = ({
         height={dimensions.height}
         viewBox={`0 0 ${dimensions.width} ${dimensions.height}`}
         className="overflow-visible"
-        style={{ filter: 'drop-shadow(0px 1px 2px rgba(0,0,0,0.12))' }}
+        xmlns="http://www.w3.org/2000/svg"
+        style={{ width: `${dimensions.width}px`, height: `${dimensions.height}px`, filter: 'drop-shadow(0px 1px 2px rgba(0,0,0,0.12))' }}
       >
         <defs>
           {/* Top text path */}
           <path
-            id={`top-arc-${size}`}
+            id={topArcId}
             d={`M ${center - dimensions.outerR + 5} ${center} A ${dimensions.outerR - 5} ${dimensions.outerR - 5} 0 1 1 ${center + dimensions.outerR - 5} ${center}`}
             fill="none"
           />
           {/* Bottom text path */}
           <path
-            id={`bottom-arc-${size}`}
+            id={bottomArcId}
             d={`M ${center + dimensions.outerR - 5} ${center} A ${dimensions.outerR - 5} ${dimensions.outerR - 5} 0 1 1 ${center - dimensions.outerR + 5} ${center}`}
             fill="none"
           />
@@ -129,7 +134,7 @@ export const TeacherOfficialStamp: React.FC<TeacherOfficialStampProps> = ({
           letterSpacing="0.35"
           style={{ fontFamily: 'Arial, Tahoma, sans-serif' }}
         >
-          <textPath href={`#top-arc-${size}`} startOffset="50%" textAnchor="middle">
+          <textPath href={`#${topArcId}`} startOffset="50%" textAnchor="middle">
             الجمهورية الجزائرية الديمقراطية الشعبية
           </textPath>
         </text>
@@ -141,10 +146,11 @@ export const TeacherOfficialStamp: React.FC<TeacherOfficialStampProps> = ({
           fontWeight="800"
           style={{ fontFamily: 'Arial, Tahoma, sans-serif' }}
         >
-          <textPath href={`#bottom-arc-${size}`} startOffset="50%" textAnchor="middle">
+          <textPath href={`#${bottomArcId}`} startOffset="50%" textAnchor="middle">
             ★ وزارة التربية الوطنية ★
           </textPath>
         </text>
+
 
         {/* Center content */}
         <g textAnchor="middle">

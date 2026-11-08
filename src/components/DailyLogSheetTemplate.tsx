@@ -63,11 +63,21 @@ interface DailyLogSheetProps {
   getSchoolWeekNumber: (dateStr: string, startDate: string) => number;
   formatLogbookDateLabel: (dateStr: string) => string;
   useOfficialImageBackground?: boolean;
+  onUpdateRow?: (rowId: string, updates: Partial<LogEntry>) => void;
+  idPrefix?: string;
 }
 
 // Left Science Graphic (Books + DNA Helix + Erlenmeyer Flask + Plant Sprout)
-const ScienceHeaderLeft: React.FC = () => (
-  <svg viewBox="0 0 130 115" className="w-[110px] h-[95px] select-none shrink-0" fill="none" xmlns="http://www.w3.org/2000/svg">
+export const ScienceHeaderLeft: React.FC = () => (
+  <svg
+    width="110"
+    height="95"
+    viewBox="0 0 130 115"
+    style={{ width: '100%', height: '100%', maxWidth: '110px', maxHeight: '95px' }}
+    className="select-none shrink-0 w-16 h-14 sm:w-20 sm:h-18 md:w-[110px] md:h-[95px]"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+  >
     <defs>
       <linearGradient id="flaskGrad" x1="0%" y1="0%" x2="100%" y2="100%">
         <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.8" />
@@ -130,8 +140,16 @@ const ScienceHeaderLeft: React.FC = () => (
 );
 
 // Right Science Graphic (Microscope + Atom Model + Leaves)
-const ScienceHeaderRight: React.FC = () => (
-  <svg viewBox="0 0 130 115" className="w-[110px] h-[95px] select-none shrink-0" fill="none" xmlns="http://www.w3.org/2000/svg">
+export const ScienceHeaderRight: React.FC = () => (
+  <svg
+    width="110"
+    height="95"
+    viewBox="0 0 130 115"
+    style={{ width: '100%', height: '100%', maxWidth: '110px', maxHeight: '95px' }}
+    className="select-none shrink-0 w-16 h-14 sm:w-20 sm:h-18 md:w-[110px] md:h-[95px]"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+  >
     <defs>
       <linearGradient id="microscopeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
         <stop offset="0%" stopColor="#0284c7" />
@@ -180,10 +198,13 @@ const ScienceHeaderRight: React.FC = () => (
 );
 
 // Botanical leaves ornament for bottom corners
-const CornerLeaves: React.FC<{ flip?: boolean }> = ({ flip = false }) => (
+export const CornerLeaves: React.FC<{ flip?: boolean }> = ({ flip = false }) => (
   <svg
+    width="48"
+    height="48"
     viewBox="0 0 65 65"
-    className={`w-12 h-12 select-none shrink-0 ${flip ? '-scale-x-100' : ''}`}
+    style={{ width: '48px', height: '48px', minWidth: '48px', minHeight: '48px' }}
+    className={`select-none shrink-0 ${flip ? '-scale-x-100' : ''}`}
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
   >
@@ -209,12 +230,15 @@ export const DailyLogSheetTemplate: React.FC<DailyLogSheetProps> = ({
   getSchoolWeekKey,
   getSchoolWeekNumber,
   formatLogbookDateLabel,
+  onUpdateRow,
+  idPrefix = 'page-content',
 }) => {
   const ROWS_PER_PAGE_CAP = 10;
   const emptyRowsCount = Math.max(0, ROWS_PER_PAGE_CAP - pageRows.length);
 
   return (
     <div
+      id={`${idPrefix}-${pageIndex}`}
       data-preview-export-page="true"
       data-logbook-content-page="true"
       className="print-page logbook-content-page relative shadow-[0_16px_50px_rgba(2,132,199,0.14)] rounded-[14px] border-2 md:border-[2.5px] border-[#0284c7] overflow-hidden mx-auto mb-8 bg-[#ffffff] text-zinc-900"
@@ -222,7 +246,7 @@ export const DailyLogSheetTemplate: React.FC<DailyLogSheetProps> = ({
         width: `${pageDimensions.w}mm`,
         height: `${pageDimensions.h}mm`,
         minHeight: `${pageDimensions.h}mm`,
-        maxWidth: 'none',
+        maxWidth: '100%',
         fontFamily: "'Tajawal', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
         direction: 'rtl',
       }}
@@ -398,13 +422,30 @@ export const DailyLogSheetTemplate: React.FC<DailyLogSheetProps> = ({
                             </div>
                           )}
                           <div
-                            className="text-[10.5px] text-zinc-900 leading-normal"
+                            className="text-[10.5px] text-zinc-900 leading-normal outline-none focus:bg-sky-50/80 focus:p-1 focus:rounded transition cursor-text"
+                            contentEditable="plaintext-only"
+                            suppressContentEditableWarning
+                            onBlur={(e) => {
+                              if (onUpdateRow) {
+                                const val = e.currentTarget.innerText.trim();
+                                onUpdateRow(r.id, { content: val, manualContent: val });
+                              }
+                            }}
                             dangerouslySetInnerHTML={{ __html: displayContent }}
                           />
                         </td>
 
                         {/* Col 5: الملاحظات */}
-                        <td className="border-b border-dashed border-[#7dd3fc] px-1.5 py-2 text-right align-top text-[10px] text-zinc-800">
+                        <td
+                          className="border-b border-dashed border-[#7dd3fc] px-1.5 py-2 text-right align-top text-[10px] text-zinc-800 outline-none focus:bg-sky-50/80 focus:p-1 focus:rounded transition cursor-text"
+                          contentEditable="plaintext-only"
+                          suppressContentEditableWarning
+                          onBlur={(e) => {
+                            if (onUpdateRow) {
+                              onUpdateRow(r.id, { note: e.currentTarget.innerText.trim() });
+                            }
+                          }}
+                        >
                           {r.note || ''}
                         </td>
                       </tr>
