@@ -34,6 +34,9 @@ import { loadCurriculumDatabase } from './data/curriculumDb';
 import designerPortraitImg from './assets/images/designer_portrait_1790463396414.jpg';
 import { getDesignerPhoto } from './utils/designerPhoto';
 
+const AIAssistantDrawer = lazy(() => import('./components/AIAssistantDrawer').then(module => ({ default: module.AIAssistantDrawer })));
+const CorrectionMemoDrawer = lazy(() => import('./components/CorrectionMemoDrawer').then(module => ({ default: module.CorrectionMemoDrawer })));
+
 const AnnualDistribution = lazy(() => import('./components/AnnualDistribution').then(module => ({ default: module.AnnualDistribution })));
 const DailyLogbook = lazy(() => import('./components/DailyLogbook').then(module => ({ default: module.DailyLogbook })));
 const AccountSettings = lazy(() => import('./components/AccountSettings').then(module => ({ default: module.AccountSettings })));
@@ -57,6 +60,7 @@ export const App: React.FC = () => {
 
   // Drawers and Modals
   const [isNavDrawerOpen, setIsNavDrawerOpen] = useState<boolean>(false);
+  const [activeTool, setActiveTool] = useState<'assistant' | 'correction' | null>(null);
   const [infoModalTab, setInfoModalTab] = useState<'about' | 'contact' | 'guide' | null>(null);
 
   const [designerPhoto, setDesignerPhoto] = useState<string>(() => getDesignerPhoto());
@@ -573,6 +577,10 @@ export const App: React.FC = () => {
 
           {/* Left Section: Action Buttons + AI Assistant */}
           <div className="flex items-center gap-2">
+            <ActionMenu label="أدوات الأستاذ" items={[
+              { id: 'btn-open-assistant', label: 'المساعد الذكي', onSelect: () => setActiveTool('assistant') },
+              { id: 'btn-open-correction', label: 'مذكرة التصحيح', onSelect: () => setActiveTool('correction') },
+            ]} />
             {/* Designer Badge - Always Visible */}
             <div className="flex items-center gap-2 sm:gap-2.5 bg-emerald-50/90 px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-2xl border border-emerald-300 shadow-xs transition-all hover:shadow-md hover:bg-emerald-100" title="تصميم وتطوير المنصة: الأستاذ بغداد الطيب">
               <img 
@@ -858,6 +866,20 @@ export const App: React.FC = () => {
           />
         </Suspense>
       )}
+
+      <Suspense fallback={<SectionLoading />}>
+        {activeTool === 'assistant' && <AIAssistantDrawer
+          isOpen onClose={() => setActiveTool(null)}
+          selectedLevel={isYearSection ? selectedLevel : undefined}
+          currentLesson={isYearSection ? currentLesson : null}
+          curriculumLessons={curriculumLessons}
+        />}
+        {activeTool === 'correction' && <CorrectionMemoDrawer
+          isOpen onClose={() => setActiveTool(null)}
+          currentLesson={isYearSection ? currentLesson : null}
+          curriculumLessons={curriculumLessons} config={config}
+        />}
+      </Suspense>
 
       {/* Global Navigation Drawer */}
       <PlatformNavigationDrawer
