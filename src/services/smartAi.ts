@@ -11,6 +11,11 @@ export interface SmartAiSource {
   uri: string;
 }
 
+export interface SmartAiMessage {
+  role: 'user' | 'assistant';
+  text: string;
+}
+
 export interface SmartAiRequest {
   question: string;
   lesson?: LessonMemo | null;
@@ -19,6 +24,8 @@ export interface SmartAiRequest {
   useWeb?: boolean;
   level?: string;
   expertMode?: boolean;
+  history?: SmartAiMessage[];
+  signal?: AbortSignal;
 }
 
 export interface SmartAiLabBlock {
@@ -171,6 +178,15 @@ export async function askSmartAi(request: SmartAiRequest): Promise<SmartAiRespon
     ].join('\n');
 
     const context = buildContext(request);
+    const history = Array.isArray(request.history)
+      ? request.history
+          .filter(item => item && (item.role === 'user' || item.role === 'assistant') && typeof item.text === 'string' && item.text.trim())
+          .slice(-12)
+          .map(item => ({ role: item.role, text: item.text.slice(0, 4000) }))
+      : [];
+    const conversationBlock = history.length
+      ? ['سجل المحادثة السابق (الأقدم أولاً، استعمله كسياق متتابع وأكمل عليه):', JSON.stringify(history, null, 2)].join('\n')
+      : 'هذه أول رسالة في المحادثة.';
     const prompt = [
       'أنت الآن تعمل كمساعد خبير للأستاذ في تعليم علوم الطبيعة والحياة في التعليم المتوسط بالجزائر (1AM–4AM).',
       'مهمتك ليست مجرد الدردشة: ساعد الأستاذ على اتخاذ خطوة بيداغوجية عملية، مع احترام المنهاج ومصادره وعدم اختلاق البيانات.',
@@ -198,6 +214,8 @@ export async function askSmartAi(request: SmartAiRequest): Promise<SmartAiRespon
       '4) البدائل المقترحة عند الحاجة.',
       '5) تنبيه "يحتاج مراجعة الأستاذ" عند وجود عدم يقين.',
       '',
+      conversationBlock,
+      '',
       'سياق المنهاج والمذكرات:',
       context,
       '',
@@ -221,7 +239,9 @@ export async function askSmartAi(request: SmartAiRequest): Promise<SmartAiRespon
         useWeb: request.useWeb !== false,
         expertMode: request.expertMode !== false,
         assistantMode: mode,
+        history,
       }),
+      signal: request.signal,
     });
 
     if (!res.ok) {
