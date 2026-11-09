@@ -16,7 +16,7 @@ export interface Activity {
   zaman?: string;
   mola7adha?: string;
   diagrams?: any[];
-  tables?: { headers: string[], rows: string[][] }[];
+  tables?: DB_Table[];
 }
 
 export interface LessonMemo {
@@ -46,9 +46,9 @@ export interface LessonMemo {
   faradiyat?: string;
   anshita: Activity[];
   irsae?: string;
-  irsaeTables?: { headers: string[], rows: string[][] }[];
-  wadiyaTables?: { headers: string[], rows: string[][] }[];
-  taqwimTables?: { headers: string[], rows: string[][] }[];
+  irsaeTables?: DB_Table[];
+  wadiyaTables?: DB_Table[];
+  taqwimTables?: DB_Table[];
   taqwim?: string;
   memoNumber?: string;
   diagrams?: { title?: string; svg?: string; description?: string }[];

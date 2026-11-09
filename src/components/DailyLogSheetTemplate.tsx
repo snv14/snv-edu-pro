@@ -48,7 +48,7 @@ export const formatTimingWithArrow = (timeStr: string) => {
   return formatSingleSlot(timeStr);
 };
 
-interface DailyLogSheetProps {
+export interface DailyLogSheetProps {
   pageRows: LogEntry[];
   allRows: LogEntry[];
   pageIndex: number;

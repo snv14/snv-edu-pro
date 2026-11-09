@@ -32,6 +32,7 @@ export interface GeneratedSession {
   taqwim?: string;
   percent?: string;
   week?: number | string;
+  weekInMonth?: number;
 }
 
 export function generateAnnualDistribution(

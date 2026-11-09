@@ -38,6 +38,7 @@ import { TeacherOfficialStamp } from './TeacherOfficialStamp';
 import { generateLogbookEntries, isLogbookRowOnOrAfter } from '../utils/dailyLogbookGenerator';
 import { collectPreservedRows, preservedRowsInPeriod } from '../utils/logbookPreservation';
 import { DailyLogSheetTemplate, ScienceHeaderLeft, ScienceHeaderRight, CornerLeaves } from './DailyLogSheetTemplate';
+import { TealLogSheetTemplate } from './TealLogSheetTemplate';
 import { DAILY_LOGBOOK_PROGRAM_1AM } from '../data/dailyLogbookProgram1am';
 import { DAILY_LOGBOOK_PROGRAM_2AM } from '../data/dailyLogbookProgram2am';
 import { DAILY_LOGBOOK_PROGRAM_3AM } from '../data/dailyLogbookProgram3am';
@@ -868,6 +869,11 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
     return 1;
   });
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait');
+  const [pageTemplate, setPageTemplate] = useState<'standard' | 'teal'>(() => {
+    try { return localStorage.getItem('logbook_page_template') === 'teal' ? 'teal' : 'standard'; } catch { return 'standard'; }
+  });
+  const SheetTemplate = pageTemplate === 'teal' ? TealLogSheetTemplate : DailyLogSheetTemplate;
+  useEffect(() => { try { localStorage.setItem('logbook_page_template', pageTemplate); } catch {} }, [pageTemplate]);
   const pageDimensions = getPageDimensions(orientation);
   const [startDate, setStartDate] = useState<string>(() => {
     try {
@@ -1254,7 +1260,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
   }, [isPreviewModalOpen]);
 
   // اكتشاف المستويات المسندة للأستاذ آلياً من جدول استعمال الزمن
-  const assignedLevels = useMemo<'1م' | '2م' | '3م' | '4م'[]>(() => {
+  const assignedLevels = useMemo<('1م' | '2م' | '3م' | '4م')[]>(() => {
     const levelsSet = new Set<string>();
     gridRows.forEach((row) => {
       WEEK_DAYS.forEach((day) => {
@@ -1696,7 +1702,8 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
         holidays,
         assignedLevels,
         orientation,
-        paginatedPages
+        paginatedPages,
+        pageTemplate
       );
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -1851,13 +1858,14 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
     const pageHeightPx = pageDimensions.h * 3.7795;
     const availableHeightPx = Math.max(360, pageHeightPx - (orientation === 'landscape' ? 330 : 390));
     const estimateLines = (value: unknown, charsPerLine: number) => {
-      const text = String(value ?? '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+      const plain = String(value ?? '').replace(/<[^>]*>/g, '');
+      const text = (pageTemplate === 'teal' ? plain.replace(/[^\S\n]+/g, ' ') : plain.replace(/\s+/g, ' ')).trim();
       if (!text) return 1;
       return text.split('\n').reduce((sum, part) => sum + Math.max(1, Math.ceil(part.length / charsPerLine)), 0);
     };
     const estimateRowHeight = (row: LogEntry) => {
       const content = buildHierarchicalContent(row);
-      const contentLines = estimateLines(content, orientation === 'landscape' ? 95 : 65);
+      const contentLines = estimateLines(content, pageTemplate === 'teal' ? (orientation === 'landscape' ? 70 : 48) : (orientation === 'landscape' ? 95 : 65));
       const noteLines = estimateLines(row.note, orientation === 'landscape' ? 30 : 22);
       const sectionLines = estimateLines(row.section, 12);
       return Math.max(58, 26 + Math.max(contentLines, noteLines, sectionLines) * 17);
@@ -1879,7 +1887,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       if (pageRows.length) pages.push(pageRows);
     });
     return pages;
-  }, [weeklyGroups, pageDimensions.h, orientation]);
+  }, [weeklyGroups, pageDimensions.h, orientation, pageTemplate]);
 
   const levelDistributionSummary = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -2615,8 +2623,8 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                     {holidays.map((h, idx) => (
                       <tr key={h.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-[#f9faf6]'}>
                         <td className="border border-zinc-200 px-2 py-1.5 text-center font-bold text-[11px] text-zinc-900">{h.label}</td>
-                        <td className="border border-zinc-200 px-2 py-1.5 text-center font-mono font-medium text-[10px] text-zinc-700" dir="ltr">{h.start}</td>
-                        <td className="border border-zinc-200 px-2 py-1.5 text-center font-mono font-medium text-[10px] text-zinc-700" dir="ltr">{h.end}</td>
+                        <td className="border border-zinc-200 px-2 py-1.5 text-center font-mono font-medium text-[10px] text-zinc-700" dir="ltr">{h.startDate}</td>
+                        <td className="border border-zinc-200 px-2 py-1.5 text-center font-mono font-medium text-[10px] text-zinc-700" dir="ltr">{h.endDate || h.startDate}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -3496,6 +3504,15 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                     </p>
                   </div>
                   <div>
+                    <label htmlFor="logbook-page-template" className="block text-[10px] font-bold text-zinc-600 mb-1">نموذج صفحات الدفتر</label>
+                    <select id="logbook-page-template" value={pageTemplate} onChange={e => setPageTemplate(e.target.value as 'standard' | 'teal')}
+                      className="w-full border border-zinc-200 rounded-lg px-2 py-2 text-[12px] bg-white outline-none font-bold">
+                      <option value="standard">النموذج الحالي</option>
+                      <option value="teal">النموذج المخطط الفيروزي (الصورة المرفقة)</option>
+                    </select>
+                    <p className="text-[10px] text-zinc-500 mt-1">يغيّر شكل صفحات الحصص فقط، دون تعديل محتوى الدفتر. الوضع الأفقي أقرب للصورة.</p>
+                  </div>
+                  <div>
                     <label className="block text-[10px] font-bold text-zinc-600 mb-1">وضعية الصفحة</label>
                     <select
                       value={orientation}
@@ -3722,11 +3739,11 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
 
           {/* Render Pages */}
           <div className="w-full overflow-x-auto flex flex-col items-center py-2 px-0 sm:px-2">
-            <div className="w-full flex flex-col items-center space-y-6 sm:space-y-8 max-w-[210mm]">
+            <div className="w-full flex flex-col items-center space-y-6 sm:space-y-8" style={{ maxWidth: orientation === 'landscape' ? '297mm' : '210mm' }}>
               {renderNotebookIntroPage(false)}
               {renderCoverFirstPage()}
               {paginatedPages.map((pageRows, pageIdx) => (
-                <DailyLogSheetTemplate
+                <SheetTemplate
                   key={`page-${pageIdx}`}
                   pageRows={pageRows}
                   allRows={rows}
@@ -4006,7 +4023,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                 {renderNotebookIntroPage(true)}
                 {React.cloneElement(renderCoverFirstPage(), { 'data-preview-export-page': 'true' })}
                 {previewPagesToDisplay.map((pageRows, pageIdx) => (
-                  <DailyLogSheetTemplate
+                  <SheetTemplate
                     key={`preview-page-${pageIdx}`}
                     pageRows={pageRows}
                     allRows={rows}

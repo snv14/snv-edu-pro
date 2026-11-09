@@ -14,7 +14,7 @@ import { DAILY_LOGBOOK_PROGRAM_4AM } from '../data/dailyLogbookProgram4am';
 
 /** A merged group row may contain more than one ISO date. */
 export function isLogbookRowOnOrAfter(dateStr: string, startDate: string): boolean {
-  const dates = dateStr.match(/\d{4}-\d{2}-\d{2}/g) || [];
+  const dates: string[] = dateStr.match(/\d{4}-\d{2}-\d{2}/g) || [];
   return dates.every((date) => date >= startDate);
 }
 
