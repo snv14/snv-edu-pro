@@ -26,6 +26,7 @@ import { MemoSheet } from './components/MemoSheet';
 import { PreviewModal } from './components/PreviewModal';
 import { LevelsHomePage } from './components/LevelsHomePage';
 import { PlatformNavigationDrawer } from './components/PlatformNavigationDrawer';
+import { ActionMenu } from './components/ActionMenu';
 import { PlatformInfoModal } from './components/PlatformInfoModal';
 import { UserProfile } from './components/UserProfile';
 import { FirebaseDataSync } from './components/FirebaseDataSync';
@@ -602,36 +603,11 @@ export const App: React.FC = () => {
                   <Eye className="w-4 h-4 text-emerald-700" />
                   <span>معاينة وطباعة</span>
                 </button>
-                <button
-                  id="btn-print-memo"
-                  type="button"
-                  onClick={handlePrint}
-                  style={{ backgroundColor: midanTheme.accentColor }}
-                  className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-white text-[12px] font-extrabold hover:opacity-90 shadow-xs transition cursor-pointer"
-                  title="تحميل ملف PDF حقيقي"
-                >
-                  <FileDown className="w-3.5 h-3.5" />
-                  <span>PDF</span>
-                </button>
-                <button
-                  id="btn-export-word"
-                  type="button"
-                  onClick={handleExportWord}
-                  className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-blue-600 text-white text-[12px] font-bold hover:bg-blue-700 shadow-xs transition cursor-pointer"
-                  title="تصدير كملف Word"
-                >
-                  <FileDown className="w-3.5 h-3.5" />
-                  <span>Word</span>
-                </button>
-                <button
-                  id="btn-reset-defaults"
-                  type="button"
-                  onClick={handleResetDefaults}
-                  title="استعادة الإعدادات الافتراضية"
-                  className="p-1.5 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition cursor-pointer"
-                >
-                  <RotateCcw className="w-4 h-4" />
-                </button>
+                <ActionMenu label="التصدير والإعدادات" items={[
+                  { id: 'btn-print-memo', label: 'تصدير PDF', title: 'تحميل ملف PDF حقيقي', onSelect: handlePrint, icon: <FileDown className="w-4 h-4" /> },
+                  { id: 'btn-export-word', label: 'تصدير Word', title: 'تصدير كملف Word', onSelect: handleExportWord, icon: <FileDown className="w-4 h-4" /> },
+                  { id: 'btn-reset-defaults', label: 'استعادة الإعدادات الافتراضية', onSelect: handleResetDefaults, icon: <RotateCcw className="w-4 h-4" /> },
+                ]} />
               </>
             ) : null}
           </div>
@@ -743,30 +719,14 @@ export const App: React.FC = () => {
 
               {/* أداة التحكم السريعة في وضوح خلفية القسم */}
               {selectedLevel === '3am' && (
-                <div className="flex items-center gap-1 bg-white/95 px-3 py-1 rounded-full border border-teal-300 text-[11.5px] font-bold shadow-xs no-print">
-                  <span className="text-teal-900 ml-1">وضوح الخلفية:</span>
-                  <button
-                    type="button"
-                    onClick={() => setBgClarity('vivid')}
-                    className={`px-2.5 py-0.5 rounded-full transition cursor-pointer ${bgClarity === 'vivid' ? 'bg-teal-700 text-white' : 'text-teal-800 hover:bg-teal-100'}`}
-                  >
-                    عالي (100%)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setBgClarity('medium')}
-                    className={`px-2.5 py-0.5 rounded-full transition cursor-pointer ${bgClarity === 'medium' ? 'bg-teal-700 text-white' : 'text-teal-800 hover:bg-teal-100'}`}
-                  >
-                    متوازن
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setBgClarity('soft')}
-                    className={`px-2.5 py-0.5 rounded-full transition cursor-pointer ${bgClarity === 'soft' ? 'bg-teal-700 text-white' : 'text-teal-800 hover:bg-teal-100'}`}
-                  >
-                    هادئ
-                  </button>
-                </div>
+                <label className="flex items-center gap-2 bg-white/95 px-3 py-1 rounded-full border border-teal-300 text-[11.5px] font-bold shadow-xs no-print text-teal-900">
+                  <span>وضوح الخلفية:</span>
+                  <select value={bgClarity} onChange={(event) => setBgClarity(event.target.value as 'vivid' | 'medium' | 'soft')} className="bg-transparent text-teal-900 cursor-pointer focus-visible:outline-2 focus-visible:outline-teal-700">
+                    <option value="vivid">عالي (100%)</option>
+                    <option value="medium">متوازن</option>
+                    <option value="soft">هادئ</option>
+                  </select>
+                </label>
               )}
 
               <div className="hidden sm:block text-gray-500 font-medium">

@@ -3,6 +3,7 @@ import { generateDistributionDocx } from "../utils/docxExportDistribution";
 import { generateDistributionPdf } from "../utils/pdfExportDistribution";
 import { LessonMemo, MemoConfig } from '../types';
 import { TeacherOfficialStamp } from './TeacherOfficialStamp';
+import { ActionMenu } from './ActionMenu';
 import { LESSONS_1AM } from '../data/lessons1am';
 import { LESSONS_2AM } from '../data/lessons2am';
 import { LESSONS_3AM } from '../data/lessons3am';
@@ -987,15 +988,11 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
             <button onClick={() => setShowPreview(true)} className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 shadow-sm transition cursor-pointer">
               <Eye size={17} /> معاينة
             </button>
-            <button onClick={handlePrint} className="flex items-center gap-1.5 px-3 py-2 bg-gray-900 text-white rounded-lg font-bold hover:bg-gray-800 shadow-sm transition cursor-pointer">
-              <Printer size={17} /> طباعة
-            </button>
-            <button onClick={handleExportPdf} className="flex items-center gap-1.5 px-3 py-2 bg-[#159a8c] text-white rounded-lg font-bold hover:bg-[#0f7f74] shadow-sm transition cursor-pointer">
-              <FileDown size={17} /> PDF
-            </button>
-            <button onClick={handleExportWord} className="flex items-center gap-1.5 px-3 py-2 bg-[#4f86c6] text-white rounded-lg font-bold hover:bg-blue-700 shadow-sm transition cursor-pointer">
-              <FileDown size={17} /> Word
-            </button>
+            <ActionMenu label="طباعة وتصدير" items={[
+              { label: 'طباعة', onSelect: handlePrint, icon: <Printer size={17} /> },
+              { label: 'تصدير PDF', onSelect: handleExportPdf, icon: <FileDown size={17} /> },
+              { label: 'تصدير Word', onSelect: handleExportWord, icon: <FileDown size={17} /> },
+            ]} />
           </div>
         </div>
       </div>

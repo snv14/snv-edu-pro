@@ -3559,73 +3559,76 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                   </div>
 
                   {/* Secondary Tools: Add manual, Merge labs, Split labs, Clear */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-1 border-t border-zinc-100 text-[11px]">
-                    <button
-                      type="button"
-                      onClick={() => { setManualLessonDate(startDate || getDefaultNotebookStartDate(config.schoolYear || '2026-2027')); setIsAddLessonModalOpen(true); }}
-                      className="bg-zinc-50 hover:bg-emerald-50 text-zinc-700 hover:text-emerald-900 border border-zinc-200 rounded-lg py-1.5 px-2 font-bold flex items-center justify-center gap-1 transition cursor-pointer"
-                      title="إضافة حصة يدوية أو تسجيل غياب الأستاذ أو تغيير"
-                    >
-                      <Plus className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                      <span>+ حصة / غياب</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!rows.length) {
-                          showToast('الدفتر فارغ حالياً.');
-                          return;
-                        }
-                        const beforeCount = rows.length;
-                        const merged = mergeConsecutiveGroupEntries(rows);
-                        setRows(merged);
-                        const diff = beforeCount - merged.length;
-                        if (diff > 0) showToast(`تم دمج ${diff} حصة للأفواج (ف1+ف2 في سطر واحد) ✅`);
-                        else showToast('الحصص مدمجة بالفعل وفق نظام الأفواج التربوية ✅');
-                      }}
-                      className="bg-zinc-50 hover:bg-teal-50 text-zinc-700 hover:text-teal-900 border border-zinc-200 rounded-lg py-1.5 px-2 font-bold flex items-center justify-center gap-1 transition cursor-pointer"
-                      title="دمج حصص الأفواج ف1 وف2 التابعة لنفس القسم في سطر واحد"
-                    >
-                      <TableIcon className="w-3.5 h-3.5 text-teal-600 shrink-0" />
-                      <span>دمج الأفواج</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!rows.length) {
-                          showToast('الدفتر فارغ حالياً.');
-                          return;
-                        }
-                        const beforeCount = rows.length;
-                        const split = splitMergedGroupEntries(rows);
-                        setRows(split);
-                        const diff = split.length - beforeCount;
-                        if (diff > 0) showToast(`تم فصل الحصص المدمجة إلى ${split.length} حصة (سطر مستقل لكل فوج) ✅`);
-                        else showToast('الحصص مفصولة ومستقلة بالفعل لكل فوج ✅');
-                      }}
-                      className="bg-zinc-50 hover:bg-sky-50 text-zinc-700 hover:text-sky-900 border border-zinc-200 rounded-lg py-1.5 px-2 font-bold flex items-center justify-center gap-1 transition cursor-pointer"
-                      title="فصل حصص الأفواج المدمجة إلى أسطر منفصلة لكل فوج"
-                    >
-                      <Layers className="w-3.5 h-3.5 text-sky-600 shrink-0" />
-                      <span>فصل الأفواج</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!rows.length && !archivedRows.length) return;
-                        if (window.confirm('هل تريد مسح سجلات الدفتر والتعديلات اليدوية المؤرشفة؟')) {
-                          setRows([]);
-                          setArchivedRows([]);
-                          showToast('تم مسح سجلات الدفتر اليومي');
-                        }
-                      }}
-                      className="bg-zinc-50 hover:bg-red-50 text-zinc-500 hover:text-red-700 border border-zinc-200 rounded-lg py-1.5 px-2 font-bold flex items-center justify-center gap-1 transition cursor-pointer"
-                      title="مسح سجلات الدفتر"
-                    >
-                      <Eraser className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-                      <span>مسح الدفتر</span>
-                    </button>
-                  </div>
+                  <details className="border-t border-zinc-100 pt-2">
+                    <summary className="cursor-pointer text-[11px] font-bold text-emerald-800 hover:text-emerald-950 focus-visible:outline-2 focus-visible:outline-emerald-700">أدوات إضافية للدفتر</summary>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-2 text-[11px]">
+                      <button
+                        type="button"
+                        onClick={() => { setManualLessonDate(startDate || getDefaultNotebookStartDate(config.schoolYear || '2026-2027')); setIsAddLessonModalOpen(true); }}
+                        className="bg-zinc-50 hover:bg-emerald-50 text-zinc-700 hover:text-emerald-900 border border-zinc-200 rounded-lg py-1.5 px-2 font-bold flex items-center justify-center gap-1 transition cursor-pointer"
+                        title="إضافة حصة يدوية أو تسجيل غياب الأستاذ أو تغيير"
+                      >
+                        <Plus className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span>+ حصة / غياب</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!rows.length) {
+                            showToast('الدفتر فارغ حالياً.');
+                            return;
+                          }
+                          const beforeCount = rows.length;
+                          const merged = mergeConsecutiveGroupEntries(rows);
+                          setRows(merged);
+                          const diff = beforeCount - merged.length;
+                          if (diff > 0) showToast(`تم دمج ${diff} حصة للأفواج (ف1+ف2 في سطر واحد) ✅`);
+                          else showToast('الحصص مدمجة بالفعل وفق نظام الأفواج التربوية ✅');
+                        }}
+                        className="bg-zinc-50 hover:bg-teal-50 text-zinc-700 hover:text-teal-900 border border-zinc-200 rounded-lg py-1.5 px-2 font-bold flex items-center justify-center gap-1 transition cursor-pointer"
+                        title="دمج حصص الأفواج ف1 وف2 التابعة لنفس القسم في سطر واحد"
+                      >
+                        <TableIcon className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                        <span>دمج الأفواج</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!rows.length) {
+                            showToast('الدفتر فارغ حالياً.');
+                            return;
+                          }
+                          const beforeCount = rows.length;
+                          const split = splitMergedGroupEntries(rows);
+                          setRows(split);
+                          const diff = split.length - beforeCount;
+                          if (diff > 0) showToast(`تم فصل الحصص المدمجة إلى ${split.length} حصة (سطر مستقل لكل فوج) ✅`);
+                          else showToast('الحصص مفصولة ومستقلة بالفعل لكل فوج ✅');
+                        }}
+                        className="bg-zinc-50 hover:bg-sky-50 text-zinc-700 hover:text-sky-900 border border-zinc-200 rounded-lg py-1.5 px-2 font-bold flex items-center justify-center gap-1 transition cursor-pointer"
+                        title="فصل حصص الأفواج المدمجة إلى أسطر منفصلة لكل فوج"
+                      >
+                        <Layers className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                        <span>فصل الأفواج</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!rows.length && !archivedRows.length) return;
+                          if (window.confirm('هل تريد مسح سجلات الدفتر والتعديلات اليدوية المؤرشفة؟')) {
+                            setRows([]);
+                            setArchivedRows([]);
+                            showToast('تم مسح سجلات الدفتر اليومي');
+                          }
+                        }}
+                        className="bg-zinc-50 hover:bg-red-50 text-zinc-500 hover:text-red-700 border border-zinc-200 rounded-lg py-1.5 px-2 font-bold flex items-center justify-center gap-1 transition cursor-pointer"
+                        title="مسح سجلات الدفتر"
+                      >
+                        <Eraser className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                        <span>مسح الدفتر</span>
+                      </button>
+                    </div>
+                  </details>
                 </div>
 
                 {showEmptyWarning && (
