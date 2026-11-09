@@ -36,7 +36,7 @@ import {
 import { LessonMemo, MemoConfig, Activity } from '../types';
 import { TeacherOfficialStamp } from './TeacherOfficialStamp';
 import { generateLogbookEntries, isLogbookRowOnOrAfter } from '../utils/dailyLogbookGenerator';
-import { markLogbookDateChanged } from '../utils/logbookDateRevision';
+import { collectPreservedRows, preservedRowsInPeriod } from '../utils/logbookPreservation';
 import { DailyLogSheetTemplate, ScienceHeaderLeft, ScienceHeaderRight, CornerLeaves } from './DailyLogSheetTemplate';
 import { DAILY_LOGBOOK_PROGRAM_1AM } from '../data/dailyLogbookProgram1am';
 import { DAILY_LOGBOOK_PROGRAM_2AM } from '../data/dailyLogbookProgram2am';
@@ -156,6 +156,7 @@ export interface LogEntry {
   taqwim?: string;
   moshkila?: string;
   manualContent?: string;
+  manualEdited?: boolean;
   sourceSequenceId?: string;
   sourceResourceId?: string;
   sourceLearningUnitId?: string;
@@ -492,6 +493,7 @@ const mergeGeneratedWithPreservedRows = (
       String(row.id || '').startsWith('manual-') ||
       !row.sourceLearningUnitId ||
       row.manualContent ||
+      row.manualEdited ||
       row.attendance
     );
   });
@@ -714,6 +716,22 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
     return getDefaultNotebookStartDate(config.schoolYear || '2026-2027') || formatDateToIsoString(new Date());
   });
 
+  // The projected curriculum timeline starts at school entry, independently of
+  // the period the teacher chooses to display.
+  const [sequenceStartDate, setSequenceStartDate] = useState<string>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('daftar_table_v2027') || '{}');
+      if (saved.sequenceStartDate) return saved.sequenceStartDate;
+    } catch {}
+    return getDefaultNotebookStartDate(config.schoolYear || '2026-2027');
+  });
+  const [archivedRows, setArchivedRows] = useState<LogEntry[]>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('daftar_table_v2027') || '{}');
+      return Array.isArray(saved.archivedRows) ? saved.archivedRows : [];
+    } catch { return []; }
+  });
+
   // تاريخ البداية مستقل عن التدرج السنوي؛ لا يستمع الدفتر إلى أحداث الرزنامة ولا يكتب إليها. 
 
   // Generated Daily Log Entries
@@ -742,12 +760,17 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
     } catch {}
     return generateLogbookEntries({
       startDate: startDate || getDefaultNotebookStartDate(config.schoolYear || '2026-2027'),
+      sequenceStartDate,
       gridRows: AUTO_FILLED_TIMETABLE_ROWS,
       period: 'سنة',
       holidays: [],
       curriculumDb: CURRICULUM_DATABASE,
     });
   });
+
+  const handleUpdateLogbookRow = (rowId: string, updates: Partial<LogEntry>) => {
+    setRows(current => current.map(row => row.id === rowId ? { ...row, ...updates, manualEdited: true } : row));
+  };
 
   // Modals & UI States
   const [isAddLessonModalOpen, setIsAddLessonModalOpen] = useState(false);
@@ -882,6 +905,8 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
           setSessionsPerActivity(Number(parsed.sessionsPerActivity) || 1);
         }
 
+        if (parsed.sequenceStartDate) setSequenceStartDate(parsed.sequenceStartDate);
+        if (Array.isArray(parsed.archivedRows)) setArchivedRows(parsed.archivedRows);
         if (typeof parsed.startDate === 'string') {
           setStartDate(parsed.startDate);
         }
@@ -934,6 +959,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
 
           const generatedRows = generateLogbookEntries({
             startDate: effectiveStart,
+            sequenceStartDate: parsed.sequenceStartDate || sequenceStartDate,
             gridRows: effectiveGrid,
             period: parsed.period || period || 'سنة',
             holidays: parsed.holidays || holidays,
@@ -953,6 +979,8 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
               gridRows: effectiveGrid,
               holidays: parsed.holidays || holidays,
               rows: fresh,
+              archivedRows: parsed.archivedRows || [],
+              sequenceStartDate: parsed.sequenceStartDate || sequenceStartDate,
               startDate: effectiveStart,
               period: parsed.period || period || 'سنة',
               orientation: parsed.orientation || orientation,
@@ -971,6 +999,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       const effectiveStart = startDate || getDefaultNotebookStartDate(config.schoolYear || '2026-2027');
       const fresh = generateLogbookEntries({
         startDate: effectiveStart,
+        sequenceStartDate,
         gridRows: AUTO_FILLED_TIMETABLE_ROWS,
         period: 'سنة',
         holidays,
@@ -1011,6 +1040,8 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       gridRows,
       holidays,
       rows: filteredRows,
+      archivedRows,
+      sequenceStartDate,
       startDate,
       period,
       sessionsPerActivity,
@@ -1023,7 +1054,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
     if ((window as any).syncToCloud) {
       (window as any).syncToCloud('logbook', dataToSave);
     }
-  }, [wilaya, school, teacher, subject, config.schoolYear, showSubjectInHeader, showYearInHeader, gridRows, holidays, rows, startDate, period, sessionsPerActivity, orientation, storageLoaded]);
+  }, [wilaya, school, teacher, subject, config.schoolYear, showSubjectInHeader, showYearInHeader, gridRows, holidays, rows, startDate, period, sessionsPerActivity, orientation, storageLoaded, archivedRows, sequenceStartDate]);
 
   // Keyboard navigation for preview modal
   useEffect(() => {
@@ -1238,6 +1269,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
 
     const fresh = generateLogbookEntries({
       startDate: targetStartDate,
+      sequenceStartDate,
       gridRows: effectiveGrid,
       period: targetPeriod || 'سنة',
       holidays,
@@ -1245,8 +1277,13 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       sessionsPerActivity: targetSessionsPerActivity,
     });
 
-    if (fresh.length > 0) {
-      setRows(fresh);
+    // Keep teacher-entered changes even when they fall outside the new period.
+    const archive = collectPreservedRows(archivedRows, rows);
+    setArchivedRows(archive);
+    const relevantManualRows = preservedRowsInPeriod(archive, targetStartDate, targetPeriod);
+    const combined = mergeGeneratedWithPreservedRows(fresh, relevantManualRows, targetStartDate);
+    if (combined.length > 0) {
+      setRows(combined);
       try {
         const dataToSave = {
           logbookDataVersion: LOGBOOK_DATA_VERSION,
@@ -1258,7 +1295,9 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
           showYearInHeader,
           gridRows: effectiveGrid,
           holidays,
-          rows: fresh,
+          rows: combined,
+          archivedRows: archive,
+          sequenceStartDate,
           startDate: targetStartDate,
           period: targetPeriod || 'سنة',
           sessionsPerActivity: targetSessionsPerActivity,
@@ -1266,7 +1305,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
         };
         localStorage.setItem('daftar_table_v2027', JSON.stringify(dataToSave));
       } catch {}
-      return fresh;
+      return combined;
     } else {
       setRows([]);
       return [];
@@ -1302,6 +1341,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
     const effectiveStart = startDate;
     const fresh = generateLogbookEntries({
       startDate: effectiveStart,
+      sequenceStartDate,
       gridRows,
       period: period || 'سنة',
       holidays,
@@ -1322,6 +1362,8 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
           gridRows,
           holidays,
           rows: fresh,
+          archivedRows,
+          sequenceStartDate,
           startDate: effectiveStart,
           period: period || 'سنة',
           orientation,
@@ -3206,7 +3248,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                       <option>سنة</option>
                     </select>
                     <p className="text-[10px] text-zinc-500 mt-1">
-                      {period === 'سنة' ? '180 يوم تدريس كامل' : `${targetDaysCount} يوم تقويمي`}
+                      {period === 'سنة' ? '365 يوماً تقويمياً' : `${targetDaysCount} يوم تقويمي`}
                     </p>
                   </div>
                   <div>
@@ -3235,6 +3277,13 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                   </div>
                 </div>
 
+                <div>
+                  <label className="block text-[10px] font-bold text-zinc-700 mb-1">تاريخ الدخول المدرسي (مرجع تقدير تسلسل الدروس)</label>
+                  <input type="date" value={sequenceStartDate} onChange={(e) => setSequenceStartDate(e.target.value)}
+                    className="w-full border border-zinc-200 rounded-lg px-2 py-2 text-[12px] bg-white outline-none" />
+                  <p className="text-[10px] text-zinc-500 mt-1">يُقدَّر تقدم الدروس وفق استعمال الزمن والعطل؛ اضغط توليد بعد تعديل المرجع.</p>
+                </div>
+
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="block text-[10px] font-bold text-zinc-700 mb-1">
@@ -3245,7 +3294,6 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                       value={startDate}
                       onChange={(e) => {
                         const selectedDate = e.target.value;
-                        markLogbookDateChanged();
                         setStartDate(selectedDate);
                         if (selectedDate) {
                           const fresh = generateAndApplyLogbook(selectedDate, period, sessionsPerActivity);
@@ -3342,9 +3390,10 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                     <button
                       type="button"
                       onClick={() => {
-                        if (!rows.length) return;
-                        if (window.confirm('هل تريد مسح سجلات الدفتر اليومي الحالية؟')) {
+                        if (!rows.length && !archivedRows.length) return;
+                        if (window.confirm('هل تريد مسح سجلات الدفتر والتعديلات اليدوية المؤرشفة؟')) {
                           setRows([]);
+                          setArchivedRows([]);
                           showToast('تم مسح سجلات الدفتر اليومي');
                         }
                       }}
@@ -3487,6 +3536,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                   getSchoolWeekKey={getSchoolWeekKey}
                   getSchoolWeekNumber={getSchoolWeekNumber}
                   formatLogbookDateLabel={formatLogbookDateLabel}
+                  onUpdateRow={handleUpdateLogbookRow}
                 />
               ))}
             </div>
@@ -3766,6 +3816,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                     getSchoolWeekKey={getSchoolWeekKey}
                     getSchoolWeekNumber={getSchoolWeekNumber}
                     formatLogbookDateLabel={formatLogbookDateLabel}
+                    onUpdateRow={handleUpdateLogbookRow}
                   />
                 ))}
               </div>

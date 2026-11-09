@@ -279,7 +279,6 @@ export function syncCalendarToAllLevels(
   levelBaseRowsProvider?: (level: '1am' | '2am' | '3am' | '4am') => OfficialAnnualDistributionRow[]
 ): boolean {
   try {
-    const ANNUAL_STORAGE_KEY = 'annual_distribution_custom_v3';
     const existing = JSON.parse(localStorage.getItem(ANNUAL_STORAGE_KEY) || '{}');
     
     // حفظ الإعدادات العالمية الموحدة لكامل المؤسسة

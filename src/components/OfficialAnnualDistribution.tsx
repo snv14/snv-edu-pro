@@ -105,8 +105,8 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
 
     try {
       const logbook = JSON.parse(localStorage.getItem('daftar_table_v2027') || '{}');
-      if (logbook.startDate && !initialStart) {
-        initialStart = logbook.startDate;
+      if (logbook.sequenceStartDate && !initialStart) {
+        initialStart = logbook.sequenceStartDate;
       }
     } catch {}
 
@@ -162,6 +162,26 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
     window.addEventListener('school-calendar-updated', handleCalendarUpdated);
     return () => window.removeEventListener('school-calendar-updated', handleCalendarUpdated);
   }, [officialBaseRows]);
+
+  // Apply an annual distribution received after this screen was mounted.
+  useEffect(() => {
+    const onSync = (event: Event) => {
+      if ((event as CustomEvent).detail?.type !== 'annualDist') return;
+      try {
+        const stored = JSON.parse(localStorage.getItem(ANNUAL_STORAGE_KEY) || '{}');
+        const settings = stored.globalCalendarSettings || stored[level]?.calendarSettings;
+        const items = stored[level]?.items;
+        if (settings) setCalendarSettings(settings);
+        if (Array.isArray(items) && items.length) {
+          setCustomRows(recalculateDistributionRows(items, settings || calendarSettings));
+        }
+      } catch (error) {
+        console.error('تعذر استعادة التدرج السنوي:', error);
+      }
+    };
+    window.addEventListener('firebase-sync-complete', onSync);
+    return () => window.removeEventListener('firebase-sync-complete', onSync);
+  }, [level, calendarSettings]);
 
   // عند تغيير السنة الدراسية خارجياً (الشريط الجانبي / إعدادات الحساب)، إعادة حساب وتحديث التدرج فورياً
   useEffect(() => {

@@ -349,7 +349,9 @@ export const DailyLogSheetTemplate: React.FC<DailyLogSheetProps> = ({
                 {pageRows.map((r, rowIdx) => {
                   const globalRowIndex = allRows.findIndex((item) => item.id === r.id);
                   const previousRow = findPreviousComparableCurriculumRow(allRows, globalRowIndex, r);
-                  const displayContent = buildHierarchicalContent(r, previousRow);
+                  const displayContent = buildHierarchicalContent(r, previousRow)
+                    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                    .replace(/&lt;u&gt;/g, '<u>').replace(/&lt;\/u&gt;/g, '</u>');
                   const isNewWeek =
                     rowIdx > 0 &&
                     getSchoolWeekKey(r.dateStr) !== getSchoolWeekKey(pageRows[rowIdx - 1].dateStr);
@@ -425,9 +427,10 @@ export const DailyLogSheetTemplate: React.FC<DailyLogSheetProps> = ({
                             className="text-[10.5px] text-zinc-900 leading-normal outline-none focus:bg-sky-50/80 focus:p-1 focus:rounded transition cursor-text"
                             contentEditable="plaintext-only"
                             suppressContentEditableWarning
+                            onFocus={(e) => { e.currentTarget.dataset.originalText = e.currentTarget.innerText.trim(); }}
                             onBlur={(e) => {
-                              if (onUpdateRow) {
-                                const val = e.currentTarget.innerText.trim();
+                              const val = e.currentTarget.innerText.trim();
+                              if (onUpdateRow && val !== e.currentTarget.dataset.originalText) {
                                 onUpdateRow(r.id, { content: val, manualContent: val });
                               }
                             }}
@@ -440,9 +443,11 @@ export const DailyLogSheetTemplate: React.FC<DailyLogSheetProps> = ({
                           className="border-b border-dashed border-[#7dd3fc] px-1.5 py-2 text-right align-top text-[10px] text-zinc-800 outline-none focus:bg-sky-50/80 focus:p-1 focus:rounded transition cursor-text"
                           contentEditable="plaintext-only"
                           suppressContentEditableWarning
+                          onFocus={(e) => { e.currentTarget.dataset.originalText = e.currentTarget.innerText.trim(); }}
                           onBlur={(e) => {
-                            if (onUpdateRow) {
-                              onUpdateRow(r.id, { note: e.currentTarget.innerText.trim() });
+                            const val = e.currentTarget.innerText.trim();
+                            if (onUpdateRow && val !== e.currentTarget.dataset.originalText) {
+                              onUpdateRow(r.id, { note: val });
                             }
                           }}
                         >
