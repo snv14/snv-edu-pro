@@ -34,7 +34,7 @@ import { loadCurriculumDatabase } from './data/curriculumDb';
 import designerPortraitImg from './assets/images/designer_portrait_1790463396414.jpg';
 import { getDesignerPhoto } from './utils/designerPhoto';
 
-const AIAssistantDrawer = lazy(() => import('./components/AIAssistantDrawer').then(module => ({ default: module.AIAssistantDrawer })));
+const AIAssistantChat = lazy(() => import('./components/AIAssistantChat').then(module => ({ default: module.AIAssistantDrawer })));
 const CorrectionMemoDrawer = lazy(() => import('./components/CorrectionMemoDrawer').then(module => ({ default: module.CorrectionMemoDrawer })));
 
 const AnnualDistribution = lazy(() => import('./components/AnnualDistribution').then(module => ({ default: module.AnnualDistribution })));
@@ -577,10 +577,6 @@ export const App: React.FC = () => {
 
           {/* Left Section: Action Buttons + AI Assistant */}
           <div className="flex items-center gap-2">
-            <ActionMenu label="أدوات الأستاذ" items={[
-              { id: 'btn-open-assistant', label: 'المساعد الذكي', onSelect: () => setActiveTool('assistant') },
-              { id: 'btn-open-correction', label: 'مذكرة التصحيح', onSelect: () => setActiveTool('correction') },
-            ]} />
             {/* Designer Badge - Always Visible */}
             <div className="flex items-center gap-2 sm:gap-2.5 bg-emerald-50/90 px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-2xl border border-emerald-300 shadow-xs transition-all hover:shadow-md hover:bg-emerald-100" title="تصميم وتطوير المنصة: الأستاذ بغداد الطيب">
               <img 
@@ -868,7 +864,7 @@ export const App: React.FC = () => {
       )}
 
       <Suspense fallback={<SectionLoading />}>
-        {activeTool === 'assistant' && <AIAssistantDrawer
+        {activeTool === 'assistant' && <AIAssistantChat
           isOpen onClose={() => setActiveTool(null)}
           selectedLevel={isYearSection ? selectedLevel : undefined}
           currentLesson={isYearSection ? currentLesson : null}
@@ -891,6 +887,7 @@ export const App: React.FC = () => {
           setYearSubTab('memos');
         }}
         onOpenInfoModal={(tab) => setInfoModalTab(tab)}
+        onOpenTool={(tool) => setActiveTool(tool)}
         config={config}
       />
 

@@ -123,6 +123,7 @@ apiApp.post('/api/gemini/smart-assistant', async (req, res) => {
       useWeb = true,
       expertMode = true,
       assistantMode = 'expert',
+      history = [],
     } = req.body;
 
     if (!String(question || '').trim()) {
@@ -213,6 +214,13 @@ apiApp.post('/api/gemini/smart-assistant', async (req, res) => {
       `وضع المهمة الحالي: ${assistantMode}`,
     ].join('\\n');
 
+    const conversationHistory: Array<{ role: 'user' | 'assistant'; text: string }> = Array.isArray(history)
+      ? history
+          .filter((item: any) => item && (item.role === 'user' || item.role === 'assistant') && typeof item.text === 'string' && item.text.trim())
+          .slice(-12)
+          .map((item: any) => ({ role: item.role, text: String(item.text).slice(0, 4000) }))
+      : [];
+
     const knowledgeSnapshot = getKnowledgeSnapshot();
     const context = [
       sourcePolicy,
@@ -228,9 +236,11 @@ apiApp.post('/api/gemini/smart-assistant', async (req, res) => {
       JSON.stringify(compactLesson, null, 2),
       'مقتطف قاعدة بيانات المنهاج والتدرجات:',
       JSON.stringify(curriculumRows, null, 2),
+      conversationHistory.length ? 'سجل المحادثة (الأقدم أولاً):' : 'لا يوجد سجل محادثة سابق.',
+      conversationHistory.length ? JSON.stringify(conversationHistory, null, 2) : '',
       'سؤال الأستاذ:',
       String(question).slice(0, 12000),
-    ].join('\n\n');
+    ].filter(Boolean).join('\n\n');
 
     // معالجة الأسئلة النصية (بدون مرفقات): إذا غاب Gemini أو طُلب مزود بديل، يتم الرد عبر المزود النصي المتاح حتى لو كان الويب مفعلاً
     const geminiKeyAvailable = Boolean(apiKey);

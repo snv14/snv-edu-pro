@@ -18,6 +18,8 @@ import {
   Dna,
   FileText,
   ShieldCheck,
+  MessagesSquare,
+  ClipboardCheck,
 } from 'lucide-react';
 import { MemoConfig } from '../types';
 import designerPortraitImg from '../assets/images/designer_portrait_1790463396414.jpg';
@@ -29,6 +31,7 @@ interface PlatformNavigationDrawerProps {
   activeSection: string;
   onNavigate: (section: string) => void;
   onOpenInfoModal: (tab: 'about' | 'contact' | 'guide') => void;
+  onOpenTool: (tool: 'assistant' | 'correction') => void;
   config: MemoConfig;
 }
 
@@ -38,6 +41,7 @@ export const PlatformNavigationDrawer: React.FC<PlatformNavigationDrawerProps> =
   activeSection,
   onNavigate,
   onOpenInfoModal,
+  onOpenTool,
   config,
 }) => {
   const [designerPhoto, setDesignerPhoto] = useState<string>(() => getDesignerPhoto());
@@ -198,6 +202,37 @@ export const PlatformNavigationDrawer: React.FC<PlatformNavigationDrawerProps> =
               <div className="flex items-center gap-2.5">
                 <Database className="w-4 h-4 text-emerald-700" />
                 <span>إدارة قاعدة البيانات</span>
+              </div>
+              <ChevronLeft className="w-4 h-4 text-gray-400" />
+            </button>
+          </div>
+
+          {/* Conversation and correction tools */}
+          <div className="space-y-1 pt-2 border-t border-gray-100">
+            <div className="text-[11px] font-black text-gray-400 uppercase tracking-wider px-2 mb-1.5">
+              المحادثة والتصحيح
+            </div>
+
+            <button
+              type="button"
+              onClick={() => { onOpenTool('assistant'); onClose(); }}
+              className="w-full flex items-center justify-between p-2.5 rounded-xl text-[13px] font-bold text-gray-700 hover:bg-teal-50 hover:text-teal-900 transition cursor-pointer"
+            >
+              <div className="flex items-center gap-2.5">
+                <MessagesSquare className="w-4 h-4 text-teal-700" />
+                <span>المحادثة التربوية</span>
+              </div>
+              <ChevronLeft className="w-4 h-4 text-gray-400" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => { onOpenTool('correction'); onClose(); }}
+              className="w-full flex items-center justify-between p-2.5 rounded-xl text-[13px] font-bold text-gray-700 hover:bg-emerald-50 hover:text-emerald-900 transition cursor-pointer"
+            >
+              <div className="flex items-center gap-2.5">
+                <ClipboardCheck className="w-4 h-4 text-emerald-700" />
+                <span>مذكرة التصحيح</span>
               </div>
               <ChevronLeft className="w-4 h-4 text-gray-400" />
             </button>
