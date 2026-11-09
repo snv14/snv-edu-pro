@@ -415,3 +415,93 @@ button,input,textarea,select{font-family:inherit;}
     text-transform: none !important;
   }
 }
+
+/* مذكرة التصحيح: صفحات A4 مطابقة للصور، تُطبع كصفحات فعلية لا كصورة. */
+.cm-sheet {
+  background: #fff;
+  color: #111827;
+  font-size: 12px;
+  line-height: 1.55;
+}
+.cm-sheet input,
+.cm-sheet textarea {
+  font-family: inherit;
+  border: none;
+  background: transparent;
+  color: inherit;
+}
+.cm-sheet input::placeholder,
+.cm-sheet textarea::placeholder {
+  color: #94a3b8;
+}
+.cm-sheet input:focus,
+.cm-sheet textarea:focus {
+  outline: none;
+}
+.cm-page-break { height: 0; }
+
+@media print {
+  @page correction-page {
+    size: A4 portrait;
+    margin: 10mm;
+  }
+
+  .cm-print-root {
+    position: static !important;
+    inset: auto !important;
+    display: block !important;
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+    width: 100% !important;
+    background: #fff !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .cm-print-root .cm-toolbar,
+  .cm-print-root .cm-sidebar,
+  .cm-sheet .cm-editor-only { display: none !important; }
+
+  .cm-sheet {
+    page: correction-page;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: #fff !important;
+    font-size: 10.5pt !important;
+  }
+
+  .cm-sheet input,
+  .cm-sheet textarea {
+    border: none !important;
+    background: transparent !important;
+    resize: none !important;
+    height: auto !important;
+    overflow: visible !important;
+    print-color-adjust: exact !important;
+    -webkit-print-color-adjust: exact !important;
+  }
+
+  .cm-sheet table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    table-layout: fixed !important;
+  }
+
+  .cm-sheet td,
+  .cm-sheet th {
+    border: 1px solid #555 !important;
+    padding: 2px 4px !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  .cm-sheet thead { display: table-header-group; }
+  .cm-sheet tr { break-inside: avoid !important; page-break-inside: avoid !important; }
+  .cm-sheet .break-inside-avoid { break-inside: avoid !important; page-break-inside: avoid !important; }
+  .cm-page-break { break-after: page !important; page-break-after: always !important; height: 0 !important; }
+}

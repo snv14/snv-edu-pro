@@ -1,9 +1,63 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ClipboardCheck, FileDown, Printer, Sparkles, X, Paperclip, FileUp, RotateCcw, XCircle, Trash2 } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  AlertTriangle, CheckCircle2, FileDown, FileUp, Loader2, Printer, Plus, RotateCcw,
+  Sparkles, Trash2, Wand2, X,
+} from 'lucide-react';
 import { LessonMemo, MemoConfig } from '../types';
-import { analyzeCorrectionSource, generateCorrectionMemo, CorrectionSourceAnalysis } from '../services/correctionMemoAi';
-import { exportCorrectionMemoToDocx, exportCorrectionMemoToPdf, printCorrectionMemo } from '../utils/correctionMemoExport';
-import { MemoAttachment, fileToMemoAttachment, listMemoAttachments, listMemoSourceDocuments, saveMemoAttachment, deleteMemoAttachment, MAX_TOTAL_ATTACHMENT_BYTES } from '../services/memoAttachmentStore';
+import {
+  CorrectionMemoData, CorrectionExercise, MemoFieldSource, SOURCE_CONFIDENCE, SOURCE_LABEL,
+  createDefaultCorrectionMemo, exerciseTotal, fillFromPlatform,
+  normalizeCorrectionMemo, overallTotal, uid, validateCorrectionMemo,
+} from '../services/correctionMemoModel';
+import { importCorrectionFile, isSupportedCorrectionFile, readFileAsDataUrl } from '../services/correctionMemoImport';
+import { applyCorrectionSuggestions, suggestAnswersForExercises, CorrectionSuggestionsResult } from '../services/correctionMemoAi';
+import { exportCorrectionMemoDataToDocx, exportCorrectionMemoToPdf, printCorrectionMemo } from '../utils/correctionMemoExport';
+import { CorrectionMemoSheet, SourceLegend } from './CorrectionMemoSheet';
+
+export interface CorrectionMeta {
+  field: string;
+  source: MemoFieldSource;
+  confidence: string;
+}
+
+const STORAGE_KEY = 'correction_memo_v2';
+
+const loadStored = (): CorrectionMemoData => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return createDefaultCorrectionMemo();
+    return normalizeCorrectionMemo(JSON.parse(raw));
+  } catch {
+    return createDefaultCorrectionMemo();
+  }
+};
+
+const saveStored = (data: CorrectionMemoData) => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch {
+    /* التخزين المحلي اختياري */
+  }
+};
+
+const deepClone = <T,>(value: T): T => {
+  const clone = (globalThis as any)?.structuredClone;
+  if (typeof clone === 'function') return clone(value);
+  return JSON.parse(JSON.stringify(value)) as T;
+};
+
+const Chip: React.FC<{ source: MemoFieldSource; label?: string }> = ({ source, label }) => {
+  if (source === 'template') return null;
+  const color = source === 'platform' ? 'bg-teal-100 text-teal-900 border-teal-200'
+    : source === 'imported' ? 'bg-blue-100 text-blue-900 border-blue-200'
+      : source === 'ai' ? 'bg-amber-100 text-amber-900 border-amber-200'
+        : 'bg-slate-100 text-slate-800 border-slate-200';
+  return (
+    <span className={`text-[9.5px] font-black border rounded-full px-1.5 py-0.5 ${color}`}>
+      {label || SOURCE_LABEL[source]} · {SOURCE_CONFIDENCE[source]}
+    </span>
+  );
+};
 
 export const CorrectionMemoDrawer: React.FC<{
   isOpen: boolean;
@@ -12,334 +66,364 @@ export const CorrectionMemoDrawer: React.FC<{
   curriculumLessons?: LessonMemo[];
   config?: MemoConfig;
 }> = ({ isOpen, onClose, currentLesson, curriculumLessons = [], config }) => {
-  const [examType, setExamType] = useState<'فرض' | 'اختبار'>('فرض');
-  const [title, setTitle] = useState('مذكرة تصحيح الفرض');
-  const [examText, setExamText] = useState('');
-  const [correction, setCorrection] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [sourceAnalysis, setSourceAnalysis] = useState<CorrectionSourceAnalysis | null>(null);
-  const [correctionSources, setCorrectionSources] = useState<Array<{ title: string; uri: string }>>([]);
-  const [attachments, setAttachments] = useState<MemoAttachment[]>([]);
-  const [savedAttachments, setSavedAttachments] = useState<MemoAttachment[]>([]);
-  const [sourceDocuments, setSourceDocuments] = useState<MemoAttachment[]>([]);
-  const [sourceCategory, setSourceCategory] = useState<'curriculum' | 'companion' | 'teacher-guide' | 'memo'>('curriculum');
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const previewRef = useRef<HTMLDivElement>(null);
+  const [data, setData] = useState<CorrectionMemoData>(() => loadStored());
+  const [filledFromPlatform, setFilledFromPlatform] = useState<string[]>([]);
+  const [skippedFromPlatform, setSkippedFromPlatform] = useState<string[]>([]);
+  const [busy, setBusy] = useState<'import' | 'ai' | null>(null);
+  const [notice, setNotice] = useState('');
+  const [error, setError] = useState('');
+  const [importMeta, setImportMeta] = useState<{ exercises: number; questions: number; points: number; usedAI: boolean; missing: string[] } | null>(null);
+  const [aiResult, setAiResult] = useState<CorrectionSuggestionsResult | null>(null);
+  const [aiTarget, setAiTarget] = useState<string>('all');
+  const [showPreview, setShowPreview] = useState(true);
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [savedAt, setSavedAt] = useState<string>('');
 
   useEffect(() => {
     if (!isOpen) return;
-    Promise.all([listMemoAttachments(), listMemoSourceDocuments()]).then(([attachments, sources]) => { setSavedAttachments(attachments); setSourceDocuments(sources); }).catch(() => undefined);
-  }, [isOpen]);
+    const stored = loadStored();
+    setData(stored);
+    const filled = fillFromPlatform(stored, { config, lesson: currentLesson, curriculum: curriculumLessons, level: currentLesson?.level });
+    setData(filled.data);
+    setFilledFromPlatform(filled.filled);
+    setSkippedFromPlatform(filled.skipped);
+  }, [isOpen, config, currentLesson, curriculumLessons]);
 
-  const addFiles = async (files: FileList | File[]) => {
-    for (const file of Array.from(files)) {
-      try {
-        const attachment = await fileToMemoAttachment(file);
-        if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf', 'text/plain'].includes(attachment.mimeType)) {
-          setCorrection('المرفق يجب أن يكون صورة أو PDF.');
-          continue;
-        }
-        setAttachments(prev => {
-          const total = prev.reduce((sum, item) => sum + item.size, 0) + attachment.size;
-          if (total > MAX_TOTAL_ATTACHMENT_BYTES) return prev;
-          return [...prev, attachment].slice(0, 6);
-        });
-        attachment.category = 'exam';
-        await saveMemoAttachment(attachment);
-        setSavedAttachments(await listMemoAttachments());
-        // وجود المرفق يكفي كمصدر؛ لا نضع نصاً وهمياً داخل ورقة التقييم.
-      } catch (error: any) {
-        setCorrection(error?.message || 'تعذر إضافة المرفق.');
-      }
+  useEffect(() => {
+    if (!isOpen) return;
+    saveStored(data);
+    setSavedAt(new Date().toLocaleTimeString('ar-DZ', { hour: '2-digit', minute: '2-digit' }));
+  }, [data, isOpen]);
+
+  const warnings = useMemo(() => validateCorrectionMemo(data), [data]);
+  const total = useMemo(() => overallTotal(data), [data]);
+
+  const mutate = useCallback((updater: (draft: CorrectionMemoData) => void) => {
+    setData(previous => {
+      const draft = deepClone(previous);
+      updater(draft);
+      draft.updatedAt = new Date().toISOString();
+      return draft;
+    });
+  }, []);
+
+  const refillFromPlatform = () => {
+    const filled = fillFromPlatform(data, { config, lesson: currentLesson, curriculum: curriculumLessons, level: currentLesson?.level });
+    setData(filled.data);
+    setFilledFromPlatform(filled.filled);
+    setSkippedFromPlatform(filled.skipped);
+    setNotice(filled.filled.length
+      ? `عُبّئت ${filled.filled.length} خانة من المنصة دون المساس بما كتبته.`
+      : 'لا توجد خانات فارغة يمكن تعبئتها من المنصة حاليًا.');
+  };
+
+  const handleImport = async (file: File) => {
+    setError('');
+    setNotice('');
+    if (!isSupportedCorrectionFile(file)) {
+      setError('نوع الملف غير مدعوم. المدعوم: صورة، PDF، أو ملف TXT.');
+      return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      setError('حجم الملف يتجاوز 20 ميغابايت.');
+      return;
+    }
+    setBusy('import');
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      const outcome = await importCorrectionFile({ file, dataUrl, examType: data.examType, current: data, lesson: currentLesson, config });
+      setData(outcome.data);
+      setImportMeta({ exercises: outcome.extractedExercises, questions: outcome.extractedQuestions, points: outcome.extractedPoints, usedAI: outcome.usedAI, missing: outcome.missing });
+      setNotice(outcome.notice);
+    } catch {
+      setError('تعذر استرداد الملف. أعد المحاولة أو أدخل التمارين يدويًا.');
+    } finally {
+      setBusy(null);
     }
   };
 
-  const restoreSaved = async () => {
-    const saved = await listMemoAttachments();
-    setSavedAttachments(saved);
-    setAttachments(saved.filter(item => ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf', 'text/plain'].includes(item.mimeType)).slice(0, 6));
+  const targetedExercises = (): CorrectionExercise[] => {
+    if (aiTarget === 'all') return data.exercises;
+    const found = data.exercises.find(exercise => exercise.id === aiTarget);
+    return found ? [found] : [];
   };
 
-  const removeAttachment = (id: string) => setAttachments(prev => prev.filter(item => item.id !== id));
-
-  const removeSaved = async (id: string) => {
-    await deleteMemoAttachment(id);
-    setSavedAttachments(prev => prev.filter(item => item.id !== id));
-    removeAttachment(id);
+  const generateAnswers = async () => {
+    const targets = targetedExercises();
+    if (!targets.some(exercise => exercise.questions.some(question => question.text.trim()))) {
+      setError('لا توجد أسئلة مستوردة لتوليد إجابات لها. استورد ورقة التقييم أو أدخل نص الأسئلة أولًا.');
+      return;
+    }
+    setError('');
+    setNotice('');
+    setBusy('ai');
+    try {
+      const result = await suggestAnswersForExercises({ data, exercises: targets, lesson: currentLesson, curriculum: curriculumLessons });
+      if (!result) {
+        setError('تعذر التوليد الآلي. تحقق من إعداد مزوّد الذكاء الاصطناعي على الخادم، أو اكتب عناصر الإجابة يدويًا.');
+        setAiResult(null);
+        return;
+      }
+      setAiResult(result);
+      setNotice('وصلت مقترحات الإجابة. لم تُطبَّق بعد؛ راجعها ثم اختر «تطبيق المقترحات».');
+    } catch {
+      setError('تعذر التوليد الآلي. اكتب عناصر الإجابة يدويًا.');
+    } finally {
+      setBusy(null);
+    }
   };
 
-  const handlePaste = async (event: React.ClipboardEvent<HTMLElement>) => {
-    const item = (Array.from(event.clipboardData.items) as DataTransferItem[]).find(x => x.type.startsWith('image/'));
-    if (!item) return;
-    event.preventDefault();
-    const blob = item.getAsFile();
-    if (blob) await addFiles([new File([blob], `صورة-التصحيح-${Date.now()}.png`, { type: blob.type || 'image/png' })]);
+  const applyAi = () => {
+    if (!aiResult) return;
+    const applied = applyCorrectionSuggestions(data, aiResult);
+    setData(applied.data);
+    setAiResult(null);
+    setNotice(`طُبّقت ${applied.applied} عنصر إجابة مقترح.${applied.skipped ? ` وتُرك ${applied.skipped} عنصرًا لأنك كتبته يدويًا أو لأن المقترح فارغ.` : ''}`);
   };
 
-  const context = useMemo(() => currentLesson
-    ? [
-        `المستوى: ${currentLesson.level}`,
-        `الميدان: ${currentLesson.midan}`,
-        `المقطع: ${currentLesson.maqta}`,
-        `المورد التعلمي: ${currentLesson.mawrid}`,
-        `تعلم المورد: ${currentLesson.ta3alom}`,
-        `الأنشطة: ${currentLesson.anshita.map(activity => activity.title).join(' | ')}`,
-      ].join('\n')
-    : 'لا يوجد مورد محدد.', [currentLesson]);
+  const resetAll = () => {
+    const fresh = createDefaultCorrectionMemo();
+    const filled = fillFromPlatform(fresh, { config, lesson: currentLesson, curriculum: curriculumLessons, level: currentLesson?.level });
+    setData(filled.data);
+    setFilledFromPlatform(filled.filled);
+    setSkippedFromPlatform(filled.skipped);
+    setImportMeta(null);
+    setAiResult(null);
+    setNotice('أُعيدت المذكرة إلى قالب فارغ مع تعبئة بيانات المنصة.');
+    setError('');
+  };
 
   if (!isOpen) return null;
 
-  const generate = async () => {
-    if (!examText.trim() && attachments.length === 0) {
-      setCorrection('أدخل نص ورقة الفرض/الاختبار أو أرفق صورة/PDF واضحاً لها.');
-      return;
-    }
-
-    setBusy(true);
-    setCorrection('');
-    setSourceAnalysis(null);
-    setCorrectionSources([]);
-    try {
-      const request = {
-        examType,
-        examText: examText.trim(),
-        lesson: currentLesson,
-        curriculum: curriculumLessons,
-        attachments: attachments.map(({ name, mimeType, size, dataUrl }) => ({ name, mimeType, size, dataUrl })),
-        sourceDocuments: sourceDocuments.filter(item => item.category && item.category !== 'exam').map(({ name, mimeType, dataUrl, category }) => ({ name, type: category as 'curriculum' | 'companion' | 'teacher-guide' | 'memo', text: mimeType === 'text/plain' ? atob(dataUrl.split(',')[1] || '') : undefined })),
-      };
-      const analysis = await analyzeCorrectionSource(request);
-      if (!analysis) {
-        setCorrection('تعذر قراءة مصدر ورقة التقييم. راجع وضوح الصورة/PDF أو أعد المحاولة.');
-        return;
-      }
-      setSourceAnalysis(analysis);
-      const result = await generateCorrectionMemo(request);
-      setCorrection(result?.text || 'تعذر إنشاء مذكرة التصحيح بعد قراءة المصدر. راجع العناصر غير الواضحة ثم أعد المحاولة.');
-      setCorrectionSources(result?.sources || []);
-    } catch {
-      setCorrection('تعذر إنشاء مذكرة التصحيح. أعد المحاولة.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const clearForm = () => {
-    setExamText('');
-    setCorrection('');
-    setSourceAnalysis(null);
-    setCorrectionSources([]);
-    setAttachments([]);
-  };
+  const part1Exercises = data.exercises.filter(exercise => exercise.part === 1);
 
   return (
-    <div className="fixed inset-0 z-[60] bg-black/45 flex justify-end" onClick={onClose}>
+    <div className="fixed inset-0 z-[60] bg-black/45 flex justify-end no-print-shell" onClick={onClose}>
       <aside
-          className="w-full max-w-5xl h-full bg-[#edf9f6] shadow-2xl overflow-y-auto"
-          dir="rtl"
-          onClick={e => e.stopPropagation()}
-          onPaste={handlePaste}
-          onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }}
-          onDrop={e => { e.preventDefault(); if (e.dataTransfer.files?.length) void addFiles(e.dataTransfer.files); }}
-        >
-        <header className="sticky top-0 z-10 px-5 py-4 bg-gradient-to-l from-teal-900 to-emerald-700 text-white flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-white/15 flex items-center justify-center"><ClipboardCheck /></div>
-            <div>
-              <h2 className="font-black text-lg">مذكرة تصحيح الفرض والاختبار</h2>
-              <p className="text-xs text-white/80">أداة مستقلة للتصحيح — منفصلة عن المساعد الذكي العام</p>
+        className="w-full max-w-6xl h-full bg-[#eef4f3] shadow-2xl overflow-y-auto cm-print-root"
+        dir="rtl"
+        onClick={event => event.stopPropagation()}
+        aria-label="مذكرة التصحيح"
+      >
+        <header className="sticky top-0 z-20 px-4 py-3 bg-gradient-to-l from-teal-900 to-emerald-700 text-white flex justify-between items-center gap-2 cm-toolbar">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-2xl bg-white/15 flex items-center justify-center shrink-0"><CheckCircle2 className="w-5 h-5" /></div>
+            <div className="min-w-0">
+              <h2 className="font-black text-[15px] leading-tight">مذكرة التصحيح — الإجابة النموذجية وسلّم التنقيط</h2>
+              <p className="text-[10.5px] text-white/80 truncate">
+                قالب قابل للتحرير · المجموع الحالي {total} ن · {savedAt ? `حُفظ محليًا ${savedAt}` : 'حفظ محلي'}
+              </p>
             </div>
           </div>
-          <button onClick={onClose} aria-label="إغلاق"><X /></button>
+          <button type="button" onClick={onClose} aria-label="إغلاق" className="p-1.5 rounded-lg hover:bg-white/15"><X className="w-5 h-5" /></button>
         </header>
 
-        <main className="p-4 md:p-6 space-y-5">
-          <section className="bg-[#fffdf8] rounded-2xl border border-teal-100 p-4 md:p-5 shadow-sm space-y-4">
-            <div className="grid md:grid-cols-2 gap-3">
-              <label className="space-y-1">
-                <span className="text-xs font-black text-slate-600">نوع التقييم</span>
-                <select value={examType} onChange={e => {
-                  const value = e.target.value as 'فرض' | 'اختبار';
-                  setExamType(value);
-                  setTitle('مذكرة تصحيح ' + value);
-                  setCorrection('');
-                }} className="w-full border border-teal-100 rounded-xl p-3 bg-white">
-                  <option value="فرض">فرض</option>
-                  <option value="اختبار">اختبار</option>
-                </select>
-              </label>
-              <label className="space-y-1">
-                <span className="text-xs font-black text-slate-600">عنوان المذكرة</span>
-                <input value={title} onChange={e => setTitle(e.target.value)} className="w-full border border-teal-100 rounded-xl p-3 bg-white" placeholder="عنوان المذكرة" />
-              </label>
-            </div>
+        <div className="cm-toolbar p-3 space-y-2">
+          <div className="flex flex-wrap items-center gap-1.5 bg-white rounded-2xl border border-teal-100 p-2.5">
+            <span className="text-[11px] font-black text-slate-500 px-1">استرداد الملف</span>
+            <button type="button" onClick={() => fileRef.current?.click()} disabled={busy !== null} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-700 text-white text-[11.5px] font-black disabled:opacity-50">
+              {busy === 'import' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileUp className="w-3.5 h-3.5" />}
+              استيراد ورقة الفرض/الاختبار
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".pdf,.txt,image/jpeg,image/png,image/webp,image/gif"
+              hidden
+              onChange={event => { const file = event.target.files?.[0]; if (file) void handleImport(file); event.target.value = ''; }}
+            />
+            <span className="text-[10px] text-slate-500 font-bold">صورة أو PDF (يحتاج مزوّد ذكاء اصطناعي) أو TXT (قراءة محلية)</span>
+            <span className="flex-1" />
+            <button type="button" onClick={refillFromPlatform} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-teal-200 text-teal-900 text-[11.5px] font-black">
+              <Wand2 className="w-3.5 h-3.5" /> تعبئة من المنصة
+            </button>
+            <button type="button" onClick={resetAll} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-[11.5px] font-black">
+              <RotateCcw className="w-3.5 h-3.5" /> قالب جديد
+            </button>
+          </div>
 
-            <div className="rounded-xl bg-teal-50/70 border border-teal-100 p-3 text-sm leading-7">
-              <div className="font-black text-teal-900 mb-1">المصدر المرتبط بالتصحيح</div>
-              <div>{context}</div>
-            </div>
+          <div className="flex flex-wrap items-center gap-1.5 bg-white rounded-2xl border border-amber-100 p-2.5">
+            <span className="text-[11px] font-black text-slate-500 px-1">التصحيح</span>
+            <select value={aiTarget} onChange={event => setAiTarget(event.target.value)} className="border border-slate-200 rounded-lg px-2 py-1.5 text-[11px] font-bold bg-white">
+              <option value="all">كل التمارين</option>
+              {data.exercises.map((exercise, index) => (
+                <option key={exercise.id} value={exercise.id}>{exercise.label || `التمرين ${index + 1}`}</option>
+              ))}
+            </select>
+            <button type="button" onClick={generateAnswers} disabled={busy !== null} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-600 text-white text-[11.5px] font-black disabled:opacity-50">
+              {busy === 'ai' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+              توليد آلي لعناصر الإجابة
+            </button>
+            {aiResult && (
+              <button type="button" onClick={applyAi} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-700 text-white text-[11.5px] font-black">
+                <CheckCircle2 className="w-3.5 h-3.5" /> تطبيق المقترحات ({aiResult.suggestions.length})
+              </button>
+            )}
+            <span className="text-[10px] text-slate-500 font-bold">أو اكتب عناصر الإجابة مباشرة في الجداول — المكتوب يدويًا لا يُستبدل آليًا</span>
+          </div>
 
-            <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-3 space-y-2">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div><div className="text-xs font-black text-indigo-900">مكتبة المصادر التربوية</div><div className="text-[10px] text-slate-500">أضف هنا المصادر التي يعتمد عليها التصحيح، ولا تُعامل كأنها ورقة الفرض.</div></div>
-                <label className="flex items-center gap-1 text-[10px] font-bold">
-                  <span>نوع المصدر</span>
-                  <select value={sourceCategory} onChange={e => setSourceCategory(e.target.value as typeof sourceCategory)} className="border rounded-lg bg-white px-2 py-1.5">
-                    <option value="curriculum">المنهاج والتدرج</option>
-                    <option value="companion">الوثيقة المرافقة</option>
-                    <option value="teacher-guide">دليل الأستاذ</option>
-                    <option value="memo">مذكرة/مرجع تربوي</option>
-                  </select>
-                </label>
-                <button type="button" onClick={() => {
-                  const input = document.createElement('input'); input.type='file'; input.accept='application/pdf,text/plain,image/jpeg,image/png,image/webp'; input.multiple=true;
-                  input.onchange = async () => { if (!input.files) return; for (const file of Array.from(input.files)) { try { const a=await fileToMemoAttachment(file); a.category=sourceCategory; await saveMemoAttachment(a); } catch {} } setSourceDocuments(await listMemoSourceDocuments()); };
-                  input.click();
-                }} className="px-3 py-1.5 rounded-lg bg-indigo-700 text-white text-[11px] font-black"><FileUp className="inline w-3.5 h-3.5 ml-1" />إضافة مصدر</button>
-              </div>
-              {sourceDocuments.length > 0 ? <div className="grid sm:grid-cols-2 gap-1.5">{sourceDocuments.slice(0,12).map(item => <div key={item.id} className="bg-white border rounded-lg px-2 py-1.5 text-[10px] flex items-center gap-2"><span className="truncate flex-1 font-bold">{item.name}</span><span className="text-indigo-700">{item.category==='curriculum'?'منهاج':item.category==='companion'?'مرافقة':item.category==='teacher-guide'?'دليل':'مذكرة'}</span><button type="button" onClick={async()=>{await deleteMemoAttachment(item.id);setSourceDocuments(await listMemoSourceDocuments());}}><Trash2 size={12} className="text-red-500"/></button></div>)}</div> : <div className="text-[10px] text-slate-500">لا توجد مصادر إضافية محفوظة بعد.</div>}
-            </div>
+          <div className="flex flex-wrap items-center gap-1.5 bg-white rounded-2xl border border-slate-200 p-2.5">
+            <button type="button" onClick={() => sheetRef.current && printCorrectionMemo(sheetRef.current, data.title)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 text-white text-[11.5px] font-black">
+              <Printer className="w-3.5 h-3.5" /> طباعة A4
+            </button>
+            <button type="button" onClick={() => sheetRef.current && void exportCorrectionMemoToPdf(sheetRef.current, data.title)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-700 text-white text-[11.5px] font-black">
+              <FileDown className="w-3.5 h-3.5" /> PDF
+            </button>
+            <button type="button" onClick={() => void exportCorrectionMemoDataToDocx(data)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-700 text-white text-[11.5px] font-black">
+              <FileDown className="w-3.5 h-3.5" /> Word بجداول
+            </button>
+            <button type="button" onClick={() => setShowPreview(value => !value)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-[11.5px] font-black">
+              {showPreview ? 'إخفاء المعاينة' : 'إظهار المعاينة'}
+            </button>
+            <span className="flex-1" />
+            <SourceLegend />
+          </div>
 
-            <div className="rounded-xl border border-dashed border-teal-200 bg-teal-50/40 p-3 space-y-2">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2 text-xs font-black text-teal-900">
-                  <Paperclip size={15} /> استيراد ملفات التصحيح
-                  <span className="text-[10px] text-slate-500 font-medium">صور / PDF / TXT + لصق صورة + استرداد محفوظ</span>
+          {notice && <div className="rounded-xl bg-teal-50 border border-teal-200 px-3 py-2 text-[11.5px] font-bold text-teal-900">{notice}</div>}
+          {error && <div className="rounded-xl bg-red-50 border border-red-200 px-3 py-2 text-[11.5px] font-bold text-red-800">{error}</div>}
+
+          {importMeta && (
+            <div className="rounded-xl bg-blue-50 border border-blue-200 px-3 py-2 text-[11px] text-blue-900 space-y-1">
+              <div className="font-black">نتيجة الاستيراد: {importMeta.exercises} تمرين · {importMeta.questions} سؤال · {importMeta.points} سؤال بنقطة مقروءة {importMeta.usedAI ? '· عبر خدمة التحليل' : '· قراءة محلية'}.</div>
+              {importMeta.missing.length > 0 && <div>لم يأتِ من الملف: {importMeta.missing.join(' · ')}.</div>}
+            </div>
+          )}
+
+          {warnings.length > 0 && (
+            <div className="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 text-[11px] text-amber-900 space-y-0.5">
+              {warnings.map((warning, index) => (
+                <div key={index} className={`flex items-start gap-1.5 ${warning.blocking ? 'font-bold' : ''}`}>
+                  <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-amber-600" />
+                  <span>{warning.message}</span>
                 </div>
-                <div className="flex gap-1.5">
-                  <button type="button" onClick={() => fileInputRef.current?.click()} className="px-2.5 py-1.5 rounded-lg bg-teal-700 text-white text-[11px] font-black">
-                    <FileUp className="inline w-3.5 h-3.5 ml-1" />إضافة ملف
-                  </button>
-                  <button type="button" onClick={restoreSaved} className="px-2.5 py-1.5 rounded-lg bg-white border border-teal-200 text-teal-800 text-[11px] font-black">
-                    <RotateCcw className="inline w-3.5 h-3.5 ml-1" />استرداد
-                  </button>
-                  <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif,application/pdf" multiple hidden onChange={e => { if (e.target.files) addFiles(e.target.files); e.currentTarget.value=''; }} />
+              ))}
+            </div>
+          )}
+
+          {filledFromPlatform.length > 0 && (
+            <div className="rounded-xl bg-white border border-teal-100 px-3 py-2 text-[10.5px] text-slate-600">
+              <span className="font-black text-teal-800">عُبّئ من المنصة: </span>{filledFromPlatform.slice(0, 8).join(' · ')}
+              {skippedFromPlatform.length > 0 && <span className="block mt-1">لم يُعبّأ لغياب المصدر أو لوجود قيمة يدوية: {skippedFromPlatform.slice(0, 8).join(' · ')}</span>}
+            </div>
+          )}
+
+          {aiResult && (
+            <div className="rounded-xl bg-white border border-amber-200 p-2.5 space-y-1.5">
+              <div className="text-[11px] font-black text-amber-800">مقترحات لم تُطبَّق بعد — راجعها قبل القبول</div>
+              {aiResult.suggestions.slice(0, 4).map(suggestion => (
+                <div key={suggestion.questionId} className="text-[10.5px] text-slate-700 border-t border-slate-100 pt-1">
+                  <span className="font-bold">{suggestion.expected.slice(0, 160) || 'لا يوجد نص'}</span>
+                  {suggestion.needsReview && <span className="text-amber-700 font-bold"> · يحتاج مراجعة الأستاذ</span>}
                 </div>
-              </div>
-              <div className="text-[10.5px] text-slate-500">اسحب ملفات الفرض أو الاختبار إلى هذا المربع، أو اضغط «استيراد ملفات» من الهاتف/الحاسوب، أو الصق صورة مباشرة. سيُستخدم الملف كمصدر أصلي للتصحيح دون اختلاق أسئلة أو نقاط. الحد الأقصى 15MB للملف و24MB للمرفقات المحفوظة.</div>
-              {attachments.length > 0 && (
-                <div className="grid sm:grid-cols-2 gap-2">
-                  {attachments.map(item => (
-                    <div key={item.id} className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg p-2">
-                      {item.mimeType.startsWith('image/') ? <img src={item.dataUrl} alt="" className="w-12 h-12 rounded object-cover border" /> : <div className="w-12 h-12 rounded bg-red-50 text-red-700 flex items-center justify-center text-[10px] font-black">PDF</div>}
-                      <span className="truncate flex-1 text-[11px] font-bold">{item.name}</span>
-                      <button type="button" onClick={() => removeAttachment(item.id)}><XCircle size={15} className="text-slate-400 hover:text-red-600" /></button>
+              ))}
+              {aiResult.ambiguous.length > 0 && <div className="text-[10px] text-amber-800">غير واضح: {aiResult.ambiguous.slice(0, 3).join(' · ')}</div>}
+              <button type="button" onClick={() => setAiResult(null)} className="text-[10px] font-black text-slate-500 hover:text-slate-800">تجاهل المقترحات</button>
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center gap-1.5 bg-white rounded-2xl border border-slate-200 p-2.5">
+            <span className="text-[11px] font-black text-slate-500 px-1">تحرير التمارين</span>
+            <button
+              type="button"
+              onClick={() => mutate(draft => {
+                const exercise = draft.exercises[draft.exercises.length - 1];
+                const label = `التمرين ${draft.exercises.length + 1}`;
+                draft.exercises.push({
+                  id: uid('ex'),
+                  part: exercise?.part || 1,
+                  label,
+                  declaredPoints: '',
+                  maqta: exercise?.maqta || '',
+                  knowledge: exercise?.knowledge || '',
+                  criteria: exercise?.criteria || '',
+                  source: 'teacher',
+                  questions: [{ id: uid('q'), number: '1', text: '', points: '', expected: '', source: 'template', needsReview: false }],
+                });
+                draft.resources.push({
+                  id: uid('res'),
+                  exerciseLabel: label,
+                  maqta: exercise?.maqta || '',
+                  knowledge: exercise?.knowledge || '',
+                  criteria: exercise?.criteria || '',
+                  maqtaSource: exercise?.maqta ? 'platform' : 'template',
+                  knowledgeSource: exercise?.knowledge ? 'platform' : 'template',
+                  criteriaSource: exercise?.criteria ? 'platform' : 'template',
+                });
+              })}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-700 text-white text-[11px] font-black"
+            >
+              <Plus className="w-3.5 h-3.5" /> تمرين
+            </button>
+            <button
+              type="button"
+              onClick={() => mutate(draft => {
+                draft.errors.push({ id: uid('err'), exercise: '', error: '', kind: '', learners: '', cause: '' });
+              })}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 text-[11px] font-black"
+            >
+              <Plus className="w-3.5 h-3.5" /> خطأ متكرر
+            </button>
+            <button
+              type="button"
+              onClick={() => mutate(draft => {
+                draft.remediation.push({ id: uid('rem'), objective: '', activity: '', support: '', learners: '' });
+              })}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 text-[11px] font-black"
+            >
+              <Plus className="w-3.5 h-3.5" /> سطر معالجة
+            </button>
+            <span className="text-[10px] text-slate-500 font-bold">تُضاف الصفوف عند الحاجة دون تغيير الشكل</span>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-slate-200 p-2.5 space-y-2">
+            <div className="text-[11px] font-black text-slate-600 px-1">التمارين والأسئلة (يمكن حذف صف أو سؤال)</div>
+            {part1Exercises.map((exercise, index) => (
+              <details key={exercise.id} className="rounded-xl border border-slate-200 p-2">
+                <summary className="cursor-pointer text-[11.5px] font-black text-slate-800 flex items-center justify-between gap-2">
+                  <span>{exercise.label || `التمرين ${index + 1}`} · {exerciseTotal(exercise)} ن</span>
+                  <Chip source={exercise.source} />
+                </summary>
+                <div className="mt-2 space-y-1.5">
+                  <div className="flex flex-wrap gap-1.5">
+                    <input value={exercise.label} onChange={event => mutate(draft => { const target = draft.exercises.find(item => item.id === exercise.id); if (target) target.label = event.target.value; })} className="flex-1 min-w-[140px] border border-slate-200 rounded-lg px-2 py-1 text-[11px]" placeholder="اسم التمرين" />
+                    <input value={exercise.declaredPoints} onChange={event => mutate(draft => { const target = draft.exercises.find(item => item.id === exercise.id); if (target) target.declaredPoints = event.target.value; })} className="w-24 border border-slate-200 rounded-lg px-2 py-1 text-[11px]" placeholder="النقطة" />
+                    <button type="button" onClick={() => mutate(draft => {
+                      draft.exercises = draft.exercises.filter(item => item.id !== exercise.id);
+                      draft.resources = draft.resources.filter(item => item.exerciseLabel !== exercise.label);
+                    })} className="px-2 py-1 rounded-lg bg-red-50 text-red-700 text-[10.5px] font-black inline-flex items-center gap-1">
+                      <Trash2 className="w-3 h-3" /> حذف التمرين
+                    </button>
+                  </div>
+                  {exercise.questions.map(question => (
+                    <div key={question.id} className="flex flex-wrap items-start gap-1.5">
+                      <input value={question.number} onChange={event => mutate(draft => { const target = draft.exercises.find(item => item.id === exercise.id)?.questions.find(item => item.id === question.id); if (target) target.number = event.target.value; })} className="w-12 border border-slate-200 rounded-lg px-1.5 py-1 text-[11px] text-center" />
+                      <input value={question.text} onChange={event => mutate(draft => { const target = draft.exercises.find(item => item.id === exercise.id)?.questions.find(item => item.id === question.id); if (target) target.text = event.target.value; })} className="flex-1 min-w-[180px] border border-slate-200 rounded-lg px-2 py-1 text-[11px]" placeholder="نص السؤال كما ورد في الورقة" />
+                      <input value={question.points} onChange={event => mutate(draft => { const target = draft.exercises.find(item => item.id === exercise.id)?.questions.find(item => item.id === question.id); if (target) target.points = event.target.value; })} className="w-16 border border-slate-200 rounded-lg px-1.5 py-1 text-[11px] text-center" placeholder="ن" />
+                      <button type="button" onClick={() => mutate(draft => { const target = draft.exercises.find(item => item.id === exercise.id); if (target) target.questions = target.questions.filter(item => item.id !== question.id); })} aria-label="حذف السؤال" className="p-1.5 rounded-lg text-red-500 hover:bg-red-50"><Trash2 className="w-3 h-3" /></button>
                     </div>
                   ))}
+                  <button type="button" onClick={() => mutate(draft => { const target = draft.exercises.find(item => item.id === exercise.id); if (target) target.questions.push({ id: uid('q'), number: String(target.questions.length + 1), text: '', points: '', expected: '', source: 'template', needsReview: false }); })} className="inline-flex items-center gap-1 text-[10.5px] font-black text-emerald-800">
+                    <Plus className="w-3 h-3" /> إضافة سؤال
+                  </button>
                 </div>
-              )}
-              {savedAttachments.length > 0 && (
-                <details className="text-[10px]">
-                  <summary className="cursor-pointer font-bold text-slate-600">المحفوظ على الجهاز ({savedAttachments.length})</summary>
-                  <div className="mt-1 space-y-1">
-                    {savedAttachments.slice(0, 10).map(item => (
-                      <div key={item.id} className="flex gap-2 items-center">
-                        <span className="truncate flex-1">{item.name}</span>
-                        <button type="button" onClick={() => setAttachments(prev => prev.some(x => x.id === item.id) ? prev : [...prev, item].slice(0, 6))} className="text-teal-700 font-black">استرداد</button>
-                        <button type="button" onClick={() => removeSaved(item.id)}><Trash2 size={13} className="text-red-500" /></button>
-                      </div>
-                    ))}
-                  </div>
-                </details>
-              )}
+              </details>
+            ))}
+          </div>
+        </div>
+
+        {showPreview && (
+          <div className="p-3">
+            <div ref={sheetRef} className="bg-white shadow-xl rounded-xl mx-auto" style={{ maxWidth: '210mm', padding: '12mm' }}>
+              <CorrectionMemoSheet data={data} editable onChange={mutate} />
             </div>
+          </div>
+        )}
 
-            <label className="block space-y-1">
-              <span className="text-xs font-black text-slate-600">ورقة الفرض أو الاختبار</span>
-              <textarea
-                value={examText}
-                onChange={e => setExamText(e.target.value)}
-                rows={11}
-                className="w-full border border-teal-100 rounded-xl p-3 bg-white leading-8"
-                placeholder="ألصق نص ورقة الفرض أو الاختبار، أو اتركه فارغاً إذا أرفقت صورة/PDF واضحاً للورقة..."
-              />
-            </label>
-
-            {sourceAnalysis && (
-              <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-xs space-y-2">
-                <div className="font-black text-amber-900">فحص ورقة التقييم قبل التصحيح</div>
-                <div className="grid sm:grid-cols-3 gap-2 text-slate-700">
-                  <span>التمارين: <b>{sourceAnalysis.exercises?.length || 0}</b></span>
-                  <span>الوثائق: <b>{sourceAnalysis.documents?.length || 0}</b></span>
-                  <span>المجموع: <b>{sourceAnalysis.totalPoints ?? 'غير محدد'}</b></span>
-                </div>
-                {!!sourceAnalysis.ambiguities?.length && (
-                  <div className="text-amber-800">
-                    <b>عناصر تحتاج مراجعة:</b> {sourceAnalysis.ambiguities.slice(0, 5).join(' • ')}
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="flex flex-wrap gap-2">
-              <button onClick={generate} disabled={busy || (!examText.trim() && attachments.length === 0)} className="flex-1 min-w-[220px] py-3 rounded-xl bg-teal-700 text-white font-black disabled:opacity-40">
-                <Sparkles className="inline w-4 h-4 ml-1" />{busy ? 'جاري إعداد مذكرة التصحيح...' : 'إعداد مذكرة التصحيح'}
-              </button>
-              <button onClick={clearForm} disabled={busy} className="px-5 py-3 rounded-xl bg-white border border-slate-200 text-slate-700 font-bold disabled:opacity-40">
-                مسح
-              </button>
-            </div>
-          </section>
-
-          {correction && (
-            <section className="bg-[#fffdf8] rounded-2xl border border-teal-100 p-3 shadow-sm">
-              <div ref={previewRef} className="print-document bg-white p-6 md:p-8 min-h-[1120px] text-slate-900" dir="rtl">
-                <div className="text-center border-b-2 border-teal-700 pb-4 mb-5">
-                  <div className="font-black">الجمهورية الجزائرية الديمقراطية الشعبية</div>
-                  <div className="font-bold">وزارة التربية الوطنية</div>
-                  <h1 className="text-2xl font-black text-teal-800 mt-3">{title}</h1>
-                  <div className="text-sm mt-2">{currentLesson?.level?.toUpperCase() || '—'} • علوم الطبيعة والحياة</div>
-                </div>
-
-                <div className="grid md:grid-cols-2 gap-2 text-sm border border-teal-100 rounded-xl p-3 mb-5 bg-teal-50/30">
-                  <div>المؤسسة: {config?.schoolName || '................'}</div>
-                  <div>الأستاذ(ة): {config?.teacherName || '................'}</div>
-                  <div>الميدان: {currentLesson?.midan || '................'}</div>
-                  <div>المقطع: {currentLesson?.maqta || '................'}</div>
-                  <div>المورد التعلمي: {currentLesson?.mawrid || '................'}</div>
-                  <div>تعلم المورد: {currentLesson?.ta3alom || '................'}</div>
-                </div>
-
-                <div className="whitespace-pre-wrap leading-8 text-[14px]">{correction}</div>
-
-                <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50/60 p-3 text-xs leading-6">
-                  <div className="font-black text-amber-900 mb-1">من أين جاء التصحيح؟</div>
-                  <div>الأولوية: ورقة التقييم → المنهاج والتدرج → الوثيقة المرافقة → دليل الأستاذ → المذكرات التربوية → الويب عند الحاجة → اقتراحات الذكاء الاصطناعي مع مراجعة الأستاذ.</div>
-                  {correctionSources.length > 0 ? (
-                    <div className="mt-2 space-y-1">
-                      <div className="font-bold">مصادر الويب المستخدمة:</div>
-                      {correctionSources.map((source, index) => (
-                        <a key={source.uri + index} href={source.uri} target="_blank" rel="noreferrer" className="block text-teal-800 underline truncate">{index + 1}. {source.title}</a>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="mt-1 text-slate-600">لم يُستخدم مصدر ويب مباشر في هذه النتيجة؛ اعتمد التصحيح على ورقة التقييم وسياق المنصة، مع وجوب مراجعة الأستاذ قبل الاعتماد.</div>
-                  )}
-                </div>
-
-
-
-                <div className="mt-8 pt-3 border-t border-slate-200 text-xs text-slate-500 flex justify-between gap-3">
-                  <span>مذكرة تصحيح</span>
-                  <span>مراجعة الأستاذ قبل الاعتماد</span>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-1.5 p-2.5 no-print rounded-xl border border-slate-200 bg-slate-50">
-                <span className="text-[11px] font-extrabold text-slate-600 px-1.5">إخراج المذكرة</span>
-                <button onClick={() => previewRef.current && printCorrectionMemo(previewRef.current, title)} className="px-3.5 py-2 rounded-lg bg-slate-900 text-white font-bold hover:bg-slate-800">
-                  <Printer className="inline w-4 h-4 ml-1" />طباعة
-                </button>
-                <button onClick={() => previewRef.current && exportCorrectionMemoToPdf(previewRef.current, title)} className="px-3.5 py-2 rounded-lg bg-teal-700 text-white font-bold hover:bg-teal-800">
-                  <FileDown className="inline w-4 h-4 ml-1" />PDF
-                </button>
-                <button onClick={() => exportCorrectionMemoToDocx({ title, text: correction, config, level: currentLesson?.level })} className="px-3.5 py-2 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-700">
-                  <FileDown className="inline w-4 h-4 ml-1" />Word قابل للتعديل
-                </button>
-              </div>
-            </section>
-          )}
-        </main>
+        <div className="cm-toolbar px-3 pb-6 text-[10px] text-slate-500 space-y-1">
+          <div className="font-bold">الرموز الملونة: أخضر = من المنصة · أزرق = مستورد من الورقة · برتقالي = اقتراح AI · رمادي داكن = محرَّر يدويًا.</div>
+          <div>الأولوية: ما أكده الأستاذ ← الورقة الأصلية ← قاعدة المنصة ← مقترح AI. لا يُستبدل أي نص كتبته يدويًا. القالب الفارغ لا يُملأ بالتخمين.</div>
+        </div>
       </aside>
     </div>
   );
