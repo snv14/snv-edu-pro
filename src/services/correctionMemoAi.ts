@@ -1,5 +1,142 @@
 import { LessonMemo } from '../types';
 import { PedagogicalAttachmentInput } from './geminiPedagogicalService';
+import { CorrectionExercise, CorrectionMemoData, exerciseTotal, toNumber } from './correctionMemoModel';
+
+export interface CorrectionSuggestion {
+  exerciseId: string;
+  questionId: string;
+  expected: string;
+  points?: string;
+  needsReview: boolean;
+  note?: string;
+}
+
+export interface CorrectionSuggestionsResult {
+  suggestions: CorrectionSuggestion[];
+  ambiguous: string[];
+  provider?: string;
+  fallbackNotice?: string;
+}
+
+/**
+ * توليد مقترح عناصر إجابة لسؤال أو أكثر. المقترح لا يُعتمد تلقائيًا؛
+ * يُعرض على الأستاذ ليقرّر قبوله، ويُوسم دائماً كمقترح.
+ */
+export async function suggestAnswersForExercises(args: {
+  data: CorrectionMemoData;
+  exercises: CorrectionExercise[];
+  lesson?: LessonMemo | null;
+  curriculum: LessonMemo[];
+}): Promise<CorrectionSuggestionsResult | null> {
+  const { data, exercises, lesson, curriculum } = args;
+  const requested = exercises
+    .filter(exercise => exercise.questions.some(question => question.text.trim()))
+    .slice(0, 6);
+  if (!requested.length) return null;
+
+  const selectedIds = new Set(requested.flatMap(exercise => exercise.questions.map(question => question.id)));
+
+  const prompt = [
+    'أنت أداة مستقلة لإعداد مذكرة تصحيح لأساتذة علوم الطبيعة والحياة في التعليم المتوسط بالجزائر.',
+    'تولّد الآن عناصر الإجابة النموذجية فقط للأسئلة المستوردة من ورقة التقييم.',
+    'قواعد إلزامية:',
+    '1. لا تغيّر نص السؤال ولا ترتيبه ولا تعده صياغة.',
+    '2. لا تدّعِ وجود نقطة أو معيار لم يُذكر إلا إذا طلبتَ تقديرها، وحينها اكتب needsReview=true.',
+    '3. ما لا تكفيه المعطيات: اترك element فارغاً واكتب في note «يحتاج مراجعة الأستاذ».',
+    '4. اعتمد المنهاج الجزائري للتعليم المتوسط، ولا تنسب نصاً رسمياً لمصدر لم يُقدَّم لك.',
+    '5. أعد JSON فقط بالبنية: {"suggestions":[{"exerciseId":"","questionId":"","expected":"","points":"","needsReview":false,"note":""}],"ambiguous":[]}.',
+    '',
+    `نوع التقييم: ${data.examType}`,
+    `المستوى: ${data.level || lesson?.level || 'غير محدد'}`,
+    `المقطع: ${requested[0]?.maqta || lesson?.maqta || 'غير محدد'}`,
+    `المعايير: ${requested[0]?.criteria || lesson?.ma3ayirTaqwim || 'غير محددة'}`,
+    '',
+    'التمارين والأسئلة المطلوبة (حافظ على المعرّفات كما هي):',
+    JSON.stringify(requested.map(exercise => ({
+      exerciseId: exercise.id,
+      label: exercise.label,
+      declaredPoints: exercise.declaredPoints,
+      computedPoints: exerciseTotal(exercise),
+      questions: exercise.questions.map(question => ({
+        questionId: question.id,
+        number: question.number,
+        text: question.text,
+        points: question.points,
+      })),
+    })), null, 2),
+    '',
+    'مقتطف من قاعدة المناهج لتقييد الإجابات علميًا:',
+    JSON.stringify(curriculum
+      .filter(item => (lesson ? item.level === lesson.level : true))
+      .slice(0, 8)
+      .map(item => ({ maqta: item.maqta, mawrid: item.mawrid, ta3alom: item.ta3alom, criteria: item.ma3ayirTaqwim, kafaa: item.kafaaKhitamiya })), null, 2),
+  ].join('\n');
+
+  try {
+    const response = await fetch('/api/gemini/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, useWeb: false }),
+    });
+    if (!response.ok) return null;
+    const payload = await response.json();
+    const raw = typeof payload?.text === 'string' ? payload.text : '';
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return null;
+    const parsed = JSON.parse(jsonMatch[0]);
+    const suggestions: CorrectionSuggestion[] = Array.isArray(parsed?.suggestions)
+      ? parsed.suggestions
+          .filter((item: any) => item && selectedIds.has(String(item.questionId)))
+          .map((item: any) => ({
+            exerciseId: String(item.exerciseId || ''),
+            questionId: String(item.questionId),
+            expected: typeof item.expected === 'string' ? item.expected.slice(0, 4000) : '',
+            points: item.points === undefined || item.points === null ? '' : String(item.points).slice(0, 20),
+            needsReview: Boolean(item.needsReview),
+            note: typeof item.note === 'string' ? item.note.slice(0, 400) : undefined,
+          }))
+      : [];
+    return {
+      suggestions,
+      ambiguous: Array.isArray(parsed?.ambiguous) ? parsed.ambiguous.map((item: any) => String(item).slice(0, 300)) : [],
+      provider: payload?.provider,
+      fallbackNotice: payload?.fallbackNotice,
+    };
+  } catch (error) {
+    console.error('[correction-suggestions] failed', error);
+    return null;
+  }
+}
+
+/** تطبيق المقترحات على المذكرة دون لمس أي خانة كتبها الأستاذ. */
+export function applyCorrectionSuggestions(data: CorrectionMemoData, result: CorrectionSuggestionsResult): { data: CorrectionMemoData; applied: number; skipped: number } {
+  const next: CorrectionMemoData = structuredClone(data);
+  let applied = 0;
+  let skipped = 0;
+
+  result.suggestions.forEach(suggestion => {
+    const exercise = next.exercises.find(item => item.id === suggestion.exerciseId)
+      || next.exercises.find(item => item.questions.some(question => question.id === suggestion.questionId));
+    const question = exercise?.questions.find(item => item.id === suggestion.questionId);
+    if (!question) return;
+    if (question.source === 'teacher' && question.expected.trim()) { skipped += 1; return; }
+    if (!suggestion.expected.trim() && !suggestion.points) { skipped += 1; return; }
+    if (suggestion.expected.trim()) {
+      question.expected = suggestion.expected.trim();
+      question.source = 'ai';
+      question.needsReview = suggestion.needsReview;
+    }
+    if (suggestion.points && !toNumber(question.points)) {
+      question.points = suggestion.points;
+      question.needsReview = suggestion.needsReview || question.needsReview;
+    }
+    applied += 1;
+  });
+
+  next.updatedAt = new Date().toISOString();
+  return { data: next, applied, skipped };
+}
+
 
 export interface CorrectionMemoRequest {
   examType: 'فرض' | 'اختبار';
