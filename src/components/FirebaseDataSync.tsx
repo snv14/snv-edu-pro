@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from './Auth';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { getLogbookDateRevision } from '../utils/logbookDateRevision';
 
 type SyncType = 'config' | 'dist' | 'logbook' | 'curriculum';
 type SyncPayload = { config?: unknown; items?: unknown; lessons?: unknown; data?: unknown };
@@ -13,6 +14,7 @@ export const FirebaseDataSync: React.FC = () => {
   useEffect(() => {
     if (!user || !db) return;
 
+    let cancelled = false;
     const syncFromCloud = async () => {
       try {
         const documents = [
@@ -22,9 +24,13 @@ export const FirebaseDataSync: React.FC = () => {
           ['logbook', 'daftar_table_v2027', 'data'],
         ] as const;
 
+        // Do not apply a stale cloud date if the user changes it during the fetch.
+        const logbookDateRevision = getLogbookDateRevision();
         for (const [documentId, storageKey, field] of documents) {
           const snapshot = await getDoc(doc(db, 'users', user.uid, 'data', documentId));
+          if (cancelled) return;
           if (!snapshot.exists()) continue;
+          if (documentId === 'logbook' && getLogbookDateRevision() !== logbookDateRevision) continue;
 
           const value = (snapshot.data() as SyncPayload)[field];
           const valid = field === 'items' || field === 'lessons'
@@ -52,6 +58,7 @@ export const FirebaseDataSync: React.FC = () => {
     };
 
     void syncFromCloud();
+    return () => { cancelled = true; };
   }, [user]);
 
   useEffect(() => {

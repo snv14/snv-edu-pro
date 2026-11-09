@@ -4,6 +4,12 @@ import { DAILY_LOGBOOK_PROGRAM_2AM } from '../data/dailyLogbookProgram2am';
 import { DAILY_LOGBOOK_PROGRAM_3AM } from '../data/dailyLogbookProgram3am';
 import { DAILY_LOGBOOK_PROGRAM_4AM } from '../data/dailyLogbookProgram4am';
 
+/** A merged group row may contain more than one ISO date. */
+export function isLogbookRowOnOrAfter(dateStr: string, startDate: string): boolean {
+  const dates = dateStr.match(/\d{4}-\d{2}-\d{2}/g) || [];
+  return dates.every((date) => date >= startDate);
+}
+
 export function formatDateToIsoString(date: Date): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -376,7 +382,7 @@ export function generateLogbookEntries({
 
       const groupSlots = secSlots
         .filter((s) => s.isGroup)
-        .sort((a, b) => a.groupNumber - b.groupNumber || a.timeMinutes - b.timeMinutes);
+        .sort((a, b) => days.indexOf(a.dayName) - days.indexOf(b.dayName) || a.timeMinutes - b.timeMinutes || a.groupNumber - b.groupNumber);
 
       const collectiveSlots = secSlots
         .filter((s) => !s.isGroup)
@@ -613,11 +619,5 @@ export function generateLogbookEntries({
   }
 
   // فلترة نهائية حاسمة: ضمان عدم وجود أي حصة قبل تاريخ البداية المختار
-  return generated.filter((entry) => {
-    const parts = (entry.dateStr || '').split('/');
-    return parts.every((p) => {
-      const match = p.trim().match(/^(\d{4}-\d{2}-\d{2})/);
-      return match ? match[1] >= startDate : true;
-    });
-  });
+  return generated.filter((entry) => isLogbookRowOnOrAfter(entry.dateStr || '', startDate));
 }
