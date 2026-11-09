@@ -35,7 +35,8 @@ import {
 } from 'lucide-react';
 import { LessonMemo, MemoConfig, Activity } from '../types';
 import { TeacherOfficialStamp } from './TeacherOfficialStamp';
-import { generateLogbookEntries } from '../utils/dailyLogbookGenerator';
+import { generateLogbookEntries, isLogbookRowOnOrAfter } from '../utils/dailyLogbookGenerator';
+import { markLogbookDateChanged } from '../utils/logbookDateRevision';
 import { DailyLogSheetTemplate, ScienceHeaderLeft, ScienceHeaderRight, CornerLeaves } from './DailyLogSheetTemplate';
 import { DAILY_LOGBOOK_PROGRAM_1AM } from '../data/dailyLogbookProgram1am';
 import { DAILY_LOGBOOK_PROGRAM_2AM } from '../data/dailyLogbookProgram2am';
@@ -486,8 +487,7 @@ const mergeGeneratedWithPreservedRows = (
 
   const preservedRows = (savedRows as LogEntry[]).filter((row) => {
     if (!row) return false;
-    const rowDate = (row.dateStr || '').split(' ')[0];
-    if (startDate && rowDate && rowDate < startDate) return false;
+    if (startDate && !isLogbookRowOnOrAfter(row.dateStr || '', startDate)) return false;
     return Boolean(
       String(row.id || '').startsWith('manual-') ||
       !row.sourceLearningUnitId ||
@@ -503,8 +503,7 @@ const mergeGeneratedWithPreservedRows = (
 
   return Array.from(merged.values())
     .filter((row) => {
-      const rowDate = (row.dateStr || '').split(' ')[0];
-      return !startDate || !rowDate || rowDate >= startDate;
+      return !startDate || isLogbookRowOnOrAfter(row.dateStr || '', startDate);
     })
     .sort((a, b) => {
       const dateA = (a.dateStr || '').split(' ')[0] || (a.dateStr || '');
@@ -691,6 +690,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
 
   // Generation controls
   const [period, setPeriod] = useState<string>('شهر');
+  const [storageLoaded, setStorageLoaded] = useState(false);
   const [sessionsPerActivity, setSessionsPerActivity] = useState<number>(() => {
     try {
       const item = localStorage.getItem('daftar_table_v2027');
@@ -708,7 +708,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       const item = localStorage.getItem('daftar_table_v2027');
       if (item) {
         const parsed = JSON.parse(item);
-        if (parsed.startDate) return parsed.startDate;
+        if (typeof parsed.startDate === 'string') return parsed.startDate;
       }
     } catch {}
     return getDefaultNotebookStartDate(config.schoolYear || '2026-2027') || formatDateToIsoString(new Date());
@@ -722,23 +722,18 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       const item = localStorage.getItem('daftar_table_v2027');
       if (item) {
         const parsed = JSON.parse(item);
-        const hasFresh1Am = (rList: any[]) => {
-          const oneAmList = rList.filter((r: any) => r.level === '1م' && r.lessonType === 'curriculum');
-          if (oneAmList.length === 0) return true;
-          return oneAmList.some((r: any) => r.sourceLearningUnitId === 'program_1am_unit_01');
-        };
         if (
           parsed.logbookDataVersion === LOGBOOK_DATA_VERSION &&
-          Array.isArray(parsed.rows) &&
-          parsed.rows.length > 0 &&
-          hasFresh1Am(parsed.rows)
+          Array.isArray(parsed.rows)
         ) {
-          const normalized = normalizeDailyLogbookRows(parsed.rows, CURRICULUM_DATABASE);
-          const effectiveStart = parsed.startDate || startDate;
+          const effectiveStart = typeof parsed.startDate === 'string' ? parsed.startDate : startDate;
+          const normalized = normalizeDailyLogbookRows(
+            effectiveStart ? parsed.rows.filter((r: LogEntry) => isLogbookRowOnOrAfter(r.dateStr || '', effectiveStart)) : parsed.rows,
+            CURRICULUM_DATABASE
+          );
           if (effectiveStart) {
             return normalized.filter((r) => {
-              const rDate = (r.dateStr || '').split(' ')[0];
-              return !rDate || rDate >= effectiveStart;
+              return isLogbookRowOnOrAfter(r.dateStr || '', effectiveStart);
             });
           }
           return normalized;
@@ -766,6 +761,10 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
   const handleAddManualLesson = () => {
     if (!manualLessonDate || !manualLessonSection.trim()) {
       showToast('يرجى تحديد تاريخ الحصة والقسم.');
+      return;
+    }
+    if (startDate && manualLessonDate < startDate) {
+      showToast('لا يمكن إضافة حصة قبل تاريخ بداية الدفتر.');
       return;
     }
     if ((manualLessonStatus === 'normal' || manualLessonStatus === 'changed') && !manualLessonContent.trim()) {
@@ -883,7 +882,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
           setSessionsPerActivity(Number(parsed.sessionsPerActivity) || 1);
         }
 
-        if (parsed.startDate) {
+        if (typeof parsed.startDate === 'string') {
           setStartDate(parsed.startDate);
         }
         if (parsed.period) setPeriod(parsed.period);
@@ -905,25 +904,20 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
           }
         }
 
-        const hasFresh1Am = (rList: any[]) => {
-          const oneAmList = rList.filter((r: any) => r.level === '1م' && r.lessonType === 'curriculum');
-          if (oneAmList.length === 0) return true;
-          return oneAmList.some((r: any) => r.sourceLearningUnitId === 'program_1am_unit_01');
-        };
 
         let hasValidRows = false;
         if (
           parsed.logbookDataVersion === LOGBOOK_DATA_VERSION &&
           parsed.rows &&
-          Array.isArray(parsed.rows) &&
-          parsed.rows.length > 0 &&
-          hasFresh1Am(parsed.rows)
+          Array.isArray(parsed.rows)
         ) {
-          const normalized = normalizeDailyLogbookRows(parsed.rows, CURRICULUM_DATABASE);
-          const effectiveStart = parsed.startDate || startDate;
+          const effectiveStart = typeof parsed.startDate === 'string' ? parsed.startDate : startDate;
+          const normalized = normalizeDailyLogbookRows(
+            effectiveStart ? parsed.rows.filter((r: LogEntry) => isLogbookRowOnOrAfter(r.dateStr || '', effectiveStart)) : parsed.rows,
+            CURRICULUM_DATABASE
+          );
           setRows(effectiveStart ? normalized.filter((r) => {
-            const rDate = (r.dateStr || '').split(' ')[0];
-            return !rDate || rDate >= effectiveStart;
+            return isLogbookRowOnOrAfter(r.dateStr || '', effectiveStart);
           }) : normalized);
           hasValidRows = true;
         }
@@ -990,17 +984,21 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
 
   useEffect(() => {
     loadFromStorage();
-    const handleSync = () => loadFromStorage();
+    setStorageLoaded(true);
+    const handleSync = (event: Event) => {
+      if ((event as CustomEvent).detail?.type === 'logbook') loadFromStorage();
+    };
     window.addEventListener('firebase-sync-complete', handleSync);
     return () => window.removeEventListener('firebase-sync-complete', handleSync);
   }, []);
 
   // Save to localStorage on change
   useEffect(() => {
+    // Wait until all saved settings have been restored before writing them back.
+    if (!storageLoaded) return;
     // Only persist rows that are on or after startDate to prevent orphan rows from prior dates
     const filteredRows = startDate ? rows.filter((r) => {
-      const rDate = (r.dateStr || '').split(' ')[0];
-      return !rDate || rDate >= startDate;
+      return isLogbookRowOnOrAfter(r.dateStr || '', startDate);
     }) : rows;
     const dataToSave = {
       logbookDataVersion: LOGBOOK_DATA_VERSION,
@@ -1025,7 +1023,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
     if ((window as any).syncToCloud) {
       (window as any).syncToCloud('logbook', dataToSave);
     }
-  }, [wilaya, school, teacher, subject, config.schoolYear, showSubjectInHeader, showYearInHeader, gridRows, holidays, rows, startDate, period, sessionsPerActivity, orientation]);
+  }, [wilaya, school, teacher, subject, config.schoolYear, showSubjectInHeader, showYearInHeader, gridRows, holidays, rows, startDate, period, sessionsPerActivity, orientation, storageLoaded]);
 
   // Keyboard navigation for preview modal
   useEffect(() => {
@@ -1277,8 +1275,11 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
 
   // توليد الدفتر اليومي من البرنامج المستقل الخاص بكل مستوى، مع احترام المدة المحددة
   const handleGenerateSmartLogbook = () => {
-    const effectiveStart = startDate || getDefaultNotebookStartDate(config.schoolYear || '2026-2027');
-    if (!startDate) setStartDate(effectiveStart);
+    if (!startDate) {
+      displayUserAlert('يرجى تحديد تاريخ بداية الدفتر أولاً.');
+      return;
+    }
+    const effectiveStart = startDate;
     const fresh = generateAndApplyLogbook(effectiveStart, period, sessionsPerActivity);
     if (fresh.length > 0) {
       showToast(`تم توليد الدفتر انطلاقاً من ${effectiveStart} (${fresh.length} حصة) بنجاح 🇩🇿`);
@@ -1292,9 +1293,13 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
 
   // ضمان وجود حصص لتفعيل التصدير دائماً دون تعطيل أو رسائل خطأ
   const ensureRowsForExport = (): LogEntry[] => {
+    if (!startDate) {
+      displayUserAlert('يرجى تحديد تاريخ بداية الدفتر أولاً.');
+      return [];
+    }
     if (rows.length > 0) return rows;
     showToast('جاري تجهيز حصص الدفتر تلقائياً للتصدير...');
-    const effectiveStart = startDate || getDefaultNotebookStartDate(config.schoolYear || '2026-2027');
+    const effectiveStart = startDate;
     const fresh = generateLogbookEntries({
       startDate: effectiveStart,
       gridRows,
@@ -3240,6 +3245,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                       value={startDate}
                       onChange={(e) => {
                         const selectedDate = e.target.value;
+                        markLogbookDateChanged();
                         setStartDate(selectedDate);
                         if (selectedDate) {
                           const fresh = generateAndApplyLogbook(selectedDate, period, sessionsPerActivity);
@@ -3253,7 +3259,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                       className="w-full border border-emerald-300 rounded-lg px-2 py-2 text-[12px] bg-white outline-none font-bold text-[#064e3b] focus:ring-2 focus:ring-emerald-400"
                     />
                     <p className="text-[10px] text-zinc-500 mt-1">
-                      يبدأ الدفتر وصفحاته من هذا التاريخ بالضبط ({startDate || 'غير محدد'})
+                      تبدأ الحصص من التاريخ المحدد أو أول يوم مبرمج بعده، مع مراعاة العطل ({startDate || 'غير محدد'})
                     </p>
                   </div>
                   <div>
