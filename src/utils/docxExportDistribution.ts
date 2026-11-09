@@ -204,32 +204,21 @@ export const generateDistributionDocx = async (
     sections: pages.filter(p => p && p.length > 0).map((page, index) => {
       const pageItems = page;
       const uniqueFields = [...new Set(pageItems.map((item) => item.midan).filter(Boolean))];
-      const uniqueSequences = [...new Set(pageItems.map((item) => item.maqta).filter(Boolean))];
-      const pageTitle = uniqueFields.length === 1
-        ? uniqueFields[0]
-        : uniqueSequences.length === 1
-          ? uniqueSequences[0]
-          : '';
-
       const rows: TableRow[] = [];
 
-      // Header row: exactly mirrors the on-screen table.
-      if (level !== '3am' && pageTitle && level !== '4am') {
-        rows.push(new TableRow({
-          children: [
-            createCell(`الميدان: ${pageTitle}`, true, "ECFDF5", 8, 1, 24)
-          ]
-        }));
-      }
+      // The same field banner and column structure are used for all levels.
+      rows.push(new TableRow({
+        children: [createCell(`الميدان: ${uniqueFields.join('  |  ') || '—'}`, true, "ECFDF5", 8, 1, 24)]
+      }));
 
       rows.push(new TableRow({
         tableHeader: true,
         children: [
           new TableCell({ width: { size: 7, type: WidthType.PERCENTAGE }, shading: { fill: "F8F8F8", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("الشهر", true, "000000", 20)] }),
-          new TableCell({ width: { size: 10, type: WidthType.PERCENTAGE }, shading: { fill: "F8F8F8", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("الأسابيع", true, "000000", 20)] }),
+          new TableCell({ width: { size: 10, type: WidthType.PERCENTAGE }, shading: { fill: "F8F8F8", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("التاريخ", true, "000000", 20)] }),
           new TableCell({ width: { size: 12, type: WidthType.PERCENTAGE }, shading: { fill: "ECFDF5", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("الميدان", true, "065F46", 20)] }),
           new TableCell({ width: { size: 14, type: WidthType.PERCENTAGE }, shading: { fill: "FFFBEB", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("المقطع التعلمي", true, "92400E", 20)] }),
-          new TableCell({ width: { size: 14, type: WidthType.PERCENTAGE }, shading: { fill: "F8F8F8", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph(level === '4am' ? "المقطع البيداغوجي" : "المورد المعرفي", true, "000000", 20)] }),
+          new TableCell({ width: { size: 14, type: WidthType.PERCENTAGE }, shading: { fill: "F8F8F8", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("المورد المعرفي", true, "000000", 20)] }),
           new TableCell({ width: { size: 18, type: WidthType.PERCENTAGE }, shading: { fill: "F8F8F8", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("الحصة الأولى", true, "000000", 20)] }),
           new TableCell({ width: { size: 18, type: WidthType.PERCENTAGE }, shading: { fill: "F8F8F8", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("الحصة الثانية", true, "000000", 20)] }),
           new TableCell({ width: { size: 7, type: WidthType.PERCENTAGE }, shading: { fill: "F8F8F8", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("النسبة", true, "000000", 20)] }),
@@ -241,7 +230,8 @@ export const generateDistributionDocx = async (
         const previous = page[rowIndex - 1];
         const sameMidan = !!previous && previous.midan === item.midan;
         const sameMaqta = sameMidan && previous.maqta === item.maqta;
-        const weekDisplay = item.week ? `${item.week} (${item.dates})` : (item.dates || '—');
+        const displayWeek = item.weekInMonth ?? item.week;
+        const weekDisplay = displayWeek ? `${displayWeek}${item.dates ? ` (${item.dates})` : ''}` : (item.dates || '—');
 
         if (item.isHoliday) {
           const isFull = item.session1 === 'عطلة الشتاء' || item.session1 === 'عطلة الربيع' || !item.session1 || item.session1 === item.session2;

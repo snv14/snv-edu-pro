@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, lazy, Suspense } from 'react';
 import {
   Printer,
   FileDown,
@@ -24,20 +24,26 @@ import { LEVELS } from './data/lessonsData';
 import { SidebarControls } from './components/SidebarControls';
 import { MemoSheet } from './components/MemoSheet';
 import { PreviewModal } from './components/PreviewModal';
-import { AnnualDistribution } from './components/AnnualDistribution';
-import { DailyLogbook } from './components/DailyLogbook';
-import { AccountSettings } from './components/AccountSettings';
 import { LevelsHomePage } from './components/LevelsHomePage';
 import { PlatformNavigationDrawer } from './components/PlatformNavigationDrawer';
-import { SourceMemo1AMViewer } from './components/SourceMemo1AMViewer';
 import { PlatformInfoModal } from './components/PlatformInfoModal';
-import { InteractiveMaqta1 } from './components/InteractiveMaqta1';
 import { UserProfile } from './components/UserProfile';
 import { FirebaseDataSync } from './components/FirebaseDataSync';
-import { CurriculumDatabaseManager } from './components/CurriculumDatabaseManager';
 import { loadCurriculumDatabase } from './data/curriculumDb';
 import designerPortraitImg from './assets/images/designer_portrait_1790463396414.jpg';
 import { getDesignerPhoto } from './utils/designerPhoto';
+
+const AnnualDistribution = lazy(() => import('./components/AnnualDistribution').then(module => ({ default: module.AnnualDistribution })));
+const DailyLogbook = lazy(() => import('./components/DailyLogbook').then(module => ({ default: module.DailyLogbook })));
+const AccountSettings = lazy(() => import('./components/AccountSettings').then(module => ({ default: module.AccountSettings })));
+const SourceMemo1AMViewer = lazy(() => import('./components/SourceMemo1AMViewer').then(module => ({ default: module.SourceMemo1AMViewer })));
+const CurriculumDatabaseManager = lazy(() => import('./components/CurriculumDatabaseManager').then(module => ({ default: module.CurriculumDatabaseManager })));
+
+const SectionLoading = () => (
+  <div dir="rtl" role="status" className="flex-1 flex items-center justify-center p-8 text-sm font-bold text-emerald-800">
+    جاري تحميل القسم…
+  </div>
+);
 
 export type MainSectionType = 'home' | '1am' | '2am' | '3am' | '4am' | 'logbook' | 'settings' | 'database';
 
@@ -791,7 +797,9 @@ export const App: React.FC = () => {
       {isYearSection && yearSubTab === 'source' && (
         <div className="flex-1 min-h-0 overflow-hidden">
           {selectedLevel === '1am' ? (
-            <SourceMemo1AMViewer lessons={curriculumLessons} />
+            <Suspense fallback={<SectionLoading />}>
+              <SourceMemo1AMViewer lessons={curriculumLessons} />
+            </Suspense>
           ) : (
             <div dir="rtl" className="h-full flex items-center justify-center p-6 bg-slate-50 text-slate-600 font-bold">
               عارض المصدر الكامل متاح حاليًا داخل قسم السنة الأولى متوسط.
@@ -840,47 +848,55 @@ export const App: React.FC = () => {
             )}
           </div>
           <div className="relative z-10 w-full min-h-full">
-          <AnnualDistribution
-            selectedLevel={selectedLevel}
-            setSelectedLevel={(lvl) => setActiveSection(lvl)}
-            config={config}
-            setConfig={setConfig}
-            showToast={showToast}
-            curriculumLessons={curriculumLessons}
-            curriculumBackground={curriculumBackground}
-          />
+            <Suspense fallback={<SectionLoading />}>
+              <AnnualDistribution
+                selectedLevel={selectedLevel}
+                setSelectedLevel={(lvl) => setActiveSection(lvl)}
+                config={config}
+                setConfig={setConfig}
+                showToast={showToast}
+                curriculumLessons={curriculumLessons}
+                curriculumBackground={curriculumBackground}
+              />
+            </Suspense>
           </div>
         </div>
       )}
 
       {activeSection === 'logbook' && (
-        <DailyLogbook
-          selectedLevel={selectedLevel}
-          setSelectedLevel={(lvl) => {
-            if (lvl) {
-              setConfig((prev) => ({ ...prev, level: lvl }));
-            }
-          }}
-          config={config}
-          setConfig={setConfig}
-          showToast={showToast}
-        />
+        <Suspense fallback={<SectionLoading />}>
+          <DailyLogbook
+            selectedLevel={selectedLevel}
+            setSelectedLevel={(lvl) => {
+              if (lvl) {
+                setConfig((prev) => ({ ...prev, level: lvl }));
+              }
+            }}
+            config={config}
+            setConfig={setConfig}
+            showToast={showToast}
+          />
+        </Suspense>
       )}
 
       {activeSection === 'database' && (
-        <CurriculumDatabaseManager
-          lessons={curriculumLessons}
-          setLessons={setCurriculumLessons}
-          showToast={showToast}
-        />
+        <Suspense fallback={<SectionLoading />}>
+          <CurriculumDatabaseManager
+            lessons={curriculumLessons}
+            setLessons={setCurriculumLessons}
+            showToast={showToast}
+          />
+        </Suspense>
       )}
 
       {activeSection === 'settings' && (
-        <AccountSettings
-          config={config}
-          setConfig={setConfig}
-          showToast={showToast}
-        />
+        <Suspense fallback={<SectionLoading />}>
+          <AccountSettings
+            config={config}
+            setConfig={setConfig}
+            showToast={showToast}
+          />
+        </Suspense>
       )}
 
       {/* Global Navigation Drawer */}

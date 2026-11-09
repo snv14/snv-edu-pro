@@ -42,7 +42,10 @@ const preparePageForExport = (source: HTMLElement, orientation: LogbookOrientati
   page.style.setProperty("overflow", "hidden");
 
   // الحفاظ على الإطار الأزرق الدائري الرسمي لورقة الدفتر اليومي
-  if (source.classList.contains("logbook-content-page") || source.hasAttribute("data-logbook-content-page")) {
+  if (source.classList.contains("teal-logbook-page")) {
+    page.style.border = "none";
+    page.style.borderRadius = "0";
+  } else if (source.classList.contains("logbook-content-page") || source.hasAttribute("data-logbook-content-page")) {
     page.style.border = "2px solid #0284c7";
     page.style.borderRadius = "14px";
   } else {

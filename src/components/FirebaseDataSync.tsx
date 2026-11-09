@@ -3,6 +3,7 @@ import { useAuth } from './Auth';
 import { db } from '../firebase';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { ANNUAL_STORAGE_KEY } from '../utils/annualDistributionDateUtils';
+import { mergeSecondYearOnCloudRestore } from '../utils/annualDistributionMigration';
 
 type SyncPayload = { config?: unknown; items?: unknown; lessons?: unknown; data?: unknown };
 
@@ -66,7 +67,18 @@ export const FirebaseDataSync: React.FC = () => {
           const valid = documentId === 'curriculum' ? Array.isArray(value)
             : value !== undefined && value !== null && typeof value === 'object' && !Array.isArray(value);
           if (!valid) continue;
-          localStorage.setItem(storageKey, JSON.stringify(value));
+          let restored = value;
+          if (documentId === 'annualDist') {
+            try {
+              const local = JSON.parse(localStorage.getItem(storageKey) || '{}');
+              restored = mergeSecondYearOnCloudRestore(local, value as Record<string, any>);
+            } catch (error) {
+              // Do not discard a local document that cannot be parsed safely.
+              console.error('تعذر دمج نسخة التدرج المحلية:', error);
+              continue;
+            }
+          }
+          localStorage.setItem(storageKey, JSON.stringify(restored));
           pending.delete(documentId);
           if (documentId === 'config') sessionStorage.setItem('algeria_sciences_session_config', JSON.stringify(value));
           window.dispatchEvent(new CustomEvent('firebase-sync-complete', { detail: { type: documentId } }));

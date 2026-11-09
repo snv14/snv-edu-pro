@@ -16,6 +16,7 @@ import {
   OfficialAnnualDistributionRow 
 } from '../data/officialAnnualDistributionData';
 import { CalendarAdjustmentModal } from './CalendarAdjustmentModal';
+import { annualDistributionVersion, migrateSecondYearDistribution } from '../utils/annualDistributionMigration';
 import { 
   SchoolCalendarSettings, 
   getDefaultCalendarSettings, 
@@ -24,7 +25,6 @@ import {
   syncCalendarToAllLevels,
   deriveDefaultSchoolEntryDate,
   deriveSchoolYearFromDate,
-  ANNUAL_SCHEDULE_DATA_VERSION,
   ANNUAL_STORAGE_KEY
 } from '../utils/annualDistributionDateUtils';
 
@@ -72,8 +72,8 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
 
     return raw.map((row, idx) => {
       const text = [row.maqta, row.mawrid, row.session1, row.session2].join(' ');
-      const isHoliday = row.isHoliday || /عطلة/.test(text);
-      const isExam = row.isExam || /إ?ختبار|اختبارات|الفرض المحروس|الفرض/.test(text);
+      const isHoliday = row.isHoliday ?? /عطلة/.test(text);
+      const isExam = row.isExam ?? /إ?ختبار|اختبارات|الفرض المحروس|الفرض/.test(text);
       return {
         ...row,
         week: typeof row.week === 'number' ? row.week : (idx + 1),
@@ -121,7 +121,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
   const [customRows, setCustomRows] = useState<OfficialAnnualDistributionRow[]>(() => {
     try {
       const stored = JSON.parse(localStorage.getItem(ANNUAL_STORAGE_KEY) || '{}');
-      const isFresh = stored[level]?.curriculumDataVersion === ANNUAL_SCHEDULE_DATA_VERSION;
+      const isFresh = stored[level]?.curriculumDataVersion === annualDistributionVersion(level);
       const base = (isFresh && stored[level]?.items && Array.isArray(stored[level].items) && stored[level].items.length > 0)
         ? stored[level].items
         : officialBaseRows;
@@ -131,11 +131,22 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
     return recalculateDistributionRows(officialBaseRows, getDefaultCalendarSettings(config.schoolYear));
   });
 
+  useEffect(() => {
+    if (level !== '2am') return;
+    try {
+      const stored = JSON.parse(localStorage.getItem(ANNUAL_STORAGE_KEY) || '{}');
+      if (migrateSecondYearDistribution(stored, officialBaseRows)) {
+        localStorage.setItem(ANNUAL_STORAGE_KEY, JSON.stringify(stored));
+        if ((window as any).syncToCloud) (window as any).syncToCloud('annualDist', stored);
+      }
+    } catch (error) { console.error('تعذر حفظ نسخة التدرج السابق:', error); }
+  }, [level, officialBaseRows]);
+
   // عند تغيير المستوى الدراسي، تحميل التدرج الخاص به ومحاذاته مع الرزنامة الحالية
   useEffect(() => {
     try {
       const stored = JSON.parse(localStorage.getItem(ANNUAL_STORAGE_KEY) || '{}');
-      const isFresh = stored[level]?.curriculumDataVersion === ANNUAL_SCHEDULE_DATA_VERSION;
+      const isFresh = stored[level]?.curriculumDataVersion === annualDistributionVersion(level);
       const base = (isFresh && stored[level]?.items && Array.isArray(stored[level].items) && stored[level].items.length > 0)
         ? stored[level].items
         : officialBaseRows;
@@ -169,6 +180,10 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
       if ((event as CustomEvent).detail?.type !== 'annualDist') return;
       try {
         const stored = JSON.parse(localStorage.getItem(ANNUAL_STORAGE_KEY) || '{}');
+        if (level === '2am' && migrateSecondYearDistribution(stored, officialBaseRows)) {
+          localStorage.setItem(ANNUAL_STORAGE_KEY, JSON.stringify(stored));
+          if ((window as any).syncToCloud) (window as any).syncToCloud('annualDist', stored);
+        }
         const settings = stored.globalCalendarSettings || stored[level]?.calendarSettings;
         const items = stored[level]?.items;
         if (settings) setCalendarSettings(settings);
@@ -181,7 +196,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
     };
     window.addEventListener('firebase-sync-complete', onSync);
     return () => window.removeEventListener('firebase-sync-complete', onSync);
-  }, [level, calendarSettings]);
+  }, [level, calendarSettings, officialBaseRows]);
 
   // عند تغيير السنة الدراسية خارجياً (الشريط الجانبي / إعدادات الحساب)، إعادة حساب وتحديث التدرج فورياً
   useEffect(() => {
@@ -212,6 +227,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
   const persistRows = (rowsToSave: OfficialAnnualDistributionRow[], currentCal: SchoolCalendarSettings) => {
     try {
       const existing = JSON.parse(localStorage.getItem(ANNUAL_STORAGE_KEY) || '{}');
+      if (level === '2am') migrateSecondYearDistribution(existing, officialBaseRows);
       existing.globalCalendarSettings = currentCal;
       existing[level] = {
         startDate: currentCal.startDate,
@@ -219,7 +235,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
         items: rowsToSave,
         calendarSettings: currentCal,
         generatedFromCurriculum: true,
-        curriculumDataVersion: ANNUAL_SCHEDULE_DATA_VERSION,
+        curriculumDataVersion: annualDistributionVersion(level),
         updatedAt: new Date().toISOString()
       };
       localStorage.setItem(ANNUAL_STORAGE_KEY, JSON.stringify(existing));
@@ -249,7 +265,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
     setCustomRows(recalculated);
     persistRows(recalculated, newSettings);
     syncCalendarToAllLevels(newSettings, getLevelBaseRows);
-    showToast(`تم تغيير الموسم الدراسي إلى ${newYear} وتحديث كافة التواريخ والعطل تلقائياً 📅`);
+    showToast(`تم تغيير الموسم الدراسي إلى ${newYear} وتحديث تواريخ التدرجات المحسوبة تلقائياً (ما عدا مرجع السنة الثانية) 📅`);
   };
 
   // تغيير فوري لتاريخ الدخول المدرسي مع إعادة حساب التدرج وتحديث السنة الدراسية
@@ -270,7 +286,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
     setCustomRows(recalculated);
     persistRows(recalculated, newSettings);
     syncCalendarToAllLevels(newSettings, getLevelBaseRows);
-    showToast(`تم اعتماد تاريخ الدخول ${newStartDate} وتحديث مواعيد كافة الأسابيع والعطل في التدرج 📅`);
+    showToast(`تم اعتماد تاريخ الدخول ${newStartDate} وتحديث مواعيد التدرجات المحسوبة، باستثناء مرجع السنة الثانية 📅`);
   };
 
   // تغيير صيغة عرض التاريخ في التدرج
@@ -321,17 +337,6 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
   const pages = useMemo(() => {
     const rows = customRows.length > 0 ? customRows : officialBaseRows;
 
-    if (level === '4am') {
-      // تطابق الصفحات الثلاث الرسمية في وثيقة وزارة التربية الوطنية:
-      // الصفحة 1: الفصل الأول (من الأسبوع 1 إلى الأسبوع 15: عطلة الشتاء)
-      // الصفحة 2: الفصل الثاني (من الأسبوع 16 إلى الأسبوع 27: عطلة الربيع)
-      // الصفحة 3: الفصل الثالث (من الأسبوع 28 إلى الأسبوع 34: نهاية السنة والاختبارات + التأشيرات)
-      const page1 = rows.slice(0, 15);
-      const page2 = rows.slice(15, 27);
-      const page3 = rows.slice(27);
-      return [page1, page2, page3];
-    }
-
     const pageSize = 11;
     return Array.from({ length: Math.ceil(rows.length / pageSize) }, (_, index) =>
       rows.slice(index * pageSize, index * pageSize + pageSize)
@@ -343,6 +348,14 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
     const unique = (values: string[]) =>
       Array.from(new Set(values.map(v => String(v || '').trim()).filter(Boolean)));
 
+    if (level === '2am' && rows.some(row => row.referenceMonthlySchedule)) {
+      const curriculumRows = rows.filter(row => !row.isIntroductory);
+      const maqtaCount = unique(curriculumRows.flatMap(row => row.maqta.split(/\s+\/\s+/))).length;
+      const resourceCount = unique(curriculumRows.flatMap(row => row.mawrid.split(/\s+\/\s+/)).filter(text => /^المورد /.test(text))).length;
+      const activities = curriculumRows.flatMap(row => [row.session1, row.session2])
+        .map(text => (text.match(/النشاط[^\n]*/)?.[0] || '').replace(/\s*\([12]\)$/, '').trim());
+      return { maqtaCount, resourceCount, ta3alomCount: '—', activityCount: unique(activities).length };
+    }
     const maqtaCount = unique(rows.map((r: any) => r.maqta)).length;
     const resourceCount = unique(rows.map((r: any) => r.mawrid)).length;
     const ta3alomCount = unique(rows.map((r: any) => r.ta3alom)).length;
@@ -354,7 +367,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
     const activityCount = unique(activityValues).length;
 
     return { maqtaCount, resourceCount, ta3alomCount, activityCount };
-  }, [customRows, officialBaseRows, baseLessons]);
+  }, [customRows, officialBaseRows, baseLessons, level]);
 
   // تعديل مباشر لمحتوى الخلية من قبل الأستاذ
   const handleCellBlur = (rowId: string | undefined, field: keyof OfficialAnnualDistributionRow, value: string) => {
@@ -378,6 +391,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
   const handleResetToOfficial = () => {
     try {
       const existing = JSON.parse(localStorage.getItem(ANNUAL_STORAGE_KEY) || '{}');
+      if (level === '2am') migrateSecondYearDistribution(existing, officialBaseRows);
       delete existing[level];
       localStorage.setItem(ANNUAL_STORAGE_KEY, JSON.stringify(existing));
       if ((window as any).syncToCloud) {
@@ -445,7 +459,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
   const handleExportWord = async () => {
     try {
       showToast("جاري تصدير التدرج السنوي إلى Word...");
-      const blob = await generateDistributionDocx(pages, config, level, orientation);
+      const blob = await generateDistributionDocx(pages, level === '2am' ? { ...config, schoolYear: '2026-2027' } : config, level, orientation);
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -485,47 +499,6 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
           
           {/* Header */}
           <div className="text-center mb-3">
-            {level === '4am' ? (
-              <div className="space-y-2 mb-2">
-                {/* Official 4AM Header Banner as in Ministry Document */}
-                <div className="flex flex-col sm:flex-row items-center justify-between border-2 border-[#16a34a] bg-[#ecfdf5] p-2 rounded-xl font-bold text-[12px] sm:text-[13px] text-gray-900 gap-2">
-                  <button 
-                    type="button"
-                    onClick={() => setIsCalendarModalOpen(true)}
-                    className="bg-white border border-[#16a34a] px-3 py-1 rounded-lg shadow-2xs hover:bg-emerald-50 transition cursor-pointer flex items-center gap-1.5"
-                    title="انقر لتعديل السنة الدراسية وتواريخ الرزنامة"
-                  >
-                    الســــنة الــــدراســـيــة: <span className="font-black text-[#15803d]">{calendarSettings.schoolYear || config.schoolYear || '2024-2025'}</span>
-                    <Settings2 size={13} className="text-[#16a34a] print:hidden" />
-                  </button>
-                  <div className="bg-[#16a34a] text-white px-5 py-1 rounded-lg shadow-xs text-base sm:text-lg font-black tracking-wide">
-                    التــــدرج الســــنوي لبناء التعلمات لمـــــادة علوم الطبيــــــــــــــــعة والحياة
-                  </div>
-                  <div className="bg-white border border-[#16a34a] px-3 py-1 rounded-lg shadow-2xs">
-                    المـــــستــــوى: <span className="font-black text-[#15803d]">السنة الـــرابعة متــــوســــط</span>
-                  </div>
-                </div>
-
-                {/* Teacher / School Meta info */}
-                <div className="flex justify-between items-center border border-[#b8dcd6] bg-[#f7fcfa] px-3 py-1 font-bold text-[11.5px] rounded-lg">
-                  <div>الأستاذ(ة): <span className="font-black text-[#075e57]">{config.teacherName}</span></div>
-                  <div>متوسطة: <span className="font-black text-[#075e57]">{config.schoolName}</span></div>
-                  <div>مديرية التربية: <span className="font-black text-[#075e57]">{config.directorate}</span></div>
-                </div>
-
-                {/* Competencies Box */}
-                <div className="text-right bg-[#f0fdf4] p-2 rounded-xl border border-[#86efac] space-y-0.5 text-[11px] leading-relaxed">
-                  <div className="text-gray-900">
-                    <strong className="text-emerald-800 ml-1.5">الكفاءة الشاملة:</strong>
-                    يقترح حلولاً مؤسسة علمياً إستجابة لمشاكل متعلقة بالصحة و يشارك في حوارات مفتوحة حول المسائل الراهنة في المجال العلمي
-                  </div>
-                  <div className="text-gray-900">
-                    <strong className="text-emerald-800 ml-1.5">الكفاءة الختامية:</strong>
-                    أمام إختلال وظيفي أو وراثي، يقدم إرشادات وجيهة بتجنيد موارده المتعلقة بالتنسيق الوظيفي للعضوية، التكاثر و انتقال الصفات الوراثية
-                  </div>
-                </div>
-              </div>
-            ) : (
               <>
                 <h1 className="text-sm font-bold">الجمهورية الجزائرية الديمقراطية الشعبية</h1>
                 <h2 className="text-sm font-bold mb-2">وزارة التربية الوطنية</h2>
@@ -536,7 +509,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
                   </div>
                   <div className="text-center">
                     <h1 className="text-2xl font-black text-[#075e57] drop-shadow-sm">التدرج السنوي لبناء التعلمات</h1>
-                    <h3 className="text-sm font-bold text-[#28756f] mt-1">مادة علوم الطبيعة والحياة - السنة {level === "3am" ? "الثالثة" : level === "2am" ? "الثانية" : "الأولى"} متوسط</h3>
+                    <h3 className="text-sm font-bold text-[#28756f] mt-1">مادة علوم الطبيعة والحياة - السنة {level === "4am" ? "الرابعة" : level === "3am" ? "الثالثة" : level === "2am" ? "الثانية" : "الأولى"} متوسط</h3>
                   </div>
                   <div className="w-12 h-12 bg-rose-50 rounded-full flex items-center justify-center border border-rose-100 print:hidden">
                     <span className="text-xl">🧠</span>
@@ -546,40 +519,28 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
                 <div className="flex justify-between items-center border border-[#b8dcd6] bg-[#f7fcfa] p-2 font-bold text-[12px]">
                   <div>الأستاذ(ة): <span>{config.teacherName}</span></div>
                   <div 
-                    onClick={() => setIsCalendarModalOpen(true)}
-                    className="flex items-center gap-1.5 cursor-pointer hover:text-emerald-700 transition"
-                    title="انقر لتعديل السنة الدراسية وتواريخ الرزنامة"
+                    onClick={() => { if (level !== '2am') setIsCalendarModalOpen(true); }}
+                    className={`flex items-center gap-1.5 ${level !== '2am' ? 'cursor-pointer hover:text-emerald-700 transition' : ''}`}
+                    title={level === '2am' ? 'موسم النموذج المرفق' : 'انقر لتعديل السنة الدراسية وتواريخ الرزنامة'}
                   >
                     <span>السنة الدراسية:</span>
-                    <span className="font-black text-emerald-800 underline decoration-dotted">{calendarSettings.schoolYear || config.schoolYear}</span>
-                    <Settings2 size={13} className="text-emerald-600 print:hidden" />
+                    <span className="font-black text-emerald-800 underline decoration-dotted">{level === '2am' ? '2026-2027' : (calendarSettings.schoolYear || config.schoolYear)}</span>
+                    {level !== '2am' && <Settings2 size={13} className="text-emerald-600 print:hidden" />}
                   </div>
                   <div>متوسطة: <span>{config.schoolName}</span></div>
                 </div>
+                {level === '4am' && (
+                  <div className="text-right bg-[#f0fdf4] p-2 mt-2 rounded-xl border border-[#86efac] space-y-0.5 text-[11px] leading-relaxed">
+                    <div><strong className="text-emerald-800 ml-1.5">الكفاءة الشاملة:</strong> يقترح حلولاً مؤسسة علمياً إستجابة لمشاكل متعلقة بالصحة و يشارك في حوارات مفتوحة حول المسائل الراهنة في المجال العلمي</div>
+                    <div><strong className="text-emerald-800 ml-1.5">الكفاءة الختامية:</strong> أمام إختلال وظيفي أو وراثي، يقدم إرشادات وجيهة بتجنيد موارده المتعلقة بالتنسيق الوظيفي للعضوية، التكاثر و انتقال الصفات الوراثية</div>
+                  </div>
+                )}
               </>
-            )}
           </div>
 
           {/* Table */}
           <table className="distribution-screen-table w-full border-collapse border border-black text-center text-[10.5px] leading-tight">
             <thead>
-              {level === '4am' ? (
-                <>
-                  <tr className="bg-[#f0fdf4] text-gray-900 font-black">
-                    <th rowSpan={2} className="border border-black p-1 w-[7%] text-center">الأشهر</th>
-                    <th rowSpan={2} className="border border-black p-1 w-[9%] text-center">الأسابيع</th>
-                    <th rowSpan={2} className="border border-black p-1 w-[12%] text-center bg-[#e5f7f3] text-[#075e57]">الميدان</th>
-                    <th rowSpan={2} className="border border-black p-1 w-[14%] text-center bg-[#fff1d6] text-[#8a5a00]">المقطع التعلمي</th>
-                    <th rowSpan={2} className="border border-black p-1 w-[15%] text-center">المورد المعرفي</th>
-                    <th colSpan={2} className="border border-black p-1 w-[36%] text-center bg-[#ecfdf5] text-emerald-950 font-black">سير الحصص</th>
-                    <th rowSpan={2} className="border border-black p-1 w-[7%] text-center">النسبة</th>
-                  </tr>
-                  <tr className="bg-[#f8fafc] text-gray-800 font-bold">
-                    <th className="border border-black p-1 w-[18%] text-center">الحصة الأولى</th>
-                    <th className="border border-black p-1 w-[18%] text-center">الحصة الثانية</th>
-                  </tr>
-                </>
-              ) : (
                 <>
                   <tr className="bg-[#f0f0f0]">
                     <th colSpan={8} className="border border-[#b8dcd6] p-2 text-sm font-black bg-[#dff6f0] text-[#075e57]">
@@ -597,11 +558,11 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
                     <th className="border border-black p-1 w-[8%]">النسبة</th>
                   </tr>
                 </>
-              )}
             </thead>
             <tbody>
               {page.map((row, i) => {
-                const weekDisplay = row.week ? `${row.week} (${row.dates})` : (row.dates || '—');
+                const displayWeek = row.weekInMonth ?? row.week;
+                const weekDisplay = displayWeek ? `${displayWeek}${row.dates ? ` (${row.dates})` : ''}` : (row.dates || '—');
 
                 // Full-width holiday row (e.g. Winter / Spring vacation spanning the sessions)
                 const isFullWeekHoliday = row.isHoliday && (
@@ -624,7 +585,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
                       </td>
                       <td className="border border-black p-1 align-middle">
                         <div className="flex flex-col items-center justify-center leading-tight">
-                          {row.week && <span className="font-black text-[11px] text-amber-950">{row.week}</span>}
+                          {displayWeek && <span className="font-black text-[11px] text-amber-950">{displayWeek}</span>}
                           <span 
                             contentEditable 
                             suppressContentEditableWarning 
@@ -671,7 +632,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
                       </td>
                       <td className="border border-black p-1 align-middle">
                         <div className="flex flex-col items-center justify-center leading-tight">
-                          {row.week && <span className="font-black text-[11px] text-emerald-950">{row.week}</span>}
+                          {displayWeek && <span className="font-black text-[11px] text-emerald-950">{displayWeek}</span>}
                           <span 
                             contentEditable 
                             suppressContentEditableWarning 
@@ -756,7 +717,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
                     </td>
                     <td className="border border-black p-1 align-middle">
                       <div className="flex flex-col items-center justify-center leading-tight">
-                        {row.week && <span className="font-black text-[11px] text-gray-900">{row.week}</span>}
+                        {displayWeek && <span className="font-black text-[11px] text-gray-900">{displayWeek}</span>}
                         <span 
                           contentEditable 
                           suppressContentEditableWarning 
@@ -811,7 +772,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
                       contentEditable 
                       suppressContentEditableWarning 
                       onBlur={(e) => handleCellBlur(row.id, 'session1', e.currentTarget.textContent || '')}
-                      className="border border-black p-1.5 text-right font-medium align-middle editable-cell outline-none text-gray-900 leading-normal"
+                      className="border border-black p-1.5 text-right font-medium align-middle editable-cell outline-none text-gray-900 leading-normal whitespace-pre-line"
                     >
                       {(row.session1 || '').trim() || (row.taqwim ? `تقويم: ${row.taqwim}` : '—')}
                     </td>
@@ -819,7 +780,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
                       contentEditable 
                       suppressContentEditableWarning 
                       onBlur={(e) => handleCellBlur(row.id, 'session2', e.currentTarget.textContent || '')}
-                      className={`border border-black p-1.5 text-right font-medium align-middle editable-cell outline-none leading-normal ${row.isHoliday ? 'bg-amber-100/70 font-black text-amber-900 text-center' : 'text-gray-900'}`}
+                      className={`border border-black p-1.5 text-right font-medium align-middle editable-cell outline-none leading-normal whitespace-pre-line ${row.isHoliday ? 'bg-amber-100/70 font-black text-amber-900 text-center' : 'text-gray-900'}`}
                     >
                       {(row.session2 || '').trim() || (row.taqwim ? `تقويم: ${row.taqwim}` : '—')}
                     </td>
@@ -844,18 +805,6 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
             aria-label="التدرج السنوي للطباعة"
           >
             <thead>
-              {level === '4am' ? (
-                <tr className="bg-[#f0fdf4] text-gray-900 font-black">
-                  <th className="border border-black p-1">الأشهر</th>
-                  <th className="border border-black p-1">الأسابيع</th>
-                  <th className="border border-black p-1 bg-[#e5f7f3] text-[#075e57]">الميدان</th>
-                  <th className="border border-black p-1 bg-[#fff1d6] text-[#8a5a00]">المقطع التعلمي</th>
-                  <th className="border border-black p-1">المورد المعرفي</th>
-                  <th className="border border-black p-1">الحصة الأولى</th>
-                  <th className="border border-black p-1">الحصة الثانية</th>
-                  <th className="border border-black p-1">النسبة</th>
-                </tr>
-              ) : (
                 <>
                   <tr className="bg-[#dff6f0] text-[#075e57] font-black">
                     <th colSpan={8} className="border border-[#b8dcd6] p-2 text-center">
@@ -873,11 +822,10 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
                     <th className="border border-black p-1">النسبة</th>
                   </tr>
                 </>
-              )}
             </thead>
             <tbody>
               {page.map((row, i) => {
-                const weekDisplay = row.week ? String(row.week) : '—';
+                const weekDisplay = row.weekInMonth != null ? String(row.weekInMonth) : row.week ? String(row.week) : '—';
                 const holidayText = row.holidayLabel || row.session1 || row.session2 || 'عطلة';
                 // في نسخة الطباعة كل عطلة صف واحد كامل، حتى لا تدخل أي خلية عربية داخل تقسيم الصفوف.
                 const isFullWeekHoliday = !!row.isHoliday;
@@ -896,7 +844,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
                   return (
                     <tr key={`print-exam-${row.id || i}`}>
                       <td colSpan={8} className="distribution-print-exam border border-black p-2">
-                        {row.month} — {weekDisplay} — {row.dates || '—'} — {row.session1 || row.mawrid || 'إختبارات الفصل'}
+                        {row.month} — {weekDisplay} — {row.dates || '—'} — {row.session1 || row.mawrid || 'إختبارات الفصل'}{row.percent ? ` — ${row.percent}` : ''}
                       </td>
                     </tr>
                   );
@@ -906,12 +854,12 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
                 return (
                   <tr key={`print-row-${row.id || i}`}>
                     <td className={`${cellBase}`}>{row.month || '—'}</td>
-                    <td className={`${cellBase}`}>{row.dates || '—'}{row.week ? ` — ${row.week}` : ''}</td>
+                    <td className={`${cellBase}`}>{row.dates || '—'}{row.weekInMonth != null ? ` — ${row.weekInMonth}` : row.week ? ` — ${row.week}` : ''}</td>
                     <td className={`${cellBase} bg-[#e5f7f3]/70 text-[#075e57] font-bold`}>{row.midan || '—'}</td>
                     <td className={`${cellBase} bg-[#fff1d6]/70 text-[#8a5a00] font-bold`}>{row.maqta || '—'}</td>
                     <td className={`${cellBase} font-bold text-gray-900`}>{row.mawrid || '—'}</td>
-                    <td className={`${cellBase} text-right`}>{(row.session1 || '').trim() || (row.taqwim ? `تقويم: ${row.taqwim}` : '—')}</td>
-                    <td className={`${cellBase} text-right`}>{(row.session2 || '').trim() || (row.taqwim ? `تقويم: ${row.taqwim}` : '—')}</td>
+                    <td className={`${cellBase} text-right whitespace-pre-line`}>{(row.session1 || '').trim() || (row.taqwim ? `تقويم: ${row.taqwim}` : '—')}</td>
+                    <td className={`${cellBase} text-right whitespace-pre-line`}>{(row.session2 || '').trim() || (row.taqwim ? `تقويم: ${row.taqwim}` : '—')}</td>
                     <td className={`${cellBase} font-black`}>{(row as any).percent || (row.isHoliday ? 'عطلة' : '—')}</td>
                   </tr>
                 );
@@ -920,7 +868,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
           </table>
 
           {/* Footer with Signatures on the last page or when explicitly rendered */}
-          {(pageIndex === pages.length - 1 || level !== '4am') && (
+          {(
             <div className="mt-6 flex justify-between items-start pt-2 px-8 font-black text-[12px] text-gray-900">
               <div className="text-center w-48">
                 <p className="border-b-2 border-black pb-1.5">إمضاء الأستاذ (ة)</p>
@@ -975,16 +923,16 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
         
         <div>
           <h2 className="text-xl font-bold text-[#c2185b]">
-            التدرج السنوي - {level === "4am" ? "4" : level === "3am" ? "3" : level === "2am" ? "2" : "1"} متوسط (الوثيقة الرسمية)
+            التدرج السنوي - {level === "4am" ? "4" : level === "3am" ? "3" : level === "2am" ? "2" : "1"} متوسط {level === '2am' ? '(وفق النموذج المرفق)' : '(الوثيقة الرسمية)'}
           </h2>
           <p className="text-sm text-gray-500 font-medium mt-1">
-            التدرج مرتبط مباشرة بقاعدة المنهاج الوزارية، وتعديل التواريخ محسوب وفق الدخول المدرسي والعطل والاختبارات.
+            {level === '2am' ? 'منقول من النموذج المرفق للموسم 2026–2027. تُعرض أسابيع الشهر كما وردت في النموذج.' : 'التدرج مرتبط مباشرة بقاعدة المنهاج الوزارية، وتعديل التواريخ محسوب وفق الدخول المدرسي والعطل والاختبارات.'}
           </p>
         </div>
         
         {/* Quick Date Display & Controls */}
         <div className="flex flex-wrap items-center gap-2 border-r pr-4">
-          <div 
+          {level !== '2am' && <div
             onClick={() => setIsCalendarModalOpen(true)}
             className="flex flex-col gap-0.5 border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 rounded-xl px-3 py-1.5 cursor-pointer transition shadow-2xs group"
             title="انقر لفتح نافذة تعديل التواريخ والرزنامة حسب الدخول المدرسي والعطل واختبارات"
@@ -996,7 +944,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
             <div className="text-xs font-black text-emerald-950 font-mono">
               {calendarSettings.startDate || 'غير محدد'}
             </div>
-          </div>
+          </div>}
 
           <div className="flex flex-col gap-1">
             <label className="text-xs font-bold text-gray-500">اتجاه الورقة</label>
@@ -1014,7 +962,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
         {/* Main Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
           {/* Highlighted Calendar Button */}
-          <button 
+          {level !== '2am' && <button
             type="button"
             onClick={() => setIsCalendarModalOpen(true)}
             className="flex items-center gap-2 px-3.5 py-2 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white rounded-xl font-black hover:from-emerald-700 hover:to-teal-800 shadow-sm transition cursor-pointer"
@@ -1025,7 +973,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
             <span className="bg-white/20 text-white text-[11px] px-1.5 py-0.2 rounded-full font-sans font-bold">
               عطل / اختبارات
             </span>
-          </button>
+          </button>}
 
           <button 
             onClick={handleResetToOfficial} 
@@ -1053,7 +1001,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
       </div>
 
       {/* Interactive Quick Calendar & School Year Master Bar */}
-      <div className="bg-gradient-to-r from-[#f0fdf9] via-[#f7fcfb] to-[#ecfdf5] border-2 border-emerald-300/80 rounded-2xl p-4 shadow-xs space-y-3.5 print:hidden">
+      {level !== '2am' && <div className="bg-gradient-to-r from-[#f0fdf9] via-[#f7fcfb] to-[#ecfdf5] border-2 border-emerald-300/80 rounded-2xl p-4 shadow-xs space-y-3.5 print:hidden">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-emerald-200/60 pb-3">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-xs">
@@ -1184,6 +1132,13 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
           </span>
         </div>
       </div>
+
+      }
+      {level === '2am' && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-900 print:hidden">
+          هذا التدرج خاص بالموسم 2026–2027 كما في الصورتين؛ أرقام الأسابيع داخل كل شهر. لم يحدد المصدر تواريخ أسبوعية، لذا تُترك فارغة ويمكن تعديلها يدوياً. تواريخ العطل تخص الموسم المذكور فقط.
+        </div>
+      )}
 
       {/* Warning banner if empty session exists */}
       {pages.flat().some(row => !row.session1 && !row.session2 && !row.isHoliday) && (

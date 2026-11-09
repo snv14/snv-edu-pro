@@ -20,6 +20,7 @@ import {
 import { MemoConfig } from "../types";
 import { LogEntry, getBaseSection } from "../components/DailyLogbook";
 import { safeHtml2Canvas } from "./html2canvasSanitizer";
+import { splitLogbookTime } from "./logbookPageTemplate";
 
 const createParagraph = (text: string, bold = false, color = "000000", size = 20, alignment: any = AlignmentType.CENTER) => {
   return new Paragraph({
@@ -344,7 +345,8 @@ export const generateLogbookDocx = async (
   holidays: any[] = [],
   assignedLevels: string[] = [],
   orientation: 'portrait' | 'landscape' = 'portrait',
-  paginatedPages?: LogEntry[][]
+  paginatedPages?: LogEntry[][],
+  pageTemplate: 'standard' | 'teal' = 'standard'
 ): Promise<Blob> => {
   // 1. استخراج الختم الرسمي وكافة الرسومات البيداغوجية والزخارف كصور PNG عالية الدقة
   const [stampPngBytes, scienceLeftPngBytes, scienceRightPngBytes, cornerLeavesPngBytes] = await Promise.all([
@@ -574,6 +576,39 @@ export const generateLogbookDocx = async (
   // ==========================================
   const contentSections = pages.map((pageRows, pageIdx) => {
     const pageChildren: any[] = [];
+    if (pageTemplate === 'teal') {
+      const border = { style: BorderStyle.SINGLE, size: 4, color: "8AC1C5" };
+      const cells = [13, 6, 6, 9, 45, 21];
+      const header = new TableRow({ tableHeader: true, children: [
+        createCell('التاريخ\nمن   إلى', true, 'DEEFF1', 1, 1, 18, AlignmentType.CENTER, cells[0]),
+        createCell('الوقت\nمن', true, 'DEEFF1', 1, 1, 18, AlignmentType.CENTER, cells[1]),
+        createCell('الوقت\nإلى', true, 'DEEFF1', 1, 1, 18, AlignmentType.CENTER, cells[2]),
+        createCell('القسم', true, 'DEEFF1', 1, 1, 18, AlignmentType.CENTER, cells[3]),
+        createCell('سير الحصة و الأنشطة', true, 'DEEFF1', 1, 1, 18, AlignmentType.CENTER, cells[4]),
+        createCell('ملاحظات', true, 'DEEFF1', 1, 1, 18, AlignmentType.CENTER, cells[5]),
+      ] });
+      const body = pageRows.map(log => {
+        const previous = findPreviousComparableCurriculumLog(logs, logs.findIndex(item => item.id === log.id), log);
+        const [from, to] = splitLogbookTime(log.time);
+        return new TableRow({ cantSplit: true, children: [
+          createCell(`${log.dayName || ''}\n${log.dateStr || ''}`.trim(), false, 'FFFFFF', 1, 1, 16, AlignmentType.CENTER, cells[0]),
+          createCell(from, false, 'FFFFFF', 1, 1, 16, AlignmentType.CENTER, cells[1]),
+          createCell(to, false, 'FFFFFF', 1, 1, 16, AlignmentType.CENTER, cells[2]),
+          createCell(log.section || '', true, 'FFFFFF', 1, 1, 16, AlignmentType.CENTER, cells[3]),
+          createCell(getExportLessonContent(log, previous), false, 'FFFFFF', 1, 1, 16, AlignmentType.RIGHT, cells[4]),
+          createCell(log.note || '', false, 'FFFFFF', 1, 1, 16, AlignmentType.RIGHT, cells[5]),
+        ] });
+      });
+      return {
+        properties: { page: { size: { width: pageWidthTwips, height: pageHeightTwips, orientation: orientation === 'landscape' ? PageOrientation.LANDSCAPE : PageOrientation.PORTRAIT }, margin: pageMargin } },
+        children: [
+          createParagraph('التاريخ: ........................                         الموافق لـ: ........................', true, '255960', 20),
+          new Table({ visuallyRightToLeft: true, width: { size: 100, type: WidthType.PERCENTAGE }, borders: { top: border, bottom: border, left: border, right: border, insideHorizontal: dashedBorder, insideVertical: border }, rows: [header, ...body] }),
+          new Paragraph({ text: '', spacing: { after: 240 } }),
+          createParagraph('المدير(ة)                               الأستاذ(ة)                               المفتش(ة)', true, '000000', 20),
+        ],
+      };
+    }
 
     // 1. الترويسة العلوية الرسمية متضمنة الرسومات البيداغوجية والشعارات العلمية
     pageChildren.push(

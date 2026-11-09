@@ -15,5 +15,5 @@ export function collectPreservedRows(archived: LogEntry[], current: LogEntry[]):
 export function preservedRowsInPeriod(rows: LogEntry[], start: string, period: string): LogEntry[] {
   const end = getLogbookPeriodEnd(start, period);
   return rows.filter(row => isLogbookRowOnOrAfter(row.dateStr || '', start)
-    && (row.dateStr.match(/\d{4}-\d{2}-\d{2}/g) || []).every(date => date < end));
+    && (row.dateStr.match(/\d{4}-\d{2}-\d{2}/g) || [] as string[]).every(date => date < end));
 }

@@ -189,6 +189,9 @@ export function recalculateDistributionRows(
   const startSunday = new Date(`${settings.startDate}T12:00:00`);
 
   return baseRows.map((row, index) => {
+    // The supplied second-year reference only specifies weeks within months.
+    // Do not invent dates or overwrite its holidays, exams, or mixed sessions.
+    if (row.referenceMonthlySchedule) return { ...row };
     // رقم الأسبوع يبدأ من 1
     const weekNum = typeof row.week === 'number' ? row.week : (index + 1);
     const weekIndex = weekNum - 1;
@@ -286,6 +289,9 @@ export function syncCalendarToAllLevels(
 
     const levels: ('1am' | '2am' | '3am' | '4am')[] = ['1am', '2am', '3am', '4am'];
     for (const lvl of levels) {
+      // The 2026–2027 second-year reference is monthly, not calendar-generated.
+      // Leave even older saved rows intact until the migration can back them up.
+      if (lvl === '2am') continue;
       const prevData = existing[lvl] || {};
       const baseRows = (Array.isArray(prevData.items) && prevData.items.length > 0)
         ? prevData.items
