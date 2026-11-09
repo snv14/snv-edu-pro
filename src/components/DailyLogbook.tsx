@@ -877,15 +877,25 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
         if (typeof parsed.startDate === 'string') return parsed.startDate;
       }
     } catch {}
+    try {
+      const stored = JSON.parse(localStorage.getItem('algeria_sciences_annual_dist_exact_user_v1') || '{}');
+      if (stored.globalCalendarSettings?.startDate) return stored.globalCalendarSettings.startDate;
+      if (stored['1am']?.startDate) return stored['1am'].startDate;
+    } catch {}
     return getDefaultNotebookStartDate(config.schoolYear || '2026-2027') || formatDateToIsoString(new Date());
   });
 
-  // The projected curriculum timeline starts at school entry, independently of
-  // the period the teacher chooses to display.
+  // The projected curriculum timeline starts at school entry, aligned with
+  // the official annual distribution calendar.
   const [sequenceStartDate, setSequenceStartDate] = useState<string>(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('daftar_table_v2027') || '{}');
       if (saved.sequenceStartDate) return saved.sequenceStartDate;
+    } catch {}
+    try {
+      const stored = JSON.parse(localStorage.getItem('algeria_sciences_annual_dist_exact_user_v1') || '{}');
+      if (stored.globalCalendarSettings?.startDate) return stored.globalCalendarSettings.startDate;
+      if (stored['1am']?.startDate) return stored['1am'].startDate;
     } catch {}
     return getDefaultNotebookStartDate(config.schoolYear || '2026-2027');
   });
@@ -896,7 +906,18 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
     } catch { return []; }
   });
 
-  // تاريخ البداية مستقل عن التدرج السنوي؛ لا يستمع الدفتر إلى أحداث الرزنامة ولا يكتب إليها. 
+  // مزامنة رزنامة الدفتر اليومي تلقائياً عند تحديث الرزنامة في التدرج السنوي
+  useEffect(() => {
+    const handleCalendarUpdate = (e: any) => {
+      const newStart = e.detail?.startDate;
+      if (newStart) {
+        setStartDate((prev) => (prev ? prev : newStart));
+        setSequenceStartDate(newStart);
+      }
+    };
+    window.addEventListener('school-calendar-updated', handleCalendarUpdate);
+    return () => window.removeEventListener('school-calendar-updated', handleCalendarUpdate);
+  }, []);
 
   // Generated Daily Log Entries
   const [rows, setRows] = useState<LogEntry[]>(() => {

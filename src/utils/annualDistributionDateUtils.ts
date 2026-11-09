@@ -264,10 +264,21 @@ export function recalculateDistributionRows(
  * مزامنة تاريخ الدخول والعطل مع دفتر النصوص في التخزين المحلي
  */
 /**
- * توافق خلفي فقط: دفتر النصوص مستقل عن التدرج السنوي.
- * لا تغيّر هذه الدالة بيانات الدفتر أو رزنامته، حتى لو استدعتها أجزاء قديمة من المنصة.
+ * مزامنة تاريخ الدخول والعطل والرزنامة الوزارية مع الدفتر اليومي في التخزين المحلي
  */
-export function syncCalendarToDailyLogbook(_startDate: string, _settings: SchoolCalendarSettings): boolean {
+export function syncCalendarToDailyLogbook(startDate: string, _settings: SchoolCalendarSettings): boolean {
+  if (typeof window === 'undefined' || !window.localStorage) return true;
+  try {
+    const raw = localStorage.getItem('daftar_table_v2027');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      parsed.sequenceStartDate = startDate;
+      if (!parsed.startDate || parsed.startDate < startDate) {
+        parsed.startDate = startDate;
+      }
+      localStorage.setItem('daftar_table_v2027', JSON.stringify(parsed));
+    }
+  } catch {}
   return true;
 }
 

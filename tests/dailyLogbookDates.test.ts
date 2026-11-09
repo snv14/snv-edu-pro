@@ -109,3 +109,74 @@ test('mergeConsecutiveGroupEntries and splitMergedGroupEntries work symmetricall
   assert.equal(split[0].section, '1م1 (فوج 1)');
   assert.equal(split[1].section, '1م1 (فوج 2)');
 });
+
+test('daily logbook steps strictly respect the official annual distribution chronological sequence for all 4 levels', async () => {
+  const { buildPedagogicalStepsForLevel } = await import('../src/utils/dailyLogbookGenerator');
+  const {
+    OFFICIAL_1AM_DISTRIBUTION,
+    OFFICIAL_2AM_DISTRIBUTION,
+    OFFICIAL_3AM_DISTRIBUTION,
+    OFFICIAL_4AM_DISTRIBUTION,
+  } = await import('../src/data/officialAnnualDistributionData');
+
+  // Level 1AM
+  const steps1am = buildPedagogicalStepsForLevel('1م', 1);
+  assert.match(steps1am[0].fullContent, /التعارف/);
+  assert.match(steps1am[1].fullContent, /تقويم تشخيصي/);
+  assert.equal(steps1am[2].fullContent, OFFICIAL_1AM_DISTRIBUTION[1].session1);
+  assert.equal(steps1am[3].fullContent, OFFICIAL_1AM_DISTRIBUTION[1].session2);
+  assert.equal(steps1am[4].fullContent, OFFICIAL_1AM_DISTRIBUTION[2].session1);
+  assert.equal(steps1am[6].fullContent, OFFICIAL_1AM_DISTRIBUTION[3].session1);
+  assert.match(steps1am[6].fullContent, /مصدر الأغذية/);
+
+  // Level 2AM
+  const steps2am = buildPedagogicalStepsForLevel('2م', 1);
+  assert.match(steps2am[0].fullContent, /التعارف/);
+  assert.match(steps2am[1].fullContent, /تقويم تشخيصي/);
+  assert.equal(steps2am[2].fullContent, OFFICIAL_2AM_DISTRIBUTION[1].session1); // W2s1
+  assert.match(steps2am[2].fullContent, /معاينة وسط حي قريب/);
+  assert.equal(steps2am[3].fullContent, OFFICIAL_2AM_DISTRIBUTION[1].session2); // W2s2
+  assert.match(steps2am[3].fullContent, /التمييز بين أوساط حية مختلفة/);
+  assert.equal(steps2am[4].fullContent, OFFICIAL_2AM_DISTRIBUTION[2].session1); // W3s1
+  assert.match(steps2am[4].fullContent, /التفاعلات بين العناصر الحية/);
+
+  // Level 3AM
+  const steps3am = buildPedagogicalStepsForLevel('3م', 1);
+  assert.match(steps3am[0].fullContent, /التعارف/);
+  assert.equal(steps3am[2].fullContent, OFFICIAL_3AM_DISTRIBUTION[1].session1);
+  assert.match(steps3am[2].fullContent, /أصف آثار الزلزال/);
+  assert.equal(steps3am[3].fullContent, OFFICIAL_3AM_DISTRIBUTION[1].session2);
+  assert.match(steps3am[3].fullContent, /خصائص الزلازل/);
+
+  // Level 4AM
+  const steps4am = buildPedagogicalStepsForLevel('4م', 1);
+  assert.match(steps4am[0].fullContent, /التعارف/);
+  assert.equal(steps4am[2].fullContent, OFFICIAL_4AM_DISTRIBUTION[1].session1);
+  assert.match(steps4am[2].fullContent, /التحولات التي تطرأ على إحدى مكونات الخبز/);
+  assert.equal(steps4am[3].fullContent, OFFICIAL_4AM_DISTRIBUTION[1].session2);
+  assert.match(steps4am[3].fullContent, /أنبوب|المعدة/);
+});
+
+test('multi-level timetable progresses through the respective annual distributions concurrently', () => {
+  const multiGrid: TimetableGridRow[] = [
+    { id: '1', time: '08:00 - 09:00', cells: { الأحد: '2م1', الإثنين: '3م1', الثلاثاء: '4م1' } },
+  ];
+  const rows = generateLogbookEntries({
+    startDate: '2026-09-20',
+    gridRows: multiGrid,
+    period: 'أسبوعين',
+  });
+
+  const row2am = rows.find(r => r.section === '2م1');
+  const row3am = rows.find(r => r.section === '3م1');
+  const row4am = rows.find(r => r.section === '4م1');
+
+  assert.ok(row2am && row3am && row4am);
+  assert.equal(row2am.level, '2م');
+  assert.equal(row3am.level, '3م');
+  assert.equal(row4am.level, '4م');
+  assert.match(row2am.content, /التعارف/);
+  assert.match(row3am.content, /التعارف/);
+  assert.match(row4am.content, /التعارف/);
+});
+

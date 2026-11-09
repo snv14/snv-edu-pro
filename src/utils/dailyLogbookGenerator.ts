@@ -1,4 +1,12 @@
 import { LogEntry, TimetableGridRow, HolidayEntry } from '../components/DailyLogbook';
+import {
+  OFFICIAL_1AM_DISTRIBUTION,
+  OFFICIAL_2AM_DISTRIBUTION,
+  OFFICIAL_3AM_DISTRIBUTION,
+  OFFICIAL_4AM_DISTRIBUTION,
+  type OfficialAnnualDistributionRow,
+} from '../data/officialAnnualDistributionData';
+import { ANNUAL_STORAGE_KEY } from './annualDistributionDateUtils';
 import { DAILY_LOGBOOK_PROGRAM_1AM, type DailyLogbookProgramItem } from '../data/dailyLogbookProgram1am';
 import { DAILY_LOGBOOK_PROGRAM_2AM } from '../data/dailyLogbookProgram2am';
 import { DAILY_LOGBOOK_PROGRAM_3AM } from '../data/dailyLogbookProgram3am';
@@ -164,7 +172,7 @@ export interface PedagogicalStep {
   isPractical?: boolean;
 }
 
-const LEVEL_PROGRAMS: Record<LogbookLevel, DailyLogbookProgramItem[]> = {
+export const LEVEL_PROGRAMS: Record<LogbookLevel, DailyLogbookProgramItem[]> = {
   '1م': DAILY_LOGBOOK_PROGRAM_1AM,
   '2م': DAILY_LOGBOOK_PROGRAM_2AM,
   '3م': DAILY_LOGBOOK_PROGRAM_3AM,
@@ -172,8 +180,29 @@ const LEVEL_PROGRAMS: Record<LogbookLevel, DailyLogbookProgramItem[]> = {
 };
 
 /**
- * بناء التسلسل الفعلي لأنشطة التدرج السنوي وفق المستوى والميدان والمقطع والمورد،
- * مع توزيع كل نشاط على عدد الحصص المطلوبة له قبل الانتقال إلى النشاط التالي.
+ * الحصول على صفوف التدرج السنوي المعتمد للمستوى (من التخزين المخصص إن وجد، أو من التدرج الوزاري الرسمي).
+ */
+export function getAnnualDistributionRowsForLevel(level: LogbookLevel): OfficialAnnualDistributionRow[] {
+  const levelKey = level === '1م' ? '1am' : level === '2م' ? '2am' : level === '3م' ? '3am' : '4am';
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      const stored = JSON.parse(localStorage.getItem(ANNUAL_STORAGE_KEY) || '{}');
+      if (stored[levelKey]?.items && Array.isArray(stored[levelKey].items) && stored[levelKey].items.length > 0) {
+        return stored[levelKey].items;
+      }
+    } catch {}
+  }
+  if (level === '1م') return OFFICIAL_1AM_DISTRIBUTION;
+  if (level === '2م') return OFFICIAL_2AM_DISTRIBUTION;
+  if (level === '3م') return OFFICIAL_3AM_DISTRIBUTION;
+  return OFFICIAL_4AM_DISTRIBUTION;
+}
+
+/**
+ * بناء التسلسل الفعلي لأنشطة الدفتر اليومي بالربط التام والمباشر مع التدرج السنوي الرسمي:
+ * - يحترم بدقة الترتيب الزمني للتدرج (أسبوع بأسبوع، حصة أولى ثم حصة ثانية).
+ * - يضمن التطابق الحرفي لعناوين الميادين والمقاطع والموارد والأنشطة والتقويمات.
+ * - يوزع النشاط على عدد الحصص المطلوبة له قبل الانتقال إلى النشاط التالي.
  */
 export function buildPedagogicalStepsForLevel(
   level: LogbookLevel,
@@ -181,83 +210,102 @@ export function buildPedagogicalStepsForLevel(
   activitySessionsMap?: Record<string, number>
 ): PedagogicalStep[] {
   const steps: PedagogicalStep[] = [];
+  const distRows = getAnnualDistributionRowsForLevel(level);
 
-  // 1. أسبوع الافتتاح: التعارف والصحة المدرسية
-  const introActivities = [
-    'التعارف بين الأستاذ والتلاميذ وتقديم برنامج مادة علوم الطبيعة والحياة وطريقة العمل وتنظيم الكراس',
-    'قواعد الأمن والنظافة والمحافظة على الصحة المدرسية والوقاية داخل المخبر العلمي',
-  ];
-
-  introActivities.forEach((act, actIdx) => {
-    steps.push({
-      sourceLearningUnitId: `daily_logbook_intro_${level}_${actIdx + 1}`,
-      midan: 'التحضير للدخول المدرسي',
-      maqta: 'الافتتاح والتعارف',
-      mawrid: 'التعارف والصحة المدرسية',
-      ta3alom: 'التعارف بين الأستاذ والتلاميذ، تقديم المادة، وقواعد الأمن والنظافة والصحة المدرسية.',
-      activityText: act,
-      fullContent: act,
-      sessionIndexInActivity: 1,
-      totalSessionsForActivity: 1,
-      taqwim: 'التعرف على التلاميذ والتذكير بقواعد النظافة والأمن والانضباط داخل المخبر والمؤسسة.',
-      isIntroductory: true,
-      isPractical: actIdx === 1,
-    });
+  // استبعاد العطل المدرسية من قائمة الحصص التعلمية الفعلية (العطل تُدار عبر الرزنامة وجدول التوقيت)
+  const activeRows = distRows.filter((r) => {
+    const isHoliday = Boolean(
+      r.isHoliday ||
+      /عطلة/.test(r.session1 || '') ||
+      /عطلة/.test(r.mawrid || '') ||
+      /عطلة/.test(r.maqta || '')
+    );
+    return !isHoliday;
   });
 
-  // 2. وحدات المنهاج والتدرج السنوي الرسمي
-  const rawUnits = LEVEL_PROGRAMS[level] || LEVEL_PROGRAMS['1م'];
+  for (const r of activeRows) {
+    const weekNum = r.week || 1;
+    const isWeek1 = weekNum === 1 || weekNum === '1';
 
-  rawUnits.forEach((unit) => {
-    const validActivities = (unit.activities || []).filter((a) => Boolean(a && a.trim()));
-    const activitiesToUse = validActivities.length > 0 ? validActivities : [unit.ta3alom || unit.mawrid || 'نشاط تعلمي'];
+    const sessions = [
+      { text: r.session1, num: 1 },
+      { text: r.session2, num: 2 },
+    ];
 
-    activitiesToUse.forEach((act) => {
-      // عدد الحصص المخصصة لهذا النشاط
-      const isLab = /تحليل|الكشف|تجربة|مخبر|تشريح|ملاحظة مجهرية|فصل|كواشف|هضم كيميائي|البلعمة/i.test(act);
-      const configuredSessions = activitySessionsMap?.[act] || sessionsPerActivity;
-      const totalSessions = Math.max(1, configuredSessions || 1);
+    for (const s of sessions) {
+      if (!s.text || !s.text.trim()) continue;
+      let text = s.text.trim();
 
-      for (let sIdx = 1; sIdx <= totalSessions; sIdx++) {
-        let sessionContent = act;
-        if (totalSessions > 1) {
+      // توحيد مصطلح التعارف البيداغوجي لضمان التطابق مع التسمية الرسمية
+      if (isWeek1 && /تعارف/.test(text) && !/التعارف/.test(text)) {
+        text = text.replace(/تعارف/, 'التعارف');
+      }
+
+      // تصنيف الحصة البيداغوجية
+      const isIntroductory = isWeek1 && (/التعارف|تعارف|استقبال|توجيهات/.test(text) || Boolean(r.isIntroductory));
+      const isReview = Boolean(
+        r.isRemediation ||
+        /معالجة بيداغوجية|إدماج|ادماج|استدراك|حل الوضعية الانطلاقية|تصحيح الاختبارات/.test(text) ||
+        /معالجة|إدماج/.test(r.mawrid || '')
+      );
+      const isLab = /تحليل|الكشف|تجربة|مخبر|تشريح|ملاحظة مجهرية|فصل|كواشف|هضم كيميائي|البلعمة|مجهر|معاينة/i.test(text);
+      const isExam = Boolean(r.isExam || /إ?ختبار|فرض/.test(text));
+
+      // استخراج المشكلة المطروحة إن وجدت في نص الحصة
+      let moshkila = (r as any).moshkila || '';
+      if (!moshkila && /المشكلة(?:\s+المطروحة)?\s*:\s*/.test(text)) {
+        const m = text.match(/المشكلة(?:\s+المطروحة)?\s*:\s*([^–\-]+?)(?:[–\-]\s*(?:النشاط|المورد)|$)/i);
+        if (m) moshkila = m[1].trim();
+      }
+
+      // الحصص الافتتاحية والتقويمية وحصص المعالجة لا تُمدد لعدة حصص متتالية
+      const configuredSessions = (isIntroductory || isReview || isExam)
+        ? 1
+        : Math.max(1, (activitySessionsMap?.[text] || sessionsPerActivity || 1));
+
+      for (let sIdx = 1; sIdx <= configuredSessions; sIdx++) {
+        let fullContent = text;
+        if (configuredSessions > 1) {
           if (sIdx === 1) {
-            sessionContent = `${act} (الحصة 1: الانطلاق والتقصي)`;
+            fullContent = `${text} (الحصة 1: الانطلاق والتقصي)`;
           } else {
-            sessionContent = `متابعة ${act} (الحصة ${sIdx}: ${sIdx === totalSessions ? 'الاستنتاج والتركيب' : 'المتابعة والتقصي'})`;
+            fullContent = `متابعة ${text} (الحصة ${sIdx}: ${sIdx === configuredSessions ? 'الاستنتاج والتركيب' : 'المتابعة والتقصي'})`;
           }
         }
 
+        const sourceId = r.sourceLearningUnitId || r.id || `${level}_official_w${weekNum}_s${s.num}`;
+
         steps.push({
-          sourceLearningUnitId: unit.sourceLearningUnitId,
-          midan: unit.midan,
-          maqta: unit.maqta,
-          mawrid: unit.mawrid,
-          ta3alom: unit.ta3alom,
-          moshkila: unit.moshkila,
-          activityText: act,
-          fullContent: sessionContent,
+          sourceLearningUnitId: sourceId,
+          midan: r.midan || 'علوم الطبيعة والحياة',
+          maqta: r.maqta || r.mawrid || 'المقطع التعلمي',
+          mawrid: r.mawrid || r.learningUnit || 'المورد التعلمي',
+          ta3alom: r.learningUnit || r.mawrid || 'تعلم المورد',
+          moshkila,
+          activityText: text,
+          fullContent,
           sessionIndexInActivity: sIdx,
-          totalSessionsForActivity: totalSessions,
-          taqwim: unit.taqwim,
+          totalSessionsForActivity: configuredSessions,
+          taqwim: r.taqwim || 'تقويم تكويني ومتابعة الإنجاز',
+          isIntroductory,
+          isReview,
           isPractical: isLab,
         });
       }
-    });
-  });
+    }
+  }
 
-  // 3. محطة الإدماج والتقويم والمعالجة البيداغوجية
-  const reviewActivities = [
-    'تمارين إدماجية ومعالجة التعثرات البيداغوجية حول المكتسبات السابقة',
-    'تقويم المكتسبات وحل الوضعيات الإدماجية التقييمية',
+  // محطة ختامية احتياطية للإدماج والتقويم والمعالجة البيداغوجية لنهاية السنة
+  const finalReview = [
+    'تمارين إدماجية ومعالجة التعثرات البيداغوجية الشاملة حول الكفاءات الختامية للمستوى',
+    'تقويم المكتسبات وحل الوضعيات الإدماجية التقييمية وحصيلة التعلمات السنوية',
   ];
-
-  reviewActivities.forEach((act, actIdx) => {
+  finalReview.forEach((act, actIdx) => {
     steps.push({
-      sourceLearningUnitId: `daily_logbook_review_${level}_${actIdx + 1}`,
+      sourceLearningUnitId: `official_review_${level}_${actIdx + 1}`,
       midan: 'الإدماج والتقويم',
-      maqta: 'مراجعة التعلمات',
-      mawrid: 'تقويم وإدماج الموارد',
+      maqta: 'مراجعة التعلمات السنوية',
+      mawrid: 'تقويم وإدماج الموارد الشاملة',
       ta3alom: 'تثبيت المكتسبات ومعالجة الصعوبات المسجلة أثناء التعلمات.',
       activityText: act,
       fullContent: act,
@@ -265,7 +313,7 @@ export function buildPedagogicalStepsForLevel(
       totalSessionsForActivity: 1,
       taqwim: 'تقويم تشخيصي وتكويني لمعرفة مدى التحكم في التعلمات واستدراك الصعوبات.',
       isReview: true,
-      isPractical: actIdx === 1,
+      isPractical: false,
     });
   });
 
