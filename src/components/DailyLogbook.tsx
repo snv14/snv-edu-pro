@@ -109,6 +109,12 @@ function getTimeRank(timeStr: string): number {
   return TIME_RANK[timeStr] ?? 999;
 }
 
+export function getTimeMinutes(timeStr: string): number {
+  const match = (timeStr || '').match(/(\d{1,2}):(\d{2})/);
+  if (!match) return getTimeRank(timeStr);
+  return parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
+}
+
 function createEmptyDayCells(): Record<string, string> {
   return {
     الأحد: '',
@@ -223,26 +229,106 @@ export function detectLevelFromSection(sec: string): '1م' | '2م' | '3م' | '4�
 }
 
 /**
- * استخراج بيانات الفوج والقسم الأساسي:
- * يتعامل مع مختلف صياغات الأساتذة: (ف1)، (فوج 1)، ف1، فوج 1، grp 1، إلخ.
+ * توحيد تسمية القسم الأساسي وإزالة الفراغات والزوائد
  */
-export function extractGroupInfo(sec: string): { baseSection: string; groupNum?: string; rawGroup?: string; isGroup?: boolean } {
+export function normalizeBaseSection(raw: string): string {
+  let s = String(raw || '').trim();
+  s = s.replace(/([1234])\s*م\s*(\d+)/g, '$1م$2');
+  s = s.replace(/[-—–/\\+]+$/, '').trim();
+  s = s.replace(/^[-—–/\\+]+/, '').trim();
+  s = s.replace(/\(\s*\)/g, '').trim();
+  return s || raw;
+}
+
+/**
+ * استخراج بيانات الفوج والقسم الأساسي:
+ * يتعامل مع مختلف صياغات الأساتذة: (ف1)، (فوج 1)، ف1، فوج 1، grp 1، (فوج 1 + فوج 2)، إلخ.
+ */
+export function extractGroupInfo(sec: string): {
+  baseSection: string;
+  groupNum?: string;
+  rawGroup?: string;
+  isGroup?: boolean;
+  isMerged?: boolean;
+  groupNumbers?: number[];
+} {
   const clean = (sec || '').trim();
-  if (!clean) return { baseSection: 'قسم غير محدد' };
-  const match = clean.match(/(?:[-—/–\s]*\(?(?:فوج|فـ|ف|grp|group|g)\s*([1234])\)?\s*)/i);
-  if (match) {
-    const base = clean.replace(match[0], '').replace(/\(\s*\)/g, '').trim();
+  if (!clean) return { baseSection: 'قسم غير محدد', isGroup: false, isMerged: false };
+
+  // 1. فحص إذا كان القسم مدمجاً بالفعل (مثل: 1م1 (فوج 1 + فوج 2) أو 1م1 (ف1 + ف2))
+  const mergedMatch = clean.match(/(?:[-—/–\s]*\(?(?:أفواج|فوج|فـ|ف)\s*([1234أبab])\s*(?:\+|و|&|\/|مع)\s*(?:أفواج|فوج|فـ|ف)?\s*([1234أبab])\)?\s*)/i);
+  if (mergedMatch) {
+    const base = normalizeBaseSection(clean.replace(mergedMatch[0], ''));
+    const parseNum = (s: string) => {
+      const low = s.toLowerCase();
+      if (low === 'أ' || low === 'a') return 1;
+      if (low === 'ب' || low === 'b') return 2;
+      return parseInt(s, 10) || 1;
+    };
+    const g1 = parseNum(mergedMatch[1]);
+    const g2 = parseNum(mergedMatch[2]);
     return {
       baseSection: base || clean,
-      groupNum: match[1],
-      rawGroup: `ف${match[1]}`,
+      groupNum: String(g1),
+      groupNumbers: [g1, g2],
+      rawGroup: `ف${g1}+ف${g2}`,
       isGroup: true,
+      isMerged: true,
     };
   }
-  const isGenericGroup = /\b(?:فوج|فـ|ف)\b/i.test(clean);
+
+  const parseGroupNumber = (str: string): string => {
+    const low = str.toLowerCase();
+    if (low === 'أ' || low === 'a') return '1';
+    if (low === 'ب' || low === 'b') return '2';
+    return str;
+  };
+
+  // 2. إذا كانت تسمية الفوج في البداية (مثل: ف1 1م1 أو فوج 1 - 1م1)
+  const prefixMatch = clean.match(/^(?:\(?\s*(?:فوج|فـ|ف|grp|group|g)\s*([1234أبab])\s*\)?\s*[-—/–\s]*)/i);
+  if (prefixMatch) {
+    const gNum = parseGroupNumber(prefixMatch[1]);
+    const base = normalizeBaseSection(clean.replace(prefixMatch[0], ''));
+    return {
+      baseSection: base || clean,
+      groupNum: gNum,
+      rawGroup: `ف${gNum}`,
+      isGroup: true,
+      isMerged: false,
+    };
+  }
+
+  // 3. صيغة الفوج مع رقم أو حرف (مثل: 1م1 ف1، 1م1 فوج 2، 4م1 (ف1)، 1م 1 - ف2، 1م1 فوج أ)
+  const groupMatch = clean.match(/(?:[-—/–\s]*\(?\s*(?:فوج|فـ|ف|grp|group|g)\s*([1234أبab])\s*\)?\s*)/i);
+  if (groupMatch) {
+    const gNum = parseGroupNumber(groupMatch[1]);
+    const base = normalizeBaseSection(clean.replace(groupMatch[0], ''));
+    return {
+      baseSection: base || clean,
+      groupNum: gNum,
+      rawGroup: `ف${gNum}`,
+      isGroup: true,
+      isMerged: false,
+    };
+  }
+
+  // 4. وسم الفوج العام دون رقم (مثل: 1م1 فوج، 1م1 مخبر)
+  const genericMatch = clean.match(/(?:[-—/–\s]*\(?\s*(?:فوج|مخبر|عمل مخبري)\s*\)?\s*)/i);
+  if (genericMatch) {
+    const base = normalizeBaseSection(clean.replace(genericMatch[0], ''));
+    return {
+      baseSection: base || clean,
+      groupNum: '1',
+      rawGroup: 'فوج',
+      isGroup: true,
+      isMerged: false,
+    };
+  }
+
   return {
-    baseSection: clean,
-    isGroup: isGenericGroup,
+    baseSection: normalizeBaseSection(clean),
+    isGroup: false,
+    isMerged: false,
   };
 }
 
@@ -307,18 +393,26 @@ export function mergeConsecutiveGroupEntries(entries: LogEntry[]): LogEntry[] {
     const baseA = getBaseSection(a.section);
     const infoA = extractGroupInfo(a.section);
 
+    // إذا كانت الحصة مدمجة مسبقاً، نحتفظ بها كما هي دون دمج مكرر
+    if (infoA.isMerged) {
+      result.push(a);
+      continue;
+    }
+
     // إذا كانت الحصة فوجاً، نبحث عن حصة الفوج الشريك لنفس القسم في نفس الأسبوع
     let partnerIdx = -1;
-    if (infoA.isGroup || a.section.includes('ف')) {
+    if (infoA.isGroup) {
       for (let j = i + 1; j < entries.length; j++) {
         if (visited.has(j)) continue;
         const b = entries[j];
         const infoB = extractGroupInfo(b.section);
         if (
-          (infoB.isGroup || b.section.includes('ف')) &&
+          infoB.isGroup &&
+          !infoB.isMerged &&
           b.level === a.level &&
           getBaseSection(b.section) === baseA &&
-          getSchoolWeekKey(b.dateStr) === getSchoolWeekKey(a.dateStr)
+          getSchoolWeekKey(b.dateStr) === getSchoolWeekKey(a.dateStr) &&
+          infoB.groupNum !== infoA.groupNum
         ) {
           partnerIdx = j;
           break;
@@ -331,29 +425,47 @@ export function mergeConsecutiveGroupEntries(entries: LogEntry[]): LogEntry[] {
       visited.add(partnerIdx);
       const infoB = extractGroupInfo(b.section);
 
-      const grpA = infoA.groupNum || '1';
-      const grpB = infoB.groupNum || '2';
+      // ترتيب الحصص زمنياً: الأسبق تاريخاً/وقتاً أولاً
+      const isBEarlier =
+        b.dateStr < a.dateStr ||
+        (b.dateStr === a.dateStr && getTimeMinutes(b.time) < getTimeMinutes(a.time));
+      const first = isBEarlier ? b : a;
+      const second = isBEarlier ? a : b;
+      const infoFirst = isBEarlier ? infoB : infoA;
+      const infoSecond = isBEarlier ? infoA : infoB;
 
-      const sameDay = a.dateStr === b.dateStr;
-      const combinedDay = sameDay ? (a.dayName || 'الأحد') : `${a.dayName || ''} / ${b.dayName || ''}`;
+      const grp1 = infoFirst.groupNum || '1';
+      const grp2 = infoSecond.groupNum || '2';
+
+      const sameDay = first.dateStr === second.dateStr;
+      const combinedDay = sameDay
+        ? (first.dayName || 'الأحد')
+        : `${first.dayName || ''} / ${second.dayName || ''}`;
       const combinedDate = sameDay
-        ? a.dateStr
-        : `${a.dateStr} (ف${grpA}) / ${b.dateStr} (ف${grpB})`;
+        ? first.dateStr
+        : `${first.dateStr} (ف${grp1}) / ${second.dateStr} (ف${grp2})`;
 
-      let combinedTime = a.time;
-      if (a.time !== b.time || !sameDay) {
-        const timeA = a.time.includes('ف') ? a.time : `${a.time} (ف${grpA})`;
-        const timeB = b.time.includes('ف') ? b.time : `${b.time} (ف${grpB})`;
-        combinedTime = `${timeA} / ${timeB}`;
+      const formatSlot = (timeStr: string) =>
+        timeStr.includes('➔')
+          ? timeStr
+          : timeStr.replace(/\s*[-–—→←]\s*/g, ' ➔ ');
+
+      const time1 = formatSlot(first.time);
+      const time2 = formatSlot(second.time);
+
+      let combinedTime = '';
+      if (time1 !== time2 || !sameDay) {
+        combinedTime = `${time1} (ف${grp1}) / ${time2} (ف${grp2})`;
       } else {
-        combinedTime = `${a.time} (ف${grpA} + ف${grpB})`;
+        combinedTime = `${time1} (ف${grp1} + ف${grp2})`;
       }
 
       const combinedSection = `${baseA} (فوج 1 + فوج 2)`;
       const combinedNote = `عمل مخبري (أفواج 1 + 2)`;
 
       result.push({
-        ...a,
+        ...first,
+        id: `merged-${first.id}-${second.id}`,
         dayName: combinedDay,
         dateStr: combinedDate,
         time: combinedTime,
@@ -362,6 +474,58 @@ export function mergeConsecutiveGroupEntries(entries: LogEntry[]): LogEntry[] {
       });
     } else {
       result.push(a);
+    }
+  }
+
+  return result;
+}
+
+/**
+ * فصل الحصص المدمجة للأفواج إلى أسطر مستقلة لكل فوج
+ * مفيد للأساتذة الذين يطلب منهم المفتش تدوين كل فوج في سطر مستقل
+ */
+export function splitMergedGroupEntries(entries: LogEntry[]): LogEntry[] {
+  const result: LogEntry[] = [];
+
+  for (const entry of entries) {
+    const info = extractGroupInfo(entry.section);
+    const isMergedSec = info.isMerged || /(?:أفواج|فوج|فـ|ف)\s*[1234أب]\s*[\+و,،/-]\s*(?:أفواج|فوج|فـ|ف)?\s*[1234أب]/i.test(entry.section || '');
+    const hasSlashDate = (entry.dateStr || '').includes('/');
+    const hasSlashTime = (entry.time || '').includes('/');
+
+    if (isMergedSec && (hasSlashDate || hasSlashTime)) {
+      const baseSec = info.baseSection;
+      const dateParts = (entry.dateStr || '').split('/').map((s) => s.trim().replace(/\s*\(ف[1234أب]\)/i, ''));
+      const dayParts = (entry.dayName || '').split('/').map((s) => s.trim());
+      const timeParts = (entry.time || '').split('/').map((s) => s.trim().replace(/\s*\(ف[1234أب](?:\s*\+\s*ف[1234أب])?\)/i, ''));
+
+      const d1 = dateParts[0] || entry.dateStr;
+      const d2 = dateParts[1] || dateParts[0] || entry.dateStr;
+      const day1 = dayParts[0] || entry.dayName;
+      const day2 = dayParts[1] || dayParts[0] || entry.dayName;
+      const t1 = timeParts[0] || entry.time;
+      const t2 = timeParts[1] || timeParts[0] || entry.time;
+
+      result.push({
+        ...entry,
+        id: `${entry.id}-grp1`,
+        dateStr: d1,
+        dayName: day1,
+        time: t1,
+        section: `${baseSec} (فوج 1)`,
+        note: 'عمل مخبري (فوج 1)',
+      });
+      result.push({
+        ...entry,
+        id: `${entry.id}-grp2`,
+        dateStr: d2,
+        dayName: day2,
+        time: t2,
+        section: `${baseSec} (فوج 2)`,
+        note: 'عمل مخبري (فوج 2)',
+      });
+    } else {
+      result.push(entry);
     }
   }
 
@@ -3356,15 +3520,15 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                     </button>
                   </div>
 
-                  {/* Secondary Tools: Add manual, Merge labs, Clear */}
-                  <div className="grid grid-cols-3 gap-1.5 pt-1 border-t border-zinc-100 text-[11px]">
+                  {/* Secondary Tools: Add manual, Merge labs, Split labs, Clear */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-1 border-t border-zinc-100 text-[11px]">
                     <button
                       type="button"
                       onClick={() => { setManualLessonDate(startDate || getDefaultNotebookStartDate(config.schoolYear || '2026-2027')); setIsAddLessonModalOpen(true); }}
-                      className="bg-zinc-50 hover:bg-emerald-50 text-zinc-700 hover:text-emerald-900 border border-zinc-200 rounded-lg py-1.5 font-bold flex items-center justify-center gap-1 transition cursor-pointer"
+                      className="bg-zinc-50 hover:bg-emerald-50 text-zinc-700 hover:text-emerald-900 border border-zinc-200 rounded-lg py-1.5 px-2 font-bold flex items-center justify-center gap-1 transition cursor-pointer"
                       title="إضافة حصة يدوية أو تسجيل غياب الأستاذ أو تغيير"
                     >
-                      <Plus className="w-3.5 h-3.5 text-emerald-600" />
+                      <Plus className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                       <span>+ حصة / غياب</span>
                     </button>
                     <button
@@ -3378,14 +3542,34 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                         const merged = mergeConsecutiveGroupEntries(rows);
                         setRows(merged);
                         const diff = beforeCount - merged.length;
-                        if (diff > 0) showToast(`تم دمج ${diff} حصة للأفواج (ف1+ف2) ✅`);
-                        else showToast('الحصص مدمجة بالفعل وفق نظام الأفواج ✅');
+                        if (diff > 0) showToast(`تم دمج ${diff} حصة للأفواج (ف1+ف2 في سطر واحد) ✅`);
+                        else showToast('الحصص مدمجة بالفعل وفق نظام الأفواج التربوية ✅');
                       }}
-                      className="bg-zinc-50 hover:bg-teal-50 text-zinc-700 hover:text-teal-900 border border-zinc-200 rounded-lg py-1.5 font-bold flex items-center justify-center gap-1 transition cursor-pointer"
-                      title="دمج حصص الأفواج ف1 وف2 في خانة واحدة"
+                      className="bg-zinc-50 hover:bg-teal-50 text-zinc-700 hover:text-teal-900 border border-zinc-200 rounded-lg py-1.5 px-2 font-bold flex items-center justify-center gap-1 transition cursor-pointer"
+                      title="دمج حصص الأفواج ف1 وف2 التابعة لنفس القسم في سطر واحد"
                     >
-                      <TableIcon className="w-3.5 h-3.5 text-teal-600" />
+                      <TableIcon className="w-3.5 h-3.5 text-teal-600 shrink-0" />
                       <span>دمج الأفواج</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!rows.length) {
+                          showToast('الدفتر فارغ حالياً.');
+                          return;
+                        }
+                        const beforeCount = rows.length;
+                        const split = splitMergedGroupEntries(rows);
+                        setRows(split);
+                        const diff = split.length - beforeCount;
+                        if (diff > 0) showToast(`تم فصل الحصص المدمجة إلى ${split.length} حصة (سطر مستقل لكل فوج) ✅`);
+                        else showToast('الحصص مفصولة ومستقلة بالفعل لكل فوج ✅');
+                      }}
+                      className="bg-zinc-50 hover:bg-sky-50 text-zinc-700 hover:text-sky-900 border border-zinc-200 rounded-lg py-1.5 px-2 font-bold flex items-center justify-center gap-1 transition cursor-pointer"
+                      title="فصل حصص الأفواج المدمجة إلى أسطر منفصلة لكل فوج"
+                    >
+                      <Layers className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                      <span>فصل الأفواج</span>
                     </button>
                     <button
                       type="button"
@@ -3397,10 +3581,10 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                           showToast('تم مسح سجلات الدفتر اليومي');
                         }
                       }}
-                      className="bg-zinc-50 hover:bg-red-50 text-zinc-500 hover:text-red-700 border border-zinc-200 rounded-lg py-1.5 font-bold flex items-center justify-center gap-1 transition cursor-pointer"
+                      className="bg-zinc-50 hover:bg-red-50 text-zinc-500 hover:text-red-700 border border-zinc-200 rounded-lg py-1.5 px-2 font-bold flex items-center justify-center gap-1 transition cursor-pointer"
                       title="مسح سجلات الدفتر"
                     >
-                      <Eraser className="w-3.5 h-3.5 text-zinc-400" />
+                      <Eraser className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
                       <span>مسح الدفتر</span>
                     </button>
                   </div>

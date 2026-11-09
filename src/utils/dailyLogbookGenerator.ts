@@ -27,34 +27,105 @@ export function detectLevelFromSection(sec: string): '1م' | '2م' | '3م' | '4�
   return null;
 }
 
+export function normalizeBaseSection(raw: string): string {
+  let s = String(raw || '').trim();
+  s = s.replace(/([1234])\s*م\s*(\d+)/g, '$1م$2');
+  s = s.replace(/[-—–/\\+]+$/, '').trim();
+  s = s.replace(/^[-—–/\\+]+/, '').trim();
+  s = s.replace(/\(\s*\)/g, '').trim();
+  return s || raw;
+}
+
 export function extractGroupInfo(sec: string): {
   baseSection: string;
   isGroup: boolean;
   groupNumber: number;
   rawGroup?: string;
   level: '1م' | '2م' | '3م' | '4م';
+  isMerged?: boolean;
+  groupNumbers?: number[];
 } {
   const raw = String(sec || '').trim();
   const level = detectLevelFromSection(raw) || '1م';
 
-  const groupMatch = raw.match(/(?:فوج|فـ|ف|g|grp|group)\s*(\d+)/i);
-  if (groupMatch) {
-    const groupNumber = parseInt(groupMatch[1], 10) || 1;
-    const baseSection = raw.replace(/\s*\(?(?:فوج|فـ|ف|g|grp|group)\s*\d+\)?\s*/gi, '').trim();
+  if (!raw) {
     return {
-      baseSection: baseSection || raw,
+      baseSection: 'قسم غير محدد',
+      isGroup: false,
+      groupNumber: 0,
+      level,
+      isMerged: false,
+    };
+  }
+
+  // 1. فحص إذا كان القسم مدمجاً بالفعل (مثال: 1م1 (فوج 1 + فوج 2) أو 1م1 (ف1 + ف2))
+  const mergedMatch = raw.match(/(?:[-—/–\s]*\(?(?:أفواج|فوج|فـ|ف)\s*([1234أبab])\s*(?:\+|و|&|\/|مع)\s*(?:أفواج|فوج|فـ|ف)?\s*([1234أبab])\)?\s*)/i);
+  if (mergedMatch) {
+    const base = normalizeBaseSection(raw.replace(mergedMatch[0], ''));
+    const parseNum = (s: string) => {
+      const low = s.toLowerCase();
+      if (low === 'أ' || low === 'a') return 1;
+      if (low === 'ب' || low === 'b') return 2;
+      return parseInt(s, 10) || 1;
+    };
+    const g1 = parseNum(mergedMatch[1]);
+    const g2 = parseNum(mergedMatch[2]);
+    return {
+      baseSection: base || raw,
       isGroup: true,
-      groupNumber,
-      rawGroup: groupMatch[0],
+      isMerged: true,
+      groupNumber: g1,
+      groupNumbers: [g1, g2],
+      rawGroup: `ف${g1}+ف${g2}`,
       level,
     };
   }
 
-  if (/\b(?:فوج|فـ|ف)\b/i.test(raw)) {
-    const baseSection = raw.replace(/\s*\(?(?:فوج|فـ|ف)\)?\s*/gi, '').trim();
+  const parseGroupNumber = (str: string): number => {
+    const low = str.toLowerCase();
+    if (low === 'أ' || low === 'a') return 1;
+    if (low === 'ب' || low === 'b') return 2;
+    return parseInt(str, 10) || 1;
+  };
+
+  // 2. إذا كانت تسمية الفوج سابقة لرقم القسم (مثال: ف1 1م1 أو فوج 1 - 1م1)
+  const prefixMatch = raw.match(/^(?:\(?\s*(?:فوج|فـ|ف|grp|group|g)\s*([1234أبab])\s*\)?\s*[-—/–\s]*)/i);
+  if (prefixMatch) {
+    const gNum = parseGroupNumber(prefixMatch[1]);
+    const base = normalizeBaseSection(raw.replace(prefixMatch[0], ''));
     return {
-      baseSection: baseSection || raw,
+      baseSection: base || raw,
       isGroup: true,
+      isMerged: false,
+      groupNumber: gNum,
+      rawGroup: `ف${gNum}`,
+      level,
+    };
+  }
+
+  // 3. صيغة الفوج مع رقم أو حرف (مثال: 1م1 ف1، 1م1 فوج 2، 4م1 (ف1)، 1م 1 - ف2، 1م1 فوج أ)
+  const groupMatch = raw.match(/(?:[-—/–\s]*\(?\s*(?:فوج|فـ|ف|grp|group|g)\s*([1234أبab])\s*\)?\s*)/i);
+  if (groupMatch) {
+    const gNum = parseGroupNumber(groupMatch[1]);
+    const base = normalizeBaseSection(raw.replace(groupMatch[0], ''));
+    return {
+      baseSection: base || raw,
+      isGroup: true,
+      isMerged: false,
+      groupNumber: gNum,
+      rawGroup: `ف${gNum}`,
+      level,
+    };
+  }
+
+  // 4. وسم الفوج العام دون رقم (مثال: 1م1 فوج، 1م1 مخبر)
+  const genericMatch = raw.match(/(?:[-—/–\s]*\(?\s*(?:فوج|مخبر|عمل مخبري)\s*\)?\s*)/i);
+  if (genericMatch) {
+    const base = normalizeBaseSection(raw.replace(genericMatch[0], ''));
+    return {
+      baseSection: base || raw,
+      isGroup: true,
+      isMerged: false,
       groupNumber: 1,
       rawGroup: 'فوج',
       level,
@@ -62,10 +133,11 @@ export function extractGroupInfo(sec: string): {
   }
 
   return {
-    baseSection: raw,
+    baseSection: normalizeBaseSection(raw),
     isGroup: false,
     groupNumber: 0,
     level,
+    isMerged: false,
   };
 }
 
@@ -330,13 +402,19 @@ export function generateLogbookEntries({
       const sameDay = visible.every(slot => slot.date === visible[0].date);
       const isGroup = first.isGroup;
       const groupNums = visible.map(slot => slot.group);
+      const uniqueGroupNums = Array.from(new Set(groupNums)).sort((a, b) => a - b);
       const dayName = sameDay ? visible[0].day : visible.map(slot => slot.day).join(' / ');
       const dateStr = sameDay ? visible[0].date : visible.map(slot => `${slot.date} (ف${slot.group})`).join(' / ');
       const time = visible.map(slot => `${formatTimeWithArrow(slot.time)}${isGroup ? ` (ف${slot.group})` : ''}`).join(' / ');
-      const section = isGroup ? `${first.base} (${groupNums.map(n => `فوج ${n}`).join(' + ')})` : first.base;
+      const section = isGroup ? `${first.base} (${uniqueGroupNums.map(n => `فوج ${n}`).join(' + ')})` : first.base;
       const exam = first.exam;
       const examLabel = exam?.label || (exam?.type === 'test' ? 'فرض محروس رسمي' : 'اختبار فصلي رسمي');
       const content = exam ? examLabel : step.fullContent;
+      const note = exam
+        ? `حصة تقويمية — ${examLabel}`
+        : isGroup
+          ? (uniqueGroupNums.length > 1 ? 'عمل مخبري (أفواج 1 + 2)' : `عمل مخبري (فوج ${uniqueGroupNums[0]})`)
+          : 'حصة جماعية (القسم كاملاً)';
       result.push({
         id: `${visible[0].date}-${first.base.replace(/\s+/g, '')}-${first.minutes}-${result.length}`,
         dayName, dateStr, time, section, level: first.level, content,
@@ -347,7 +425,7 @@ export function generateLogbookEntries({
         moshkila: exam ? undefined : step.moshkila,
         activitiesList: [content],
         taqwim: exam ? 'تقويم تحصيلي لمراقبة الكفاءات' : step.taqwim || 'تقويم تكويني ومتابعة الإنجاز',
-        note: exam ? `حصة تقويمية — ${examLabel}` : isGroup ? `عمل مخبري (${groupNums.map(n => `فوج ${n}`).join(' + ')})` : 'حصة جماعية (القسم كاملاً)',
+        note,
         lessonType: exam ? 'assessment' : step.isIntroductory ? 'introductory' : step.isReview ? 'remediation' : 'curriculum',
         resourceIndex: index + 1,
         sourceLearningUnitId: exam ? `exam_${exam.startDate}` : step.sourceLearningUnitId,

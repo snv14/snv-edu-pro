@@ -84,3 +84,28 @@ test('exams pause curriculum progression and third session is labelled correctly
   assert.equal(rows[1].lessonType, 'assessment');
   assert.equal(rows[2].resourceIndex, 2);
 });
+
+test('mergeConsecutiveGroupEntries and splitMergedGroupEntries work symmetrically and robustly', async () => {
+  const { mergeConsecutiveGroupEntries, splitMergedGroupEntries, extractGroupInfo } = await import('../src/components/DailyLogbook');
+  
+  // Format parsing
+  assert.equal(extractGroupInfo('4م 1 ف1').baseSection, '4م1');
+  assert.equal(extractGroupInfo('1م1 (فوج 1 + فوج 2)').isMerged, true);
+  assert.equal(extractGroupInfo('1م1 (فوج 1 + فوج 2)').baseSection, '1م1');
+
+  // Same day merging
+  const sameDayRows = [
+    { id: 'a', dateStr: '2026-10-04', dayName: 'الأحد', time: '08:00 - 09:00', section: '1م1 ف1', level: '1م' as const, content: 'نشاط 1' },
+    { id: 'b', dateStr: '2026-10-04', dayName: 'الأحد', time: '09:00 - 10:00', section: '1م1 ف2', level: '1م' as const, content: 'نشاط 1' },
+  ];
+  const merged = mergeConsecutiveGroupEntries(sameDayRows);
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].section, '1م1 (فوج 1 + فوج 2)');
+  assert.match(merged[0].time, /08:00.*ف1.*09:00.*ف2/);
+
+  // Splitting back
+  const split = splitMergedGroupEntries(merged);
+  assert.equal(split.length, 2);
+  assert.equal(split[0].section, '1م1 (فوج 1)');
+  assert.equal(split[1].section, '1م1 (فوج 2)');
+});
