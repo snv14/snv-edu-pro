@@ -4,7 +4,7 @@ import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { createServer as createViteServer } from 'vite';
 import { apiApp } from './src/server/api';
-import { securityHeaders } from './src/server/security';
+import { createRateLimiter, securityHeaders } from './src/server/security';
 import { printEnvReport } from './src/server/env';
 
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
@@ -20,6 +20,11 @@ async function startServer() {
   if (process.env.TRUST_PROXY) app.set('trust proxy', Number(process.env.TRUST_PROXY) || 1);
   app.use(securityHeaders);
   const PORT = process.env.PORT || 3000;
+
+  // Limit expensive AI calls before parsing request bodies.
+  const configuredLimit = Number(process.env.AI_RATE_LIMIT_PER_MINUTE);
+  const maxRequests = Number.isInteger(configuredLimit) && configuredLimit > 0 ? configuredLimit : 20;
+  app.use('/api/gemini', createRateLimiter({ windowMs: 60_000, max: maxRequests }));
 
   // Mount backend API router
   app.use(apiApp);
