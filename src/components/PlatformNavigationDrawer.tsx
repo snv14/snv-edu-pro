@@ -11,6 +11,7 @@ import {
   HelpCircle,
   Sparkles,
   ChevronLeft,
+  ChevronDown,
   Sprout,
   TreePine,
   Mountain,
@@ -116,6 +117,7 @@ export const PlatformNavigationDrawer: React.FC<PlatformNavigationDrawerProps> =
             <button
               type="button"
               onClick={onClose}
+              aria-label="إغلاق القائمة"
               className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-xs font-bold transition cursor-pointer"
             >
               ✕
@@ -202,11 +204,11 @@ export const PlatformNavigationDrawer: React.FC<PlatformNavigationDrawerProps> =
           </div>
 
           {/* Educational Levels */}
-          <div className="space-y-1 pt-2 border-t border-gray-100">
-            <div className="text-[11px] font-black text-gray-400 uppercase tracking-wider px-2 mb-1.5 flex items-center justify-between">
+          <details className="space-y-1 pt-2 border-t border-gray-100">
+            <summary className="cursor-pointer text-[11px] font-black text-gray-500 uppercase tracking-wider px-2 mb-1.5 flex items-center justify-between">
               <span>المذكرات وتدرج التعلمات</span>
-              <GraduationCap className="w-3.5 h-3.5 text-gray-400" />
-            </div>
+              <span className="flex items-center gap-1"><GraduationCap className="w-3.5 h-3.5 text-gray-400" /><ChevronDown className="w-3.5 h-3.5" aria-hidden="true" /></span>
+            </summary>
 
             {levels.map((lvl) => (
               <button
@@ -229,15 +231,13 @@ export const PlatformNavigationDrawer: React.FC<PlatformNavigationDrawerProps> =
                 <ChevronLeft className="w-4 h-4 text-gray-400" />
               </button>
             ))}
-          </div>
+          </details>
 
           {/* AI Assistant & Platform Hub */}
-          <div className="space-y-1.5 pt-2 border-t border-gray-100">
-            <div className="text-[11px] font-black text-gray-400 uppercase tracking-wider px-2 mb-1.5">
-              أدوات وخدمات المنصة
-            </div>
-
-
+          <details className="space-y-1.5 pt-2 border-t border-gray-100">
+            <summary className="cursor-pointer text-[11px] font-black text-gray-500 uppercase tracking-wider px-2 mb-1.5 flex items-center justify-between">
+              <span>أدوات وخدمات المنصة</span><ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />
+            </summary>
 
             {/* About Platform Button */}
             <button
@@ -286,7 +286,7 @@ export const PlatformNavigationDrawer: React.FC<PlatformNavigationDrawerProps> =
               </div>
               <ChevronLeft className="w-4 h-4 text-gray-400" />
             </button>
-          </div>
+          </details>
         </div>
 
         {/* Footer info & Designer */}
