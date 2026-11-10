@@ -6,6 +6,7 @@ import { askSmartAi, SmartAiMessage, SmartAiSource } from '../services/smartAi';
 import { clearConversation, conversationContext, loadConversation, saveConversation } from '../services/conversationHistory';
 import { loadKnowledgeSettings, saveKnowledgeSettings, type KnowledgeSettings } from '../services/knowledgeLibraryStore';
 import { loadOcrSupplement } from '../services/knowledgeSupplements';
+import { preloadOfficialSources } from '../services/knowledgeOfficialSources';
 import { buildQuickTaskPrompt, describeScope, KNOWLEDGE_QUICK_TASKS } from '../services/knowledgeQuickTasks';
 import type { KnowledgeReference } from '../services/knowledgeBase';
 import { KnowledgeBasePanel } from './KnowledgeBasePanel';
@@ -116,6 +117,8 @@ export const AIAssistantDrawer: React.FC<{
     }
     let active = true;
     void loadOcrSupplement().then(doc => { if (active) setOcrDocs(doc ? [doc] : []); });
+    // تحميل مسبق للنصوص الرسمية حتى تكون جاهزة عند أول سؤال محلي.
+    void preloadOfficialSources();
     return () => { active = false; };
   }, [isOpen, knowledgeSettings.includeOcrSupplement]);
 

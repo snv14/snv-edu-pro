@@ -79,6 +79,8 @@ export interface KnowledgeChunk {
   text: string;
   scope: KnowledgeScope;
   url?: string;
+  /** رقم الصفحة في الوثيقة الرسمية الأصلية؛ يُستعمل في الاستشهاد («ص 29»). */
+  page?: number;
   /** أولوية المصدر (كلما صغر الرقم كان المصدر أقوى). */
   priority: number;
 }
@@ -110,7 +112,23 @@ export interface TeacherKnowledgeDoc {
   authority?: string;
   url?: string;
   createdAt: string;
-  source?: 'teacher' | 'ocr' | 'platform';
+  source?: 'teacher' | 'ocr' | 'platform' | 'official';
+}
+
+/**
+ * وثيقة رسمية حرفية مفرَّغة من ملف الوزارة الأصلي (منهاج، وثيقة مرافقة، دليل
+ * أستاذ، مخططات سنوية). تُولَّد بواسطة scripts/ingest_official_pdfs.py وتُخزَّن
+ * في src/data/official. تحتفظ بترقيم الصفحات حتى يكون الاستشهاد دقيقاً:
+ * «المنهاج 2016، ص 29».
+ */
+export interface OfficialKnowledgeDoc extends TeacherKnowledgeDoc {
+  source: 'official';
+  /** صفحات الوثيقة كما وردت في الملف الأصلي؛ الرقم يُستعمل في الاستشهاد. */
+  pages: Array<{ page: number; text: string }>;
+  /** مسار الاستخراج الذي فاز بالتسجيل الآلي (pypdf / pymupdf / +tounicode). */
+  extraction?: string;
+  /** نسبة مطابقة الكلمات للمفردات الرسمية — مؤشر جودة الطبقة النصية. */
+  quality?: number;
 }
 
 export interface ResolvedScopeMatch {
@@ -148,6 +166,8 @@ export interface ExtractionCandidate {
   level: KnowledgeLevel;
   url?: string;
   scope: KnowledgeScope;
+  /** رقم الصفحة في الوثيقة الرسمية الأصلية إن كانت المعلومة منها. */
+  page?: number;
   score: number;
   priority: number;
   sourceLabel: string;

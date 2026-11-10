@@ -13,31 +13,32 @@
 ├── firestore.rules           # قواعد الأمان (5 مستندات فقط لكل مستخدم)
 ├── data/aiKnowledge.json     # لقطة معرفة المساعد (تُحدَّث بـ npm run refresh:ai-knowledge)
 ├── KNOWLEDGE_BASE.md         # دليل قاعدة معرفة المساعد (المنهاج/الوثيقة المرافقة/دليل الأستاذ/المذكرات)
-├── scripts/                  # أدوات صيانة
+├── scripts/                  # أدوات صيانة: refresh-ai-knowledge.mjs وingest_official_pdfs.py (تفريغ الوثائق الوزارية)
 ├── archive/                  # ملفات مصدرية قديمة غير مستعملة في التشغيل
 ├── public/                   # favicon وصور ثابتة
 └── src/
     ├── main.tsx, App.tsx, types.ts, index.css, vite-env.d.ts
     ├── components/           # 27 مكوّنًا
-    ├── services/             # 19 ملفًا: الذكاء الاصطناعي، قاعدة المعرفة، ومصادر المذكرات
+    ├── services/             # 20 ملفًا: الذكاء الاصطناعي، قاعدة المعرفة، ومصادر المذكرات
     ├── utils/                # 16 ملفًا: التصدير (Word/PDF) والتعقيم والتوزيع
     ├── server/               # api.ts وaiGateway.ts وsecurity.ts وenv.ts
-    ├── data/                 # 45 ملفًا: المنهاج والتدرج والدفتر ومرجع قاعدة المعرفة
+    ├── data/                 # 44 ملفًا: المنهاج والتدرج والدفتر ومرجع قاعدة المعرفة
+    │   └── official/         # 13 ملفًا مُولَّدًا: متن الوثائق الوزارية الحرفي (386 صفحة) + البيان والمحمِّلات
     └── types/                # أنواع إضافية (pedagogicalNote.ts وknowledge.ts)
 ```
 
 ## الملفات
 - **components**: `AIAssistantChat.tsx`, `KnowledgeBasePanel.tsx`, `AccountSettings.tsx`, `AnnualDistribution.tsx`, `Auth.tsx`, `CalendarAdjustmentModal.tsx`, `CorrectionMemoDrawer.tsx`, `CurriculumDatabaseManager.tsx`, `DailyLogSheetTemplate.tsx`, `DailyLogbook.tsx`, `ErrorBoundary.tsx`, `FirebaseDataSync.tsx`, `InteractiveMaqta1.tsx`, `LevelsHomePage.tsx`, `MemoSheet.tsx`, `OfficialAnnualDistribution.tsx`, `PedagogicalNoteModal.tsx`, `PlatformInfoModal.tsx`, `PlatformNavigationDrawer.tsx`, `PreviewModal.tsx`, `SidebarControls.tsx`, `SourceMemo1AMViewer.tsx`, `TeacherOfficialStamp.tsx`, `UserProfile.tsx`
-- **services**: `aiProviderRegistry.ts`, `aiSourcePriority.ts`, `conversationHistory.ts`, `correctionMemoAi.ts`, `correctionMemoImport.ts`, `correctionMemoModel.ts`, `expertLabStore.ts`, `geminiPedagogicalService.ts`, `geminiPrompts.ts`, `knowledgeBase.ts`, `knowledgeLibraryStore.ts`, `knowledgeQuickTasks.ts`, `knowledgeSupplements.ts`, `memoAttachmentStore.ts`, `memoLearningStore.ts`, `memoSuggestionEngine.ts`, `officialPedagogicalSources.ts`, `scienceMemoModelLibrary.ts`, `smartAi.ts`
+- **services**: `aiProviderRegistry.ts`, `aiSourcePriority.ts`, `conversationHistory.ts`, `correctionMemoAi.ts`, `correctionMemoImport.ts`, `correctionMemoModel.ts`, `expertLabStore.ts`, `geminiPedagogicalService.ts`, `geminiPrompts.ts`, `knowledgeBase.ts`, `knowledgeLibraryStore.ts`, `knowledgeOfficialSources.ts`, `knowledgeQuickTasks.ts`, `knowledgeSupplements.ts`, `memoAttachmentStore.ts`, `memoLearningStore.ts`, `memoSuggestionEngine.ts`, `officialPedagogicalSources.ts`, `scienceMemoModelLibrary.ts`, `smartAi.ts`
 - **types**: `pedagogicalNote.ts`, `knowledge.ts` (عائلات المصادر، أنواع المعلومة، نتائج الاستخراج)
-- **data (قاعدة المعرفة)**: `knowledgeBaseCorpus.ts` (المرجع المنهجي للمنهاج والوثيقة المرافقة ودليل الأستاذ وبنية المذكرة)
+- **data (قاعدة المعرفة)**: `knowledgeBaseCorpus.ts` (المرجع المنهجي للمنهاج والوثيقة المرافقة ودليل الأستاذ وبنية المذكرة)، و`official/` (مُولَّد بـ `scripts/ingest_official_pdfs.py`: `types.ts` + `index.ts` فيه `OFFICIAL_SOURCES_MANIFEST` و`OFFICIAL_SOURCE_LOADERS` بمحمِّلات `import()` كسولة + 11 وحدة صفحات حرفية)
 - **utils**: `annualDistributionDateUtils.ts`, `annualDistributionGenerator.ts`, `correctionMemoExport.ts`, `dailyLogbookGenerator.ts`, `designerPhoto.ts`, `docxExport.ts`, `docxExportDistribution.ts`, `docxExportLogbook.ts`, `html2canvasSanitizer.ts`, `pdfExport.ts`, `pdfExportDistribution.ts`, `pdfExportLogbook.ts`, `sanitize.ts`
 - **server**: `aiGateway.ts`, `api.ts`, `env.ts`, `security.ts`
 
 ## تدفق البيانات
 1. الحالة والإعدادات في `localStorage` (مفاتيح `algeria_sciences_*` و`mizaniyati_*` و`daftar_*`).
 2. عند تسجيل الدخول: `FirebaseDataSync` يقارن `updatedAt` السحابي بوقت آخر حفظ محلي ولا يستبدل الأحدث، ويوفّر `window.syncToCloud(type, data)` للأنواع: `config` و`annualDist` و`curriculum` و`logbook` و`timetable`.
-3. **قاعدة معرفة المساعد**: يُفهرس المنهاج والتدرج والوثيقة المرافقة ودليل الأستاذ والمذكرات (≈2187 مقطعًا) في الذاكرة بفهرس مقلوب عربي (توحيد الحروف + TF‑IDF). لكل سؤال: يُحدَّد النطاق (المستوى ← المقطع ← المورد ← تعلم المورد) ونوع المعلومة المطلوب، ثم تُسترجع المقاطع وتُعرض كاحتمالات موثقة أو تُرسل كسياق مُرقّم يقتبس منه النموذج. التفاصيل في [KNOWLEDGE_BASE.md](KNOWLEDGE_BASE.md).
+3. **قاعدة معرفة المساعد**: طبقتان — **نص رسمي حرفي** مُفرَّغ من 11 وثيقة وزارية (386 صفحة، ≈469 ألف حرف، حالة `official`، مُستشهدٌ به برقم الصفحة) و**قاعدة بنيوية** من بيانات المنصة والملخصات المنهجية (`reference`). يُفهرس الكل (≈2703 مقاطع في 27 وثيقة) في الذاكرة بفهرس مقلوب عربي (توحيد الحروف + TF‑IDF) في ≈100 ms ويُخزَّن بتوقيع. الوثائق الرسمية تُحمَّل كسولياً (`knowledgeOfficialSources.ts`) مع عزل فشل أي وثيقة، والخادم يحمّلها بنفسه فلا يُرسل العميل المتن في كل طلب. لكل سؤال: يُحدَّد النطاق (المستوى ← المقطع ← المورد ← تعلم المورد) ونوع المعلومة المطلوب، ثم تُسترجع المقاطع وتُعرض كاحتمالات موثقة أو تُرسل كسياق مُرقّم يقتبس منه النموذج. التفاصيل في [KNOWLEDGE_BASE.md](KNOWLEDGE_BASE.md).
 4. طلبات الذكاء الاصطناعي تمر عبر `/api/gemini/*` (تحديد معدّل + تحقق من المرفقات + أخطاء منقّاة)، ولا تصل مفاتيح الخادم إلى المتصفح أبدًا.
 5. نقاط `/api/knowledge/*` (status/search/extract) بحث محلي بلا ذكاء اصطناعي، وتستعمل نفس الوحدة `services/knowledgeBase.ts` على الخادم والعميل؛ وعند غياب أي مزود AI يجيب المساعد من قاعدة المعرفة بدل الخطأ.
 
@@ -64,7 +65,7 @@
 | `POST /api/gemini/analyze-correction-source` | تحليل ورقة الفرض/الاختبار |
 | `POST /api/gemini/generate-pedagogical-note` | توليد المذكرة عبر المزودات الاحتياطية |
 | `GET /api/gemini/assistant-status` · `GET /api/gemini/knowledge-status` · `GET /api/ai/providers` | حالات المزودات ولقطة المعرفة |
-| `GET /api/knowledge/status` | أحجام فهرس قاعدة المعرفة ووثائقه |
+| `GET /api/knowledge/status` | أحجام فهرس قاعدة المعرفة ووثائقه + كتلة `officialSources` (بيان الوثائق الرسمية وصفحاتها وجودتها) |
 | `POST /api/knowledge/search` | بحث حر في قاعدة المعرفة |
 | `POST /api/knowledge/extract` | استخراج موجه يعيد عدة احتمالات موثقة |
 

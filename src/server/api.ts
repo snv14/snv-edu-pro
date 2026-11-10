@@ -18,6 +18,7 @@ import {
   toKnowledgeReferences,
 } from '../services/knowledgeBase';
 import { KNOWLEDGE_FACET_LABELS, KNOWLEDGE_KIND_LABELS, type TeacherKnowledgeDoc } from '../types/knowledge';
+import { getOfficialSourcesManifest, loadOfficialSources } from '../services/knowledgeOfficialSources';
 
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
@@ -269,6 +270,7 @@ apiApp.post('/api/gemini/smart-assistant', async (req, res) => {
         const serverExtraction = extractKnowledge(String(question), {
           level: String(level || currentLesson?.level || ''),
           lesson: currentLesson || null,
+          officialDocs: await loadOfficialSources(),
         });
         knowledgeBlock = buildKnowledgeContext(serverExtraction);
         knowledgeRefs = toKnowledgeReferences(serverExtraction.hits, 8);
@@ -345,6 +347,7 @@ apiApp.post('/api/gemini/smart-assistant', async (req, res) => {
           const localExtraction = extractKnowledge(String(question), {
             level: String(level || currentLesson?.level || ''),
             lesson: currentLesson || null,
+            officialDocs: await loadOfficialSources(),
           });
           const candidates = localExtraction.facets.reduce((sum, group) => sum + group.candidates.length, 0);
           if (candidates > 0) {
@@ -519,9 +522,27 @@ const resolveScopeForApi = (query: string, level?: unknown) => {
 };
 
 // حالة قاعدة المعرفة: العائلات، الأحجام، وأنواع المعلومة المفهرسة.
-apiApp.get('/api/knowledge/status', (_req, res) => {
-  const stats = getKnowledgeStats();
+apiApp.get('/api/knowledge/status', async (_req, res) => {
+  const officialDocs = await loadOfficialSources();
+  const stats = getKnowledgeStats({ officialDocs });
   res.json({
+    officialSources: {
+      count: officialDocs.length,
+      manifest: getOfficialSourcesManifest().map((entry) => ({
+        id: entry.id,
+        kind: entry.kind,
+        kindLabel: KNOWLEDGE_KIND_LABELS[entry.kind] || entry.kind,
+        title: entry.title,
+        authority: entry.authority,
+        url: entry.url,
+        level: entry.level,
+        pages: entry.pages,
+        chars: entry.chars,
+        extraction: entry.extraction,
+        quality: entry.quality,
+        garbage: entry.garbage,
+      })),
+    },
     chunks: stats.chunks,
     byKind: Object.fromEntries(Object.entries(stats.byKind).map(([kind, count]) => [kind, { count, label: KNOWLEDGE_KIND_LABELS[kind as keyof typeof KNOWLEDGE_KIND_LABELS] || kind }])),
     byFacet: Object.fromEntries(Object.entries(stats.byFacet).map(([facet, count]) => [facet, { count, label: KNOWLEDGE_FACET_LABELS[facet as keyof typeof KNOWLEDGE_FACET_LABELS] || facet }])),
@@ -542,7 +563,7 @@ apiApp.get('/api/knowledge/status', (_req, res) => {
 });
 
 // بحث حر في قاعدة المعرفة (بدون ذكاء اصطناعي).
-apiApp.post('/api/knowledge/search', (req, res) => {
+apiApp.post('/api/knowledge/search', async (req, res) => {
   try {
     const query = String(req.body?.query || '').slice(0, 2000);
     if (!query.trim()) return res.status(400).json({ error: 'نص البحث مطلوب' });
@@ -552,6 +573,7 @@ apiApp.post('/api/knowledge/search', (req, res) => {
       facets: Array.isArray(req.body?.facets) ? req.body.facets : undefined,
       topK: Math.min(30, Number(req.body?.topK) || 12),
       teacherDocs: sanitizeTeacherDocs(req.body?.teacherDocs),
+      officialDocs: await loadOfficialSources(),
     });
     res.json({
       query,
@@ -564,7 +586,7 @@ apiApp.post('/api/knowledge/search', (req, res) => {
 });
 
 // استخراج موجه: يعيد عدة احتمالات موثقة لكل نوع معلومة (أنشطة، مشكلة، فرضية، إرساء، تقويم…).
-apiApp.post('/api/knowledge/extract', (req, res) => {
+apiApp.post('/api/knowledge/extract', async (req, res) => {
   try {
     const query = String(req.body?.query || '').slice(0, 4000);
     if (!query.trim()) return res.status(400).json({ error: 'نص الطلب مطلوب' });
@@ -573,6 +595,7 @@ apiApp.post('/api/knowledge/extract', (req, res) => {
       facets: Array.isArray(req.body?.facets) ? req.body.facets : undefined,
       maxCandidates: Math.min(8, Number(req.body?.maxCandidates) || 5),
       teacherDocs: sanitizeTeacherDocs(req.body?.teacherDocs),
+      officialDocs: await loadOfficialSources(),
     });
     res.json({
       extraction: serializeExtraction(extraction),

@@ -21,6 +21,7 @@ import {
   type KnowledgeTaskKind,
   type ResolvedScope,
   type TeacherKnowledgeDoc,
+  type OfficialKnowledgeDoc,
 } from '../types/knowledge';
 import { getOfficialCurriculumDatabase } from '../data/curriculumDb';
 import {
@@ -164,7 +165,12 @@ export const FACET_KEYWORDS: Array<{ facet: KnowledgeFacet; terms: string[] }> =
   { facet: 'marifa', terms: ['معلومات', 'معلومه', 'بيانات', 'معطيات', 'مفهوم', 'تعريف', 'معرفي'] },
   { facet: 'manhaji', terms: ['منهجي', 'منهجيه', 'مهاره'] },
   { facet: 'mostalahat', terms: ['مصطلحات', 'مصطلح', 'مفردات'] },
+  // «ختاميه» كلمة شديدة الخصوصية: لا تكاد ترد في الوثائق الرسمية إلا مع الكفاءة،
+  // وبها تصبح واجهة الكفاءة الختامية قابلة للطلب صراحةً (كانت غير قابلة للوصول
+  // فينسب السؤال إلى مركبة الكفاءة).
+  { facet: 'kafaa', terms: ['ختاميه', 'ختامي'] },
   { facet: 'markaba', terms: ['كفاءه', 'كفاءات', 'مركبه'] },
+  { facet: 'midan', terms: ['ميدان', 'ميادين'] },
   { facet: 'ma3ayir', terms: ['معايير', 'مؤشرات', 'شبكه', 'سلم'] },
   { facet: 'teacherRole', terms: ['الاستاذ', 'سيناريو', 'مراحل'] },
   { facet: 'learnerRole', terms: ['المتعلم', 'التلميذ'] },
@@ -233,6 +239,23 @@ export function detectRequestedFacets(query: string): KnowledgeFacet[] {
     { phrase: 'قائمه المقاطع', facet: 'map', weight: 4 },
     { phrase: 'عناوين الدروس', facet: 'map', weight: 4 },
     { phrase: 'خريطه المنهاج', facet: 'map', weight: 4 },
+    // عبارات الكفاءة: تميّز الختامية والشاملة عن مركبة الكفاءة
+    { phrase: 'الكفاءه الختاميه', facet: 'kafaa', weight: 4 },
+    { phrase: 'الكفاءات الختاميه', facet: 'kafaa', weight: 4 },
+    { phrase: 'كفاءه ختاميه', facet: 'kafaa', weight: 4 },
+    { phrase: 'الكفاءه الشامله', facet: 'kafaa', weight: 4 },
+    { phrase: 'الكفاءات المستهدفه', facet: 'kafaa', weight: 3 },
+    { phrase: 'مركبه الكفاءه', facet: 'markaba', weight: 4 },
+    { phrase: 'مركبات الكفاءه', facet: 'markaba', weight: 4 },
+    // عبارات بنيوية تُطلب صراحة من الوثائق الرسمية
+    { phrase: 'الهدف التعلمي', facet: 'ta3alom', weight: 4 },
+    { phrase: 'الاهداف التعليميه', facet: 'ta3alom', weight: 3 },
+    { phrase: 'مقطع تعلمي', facet: 'maqta', weight: 3 },
+    { phrase: 'مورد تعلمي', facet: 'mawrid', weight: 3 },
+    { phrase: 'معايير التقويم', facet: 'ma3ayir', weight: 4 },
+    { phrase: 'الحجم الساعي', facet: 'zaman', weight: 4 },
+    { phrase: 'المخطط السنوي', facet: 'progression', weight: 3 },
+    { phrase: 'المخططات السنويه', facet: 'progression', weight: 3 },
   ];
   for (const item of phrases) if (normalized.includes(item.phrase)) register(item.facet, item.weight);
   return [...found.entries()]
@@ -331,8 +354,12 @@ const TEACHER_PHASES: Array<{ key: 'inilitaq' | 'taqasi' | 'irsae' | 'taqwim'; l
 export interface IndexBuildOptions {
   lessons?: LessonMemo[];
   teacherDocs?: TeacherKnowledgeDoc[];
+  /** الوثائق الرسمية الحرفية (المنهاج، الوثيقة المرافقة، دليل الأستاذ، المخططات). */
+  officialDocs?: OfficialKnowledgeDoc[];
   includeProgression?: boolean;
   includeCorpus?: boolean;
+  /** تضمين المصادر الرسمية الحرفية؛ الافتراضي نعم. */
+  includeOfficialDocs?: boolean;
 }
 
 const buildMemoDocuments = (lessons: LessonMemo[]): { documents: KnowledgeDocument[]; chunks: KnowledgeChunk[] } => {
@@ -592,8 +619,8 @@ const buildCorpus = (): { documents: KnowledgeDocument[]; chunks: KnowledgeChunk
 
 const TEACHER_CHUNK_SIZE = 1100;
 
-/** تقسيم نص وثيقة الأستاذ إلى مقاطع بحجم مناسب للبحث مع الحفاظ على العناوين. */
-export function chunkTeacherText(text: string): string[] {
+/** تقسيم نص وثيقة إلى مقاطع بحجم مناسب للبحث مع الحفاظ على العناوين. */
+export function chunkTeacherText(text: string, maxSize: number = TEACHER_CHUNK_SIZE): string[] {
   const clean = String(text || '').replace(/\r/g, '');
   if (!clean.trim()) return [];
   const blocks = clean.split(/\n{2,}|(?=^#{1,4}\s)/m).map(block => block.trim()).filter(Boolean);
@@ -601,12 +628,12 @@ export function chunkTeacherText(text: string): string[] {
   let buffer = '';
   const flush = () => { if (buffer.trim()) pieces.push(buffer.trim()); buffer = ''; };
   for (const block of blocks) {
-    if (block.length > TEACHER_CHUNK_SIZE) {
+    if (block.length > maxSize) {
       flush();
       const sentences = block.split(/(?<=[.!؟\n])\s+/);
       let part = '';
       for (const sentence of sentences) {
-        if ((part + sentence).length > TEACHER_CHUNK_SIZE) {
+        if ((part + sentence).length > maxSize) {
           if (part.trim()) pieces.push(part.trim());
           part = sentence;
         } else {
@@ -616,35 +643,188 @@ export function chunkTeacherText(text: string): string[] {
       if (part.trim()) pieces.push(part.trim());
       continue;
     }
-    if (buffer && (buffer + '\n\n' + block).length > TEACHER_CHUNK_SIZE) flush();
+    if (buffer && (buffer + '\n\n' + block).length > maxSize) flush();
     buffer = buffer ? `${buffer}\n\n${block}` : block;
   }
   flush();
   return pieces;
 }
 
-/** تخمين نوع المعلومة داخل نص حر (وثيقة أستاذ) من كلماته. */
+/**
+ * قواعد تحديد نوع المعلومة داخل نص حر (وثيقة أستاذ أو نص رسمي مفرَّغ).
+ *
+ * كل قاعدة قائمة مصطلحات بأوزان: المصطلح المركّب («الكفاءة الختامية») يرجّح
+ * بوزن أعلى من المفرد («كفاءة»)، لأن الصفحات الرسمية طويلة وتذكر عدة مفاهيم
+ * معاً. الترتيب في المصفوفة يحسم التعادل، لذا تسبقها الواجهات البنيوية.
+ */
+const FACET_TEXT_RULES: Array<{ facet: KnowledgeFacet; terms: Array<[string, number]> }> = [
+  { facet: 'kafaa', terms: [['كفاءه ختاميه', 4], ['كفاءات ختاميه', 4], ['كفاءه شامله', 4], ['الكفاءات المستهدفه', 3], ['كفاءه', 1]] },
+  { facet: 'markaba', terms: [['مركبات الكفاءه', 4], ['مركبه الكفاءه', 4], ['مركبات', 2], ['مركبه', 2]] },
+  { facet: 'ma3ayir', terms: [['معايير التقويم', 4], ['معايير', 2], ['معيار', 2]] },
+  { facet: 'midan', terms: [['الميادين', 3], ['ميادين', 2], ['ميدان', 2]] },
+  { facet: 'maqta', terms: [['مقطع تعلمي', 4], ['المقاطع التعلمي', 3], ['مقطع', 1]] },
+  { facet: 'mawrid', terms: [['مورد تعلمي', 4], ['الموارد التعلمي', 3], ['مورد', 1]] },
+  { facet: 'ta3alom', terms: [['الهدف التعلمي', 4], ['تعلم المورد', 4], ['اهداف تعليميه', 3]] },
+  { facet: 'marifa', terms: [['مورد معرفي', 4], ['الموارد المعرفيه', 3]] },
+  { facet: 'manhaji', terms: [['مورد منهجي', 4], ['الموارد المنهجيه', 3]] },
+  { facet: 'mostalahat', terms: [['مصطلحات', 3], ['مصطلح', 3]] },
+  { facet: 'zaman', terms: [['حجم ساعي', 4], ['الحجم الساعي', 4], ['عدد الاسابيع', 3], ['الحصص', 2]] },
+  { facet: 'progression', terms: [['المخططات السنويه', 3], ['المخطط السنوي', 3], ['توزيع سنوي', 3], ['تدرج', 3], ['اسبوع', 1]] },
+  { facet: 'wadiya', terms: [['وضعيه انطلاق', 4], ['الوضعيه الانطلاقيه', 4], ['انطلاقيه', 3], ['وضعيات', 1]] },
+  { facet: 'moshkila', terms: [['اشكالي', 4], ['نص الوضعيه', 3], ['مشكل', 3]] },
+  { facet: 'faradiyat', terms: [['فرضيات', 4], ['فرضي', 4]] },
+  { facet: 'irsae', terms: [['ارساء', 4], ['خلاصه', 3], ['حصيله', 3]] },
+  { facet: 'teacherRole', terms: [['دور الاستاذ', 4], ['نشاط الاستاذ', 4], ['يقود الاستاذ', 3]] },
+  { facet: 'learnerRole', terms: [['دور المتعلم', 4], ['نشاط المتعلم', 4]] },
+  { facet: 'instructions', terms: [['تعليمات', 4], ['اسئله', 3], ['السند', 2]] },
+  { facet: 'answers', terms: [['سلم التنقيط', 4], ['اجوبه', 4], ['الاجابه المرتقبه', 4], ['اجابه', 3]] },
+  { facet: 'taqwim', terms: [['تقويم', 3], ['اختبار', 3], ['فرض', 2], ['تمرين', 2], ['تطبيق', 1]] },
+  { facet: 'activity', terms: [['انشطه', 3], ['النشاط', 2], ['نشاط', 1]] },
+  { facet: 'wasail', terms: [['وسائل', 3], ['السندات', 2], ['ادوات', 2]] },
+  { facet: 'methodology', terms: [['توجيه منهجي', 4], ['دليل الاستاذ', 3], ['وثيقه مرافقه', 3], ['ارشاد', 2]] },
+];
+
+/** حجم النص الذي تُفحص فيه المصطلحات؛ يكفي لتحديد الموضوع دون كلفة على الفهرسة. */
+const FACET_GUESS_WINDOW = 1600;
+
+/**
+ * طيّ أداة التعريف لمقارنة مصطلحات الواجهات.
+ *
+ * `normalizeArabic` لا تحذف «ال»، فكان المصطلح «كفاءة ختامية» لا يطابق
+ * «الكفاءة الختامية» كما ترد في الوثائق الرسمية. تُحذف «ال» من أول كل كلمة
+ * في النص والمصطلح معاً، فتبقى القواعد مكتوبة بصيغتها الطبيعية.
+ */
+const foldArticle = (value: string): string => normalizeArabic(value).replace(/(^|\s)ال/g, '$1');
+
+const countTerm = (haystack: string, needle: string): number => {
+  if (!needle) return 0;
+  let count = 0;
+  let from = haystack.indexOf(needle);
+  while (from >= 0 && count < 3) {
+    count += 1;
+    from = haystack.indexOf(needle, from + needle.length);
+  }
+  return count;
+};
+
+/**
+ * تخمين نوع المعلومة داخل نص حر (وثيقة أستاذ أو نص رسمي مفرَّغ).
+ *
+ * تُجمع أوزان كل قاعدة بدل الاكتفاء بأول مطابقة: الصفحة الرسمية قد تذكر
+ * «التقويم» عَرَضاً بينما موضوعها «الكفاءة الختامية»، والمطابقة الأولى كانت
+ * تُصنّفها خطأ. ظهور المصطلح في أول سطر (موضع العنوان) يمنح ترجيحاً إضافياً.
+ */
+const FACET_TERM_FOLDS = new Map<string, string>();
+const foldTerm = (term: string): string => {
+  const cached = FACET_TERM_FOLDS.get(term);
+  if (cached !== undefined) return cached;
+  const folded = foldArticle(term);
+  FACET_TERM_FOLDS.set(term, folded);
+  return folded;
+};
+
 export function guessFacetOfFreeText(text: string): KnowledgeFacet {
-  const normalized = normalizeArabic(text.slice(0, 500));
-  const order: Array<[string, KnowledgeFacet]> = [
-    ['ارساء', 'irsae'], ['خلاصه', 'irsae'], ['حصيله', 'irsae'],
-    ['فرضي', 'faradiyat'],
-    ['وضعيه انطلاق', 'wadiya'], ['انطلاقيه', 'wadiya'],
-    ['مشكل', 'moshkila'], ['اشكالي', 'moshkila'],
-    ['تقويم', 'taqwim'], ['تمرين', 'taqwim'], ['تطبيق', 'taqwim'], ['اختبار', 'taqwim'],
-    ['تعليمات', 'instructions'], ['اسئله', 'instructions'],
-    ['اجوبه', 'answers'], ['اجابه', 'answers'],
-    ['نشاط', 'activity'], ['انشطه', 'activity'],
-    ['وسائل', 'wasail'], ['ادوات', 'wasail'],
-    ['مصطلح', 'mostalahat'],
-    ['كفاءه', 'markaba'], ['مركبه', 'markaba'],
-    ['تدرج', 'progression'], ['اسبوع', 'progression'],
-    ['دليل الاستاذ', 'methodology'], ['وثيقه مرافقه', 'methodology'],
-    ['منهاج', 'reference'], ['مذكره', 'reference'],
-  ];
-  for (const [term, facet] of order) if (normalized.includes(term)) return facet;
-  return 'reference';
+  const source = String(text || '');
+  const normalized = foldArticle(source.slice(0, FACET_GUESS_WINDOW));
+  if (!normalized) return 'reference';
+  const newlineAt = source.indexOf('\n');
+  const heading = foldArticle(source.slice(0, newlineAt > 0 ? Math.min(newlineAt, 160) : Math.min(source.length, 160)));
+  let best: { facet: KnowledgeFacet; score: number } | null = null;
+  for (const rule of FACET_TEXT_RULES) {
+    let score = 0;
+    for (const [rawTerm, weight] of rule.terms) {
+      const term = foldTerm(rawTerm);
+      const hits = countTerm(normalized, term);
+      if (hits === 0) continue;
+      score += weight * hits;
+      if (heading.includes(term)) score += weight * 2;
+    }
+    // التساوي يحسمه ترتيب القواعد: الواجهات البنيوية أولاً.
+    if (score > 0 && (!best || score > best.score)) best = { facet: rule.facet, score };
+  }
+  return best ? best.facet : 'reference';
 }
+
+/**
+ * حجم المقطع للوثائق الرسمية: أكبر قليلاً من وثائق الأستاذ لأن الصفحة الواحدة
+ * وحدة استشهاد متماسكة، وتفتيتها أكثر يفقد الفقرة سياقها.
+ */
+const OFFICIAL_CHUNK_SIZE = 1500;
+
+/**
+ * أدنى طول لمقطع رسمي مفهرس. التفريغ يولّد أحياناً شذرات في آخر الصفحة
+ * (بقايا خلية جدول أو رقم)، ومقاطعة بهذه القِصَر لا تحمل معنى وتلوّث البحث،
+ * فتُدمج في المقطع السابق بدل فهرستها مستقلة.
+ */
+const MIN_OFFICIAL_CHUNK = 60;
+
+const mergeShortPieces = (pieces: string[]): string[] => {
+  const merged: string[] = [];
+  for (const piece of pieces) {
+    const previous = merged[merged.length - 1];
+    if (piece.length < MIN_OFFICIAL_CHUNK && previous) {
+      merged[merged.length - 1] = `${previous}\n${piece}`;
+      continue;
+    }
+    merged.push(piece);
+  }
+  // شذرة أولى قصيرة تُرحَّل إلى ما بعدها
+  if (merged.length > 1 && merged[0].length < MIN_OFFICIAL_CHUNK) {
+    const [head, ...rest] = merged;
+    return [`${head}\n${rest[0]}`, ...rest.slice(1)];
+  }
+  return merged.filter(piece => piece.length >= MIN_OFFICIAL_CHUNK || merged.length === 1);
+};
+
+/**
+ * فهرسة النصوص الرسمية الحرفية صفحةً صفحة.
+ *
+ * الفرق الجوهري عن وثائق الأستاذ أن كل مقطع يحمل رقم صفحته في الملف الأصلي،
+ * فيصبح الاستشهاد قابلاً للتحقق: «الوثيقة المرافقة — ص 31». وحالة المصدر
+ * `official` تمنحه أولوية أعلى من الملخصات المنهجية (`reference`) في المحرك.
+ */
+const buildOfficialDocs = (docs: OfficialKnowledgeDoc[]): { documents: KnowledgeDocument[]; chunks: KnowledgeChunk[] } => {
+  const documents: KnowledgeDocument[] = [];
+  const chunks: KnowledgeChunk[] = [];
+  for (const doc of docs) {
+    const pages = Array.isArray(doc.pages) ? doc.pages.filter(page => String(page?.text || '').trim()) : [];
+    if (pages.length === 0) continue;
+    const document: KnowledgeDocument = {
+      id: doc.id,
+      kind: doc.kind || 'curriculum',
+      title: doc.title,
+      authority: doc.authority || 'وزارة التربية الوطنية',
+      url: doc.url,
+      level: doc.level || 'all',
+      status: 'official',
+      role: doc.quality
+        ? `نص رسمي حرفي مفرَّغ من ملف الوزارة (مطابقة ${doc.quality}%).`
+        : 'نص رسمي حرفي مفرَّغ من ملف الوزارة.',
+    };
+    documents.push(document);
+    for (const page of pages) {
+      mergeShortPieces(chunkTeacherText(String(page.text), OFFICIAL_CHUNK_SIZE)).forEach((piece, index) => {
+        const heading = cleanText(piece.split('\n')[0]).slice(0, 70);
+        chunks.push({
+          id: `${document.id}-p${page.page}-${index}`,
+          documentId: document.id,
+          documentTitle: document.title,
+          kind: document.kind,
+          status: document.status,
+          level: document.level,
+          facet: guessFacetOfFreeText(piece),
+          section: heading ? `ص ${page.page} — ${heading}` : `ص ${page.page}`,
+          text: piece,
+          scope: {},
+          url: document.url,
+          page: page.page,
+          priority: priorityOf(document.kind, document.status),
+        });
+      });
+    }
+  }
+  return { documents, chunks };
+};
 
 const buildTeacherDocs = (docs: TeacherKnowledgeDoc[]): { documents: KnowledgeDocument[]; chunks: KnowledgeChunk[] } => {
   const documents: KnowledgeDocument[] = [];
@@ -718,9 +898,13 @@ export function buildKnowledgeIndex(options: IndexBuildOptions = {}): KnowledgeI
   const progressionPart = options.includeProgression === false ? { documents: [], chunks: [] } : buildProgression();
   const corpusPart = options.includeCorpus === false ? { documents: [], chunks: [] } : buildCorpus();
   const teacherPart = buildTeacherDocs(Array.isArray(options.teacherDocs) ? options.teacherDocs : []);
+  const officialPart = options.includeOfficialDocs === false
+    ? { documents: [], chunks: [] }
+    : buildOfficialDocs(Array.isArray(options.officialDocs) ? options.officialDocs : []);
 
   const documents = [
     ...mapPart.documents,
+    ...officialPart.documents,
     ...corpusPart.documents,
     ...progressionPart.documents,
     ...memoPart.documents,
@@ -728,6 +912,7 @@ export function buildKnowledgeIndex(options: IndexBuildOptions = {}): KnowledgeI
   ];
   const chunks = [
     ...mapPart.chunks,
+    ...officialPart.chunks,
     ...corpusPart.chunks,
     ...progressionPart.chunks,
     ...memoPart.chunks,
@@ -774,6 +959,9 @@ const signatureOf = (options: IndexBuildOptions): string => [
   options.includeProgression === false ? 'no-progression' : 'progression',
   options.includeCorpus === false ? 'no-corpus' : 'corpus',
   (options.teacherDocs || []).map(doc => `${doc.id}:${doc.text.length}`).join(','),
+  options.includeOfficialDocs === false
+    ? 'no-official'
+    : `official:${(options.officialDocs || []).map(doc => `${doc.id}:${doc.text.length}`).join(',')}`,
 ].join('|');
 
 /** فهرس مخزّن مؤقتاً: يُعاد بناؤه فقط عند تغيّر الدروس أو وثائق الأستاذ. */
@@ -862,7 +1050,9 @@ const buildSnippet = (text: string, terms: string[], max = 240): string => {
 export const sourceLabelOf = (chunk: KnowledgeChunk): string => {
   const kind = KNOWLEDGE_KIND_LABELS[chunk.kind] || chunk.kind;
   const level = chunk.level === 'all' ? '' : ` — ${KNOWLEDGE_LEVEL_LABELS[chunk.level]}`;
-  return `${kind}${level}`;
+  // رقم الصفحة يجعل الاستشهاد من الوثيقة الرسمية قابلاً للتحقق منه ورقياً.
+  const page = chunk.page ? ` — ص ${chunk.page}` : '';
+  return `${kind}${level}${page}`;
 };
 
 export interface KnowledgeSearchOptions extends KnowledgeSearchFilters, IndexBuildOptions {
@@ -1170,6 +1360,7 @@ const toCandidate = (hit: KnowledgeHit): ExtractionCandidate => ({
   level: hit.chunk.level,
   url: hit.chunk.url,
   scope: hit.chunk.scope,
+  page: hit.chunk.page,
   score: hit.score,
   priority: hit.chunk.priority,
   sourceLabel: hit.sourceLabel,
@@ -1398,6 +1589,8 @@ export interface KnowledgeReference {
   statusLabel: string;
   sourceLabel: string;
   url?: string;
+  /** رقم الصفحة في الوثيقة الرسمية الأصلية إن كان المقطع منها. */
+  page?: number;
   snippet: string;
   score?: number;
   scopeLabel?: string;
@@ -1423,6 +1616,7 @@ export interface SerializedExtraction {
       statusLabel: string;
       sourceLabel: string;
       url?: string;
+      page?: number;
       scopeLabel: string;
       score: number;
     }>;
@@ -1466,6 +1660,7 @@ export function serializeExtraction(extraction: KnowledgeExtraction, options: { 
         statusLabel: KNOWLEDGE_STATUS_LABELS[candidate.status],
         sourceLabel: candidate.sourceLabel,
         url: candidate.url,
+        page: candidate.page,
         scopeLabel: pathOf(candidate.scope),
         score: candidate.score,
       })),
@@ -1496,6 +1691,7 @@ export function toKnowledgeReferences(hits: KnowledgeHit[], limit = 8): Knowledg
     statusLabel: KNOWLEDGE_STATUS_LABELS[hit.chunk.status],
     sourceLabel: hit.sourceLabel,
     url: hit.chunk.url,
+    page: hit.chunk.page,
     snippet: hit.snippet,
     score: hit.score,
     scopeLabel: pathOf(hit.chunk.scope),
