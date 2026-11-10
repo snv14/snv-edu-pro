@@ -7,6 +7,7 @@ import {
   toKnowledgeReferences,
   type KnowledgeReference,
 } from './knowledgeBase';
+import { getCachedOfficialSources, preloadOfficialSources } from './knowledgeOfficialSources';
 import { loadKnowledgeDocs, loadKnowledgeSettings, type KnowledgeSettings } from './knowledgeLibraryStore';
 
 export interface SmartAiAttachment {
@@ -303,6 +304,9 @@ export function prepareKnowledge(request: SmartAiRequest): PreparedKnowledge | n
     ...(settings.includeTeacherDocs ? loadKnowledgeDocs() : []),
     ...(request.knowledge?.extraDocs || []),
   ];
+  // النسخة المتزامنة من المصادر الرسمية؛ تكون جاهزة لأن askSmartAi ينتظر
+  // preloadOfficialSources قبل استدعاء هذه الدالة.
+  const officialDocs = settings.includeOfficialSources === false ? [] : getCachedOfficialSources();
 
   try {
     const extraction = extractKnowledge(request.question, {
@@ -310,6 +314,7 @@ export function prepareKnowledge(request: SmartAiRequest): PreparedKnowledge | n
       lesson: request.lesson || null,
       level: request.level || request.lesson?.level,
       teacherDocs,
+      officialDocs,
       includeCorpus: settings.includeCorpus,
       includeProgression: settings.includeProgression,
       facets: request.knowledge?.facets,
@@ -347,6 +352,11 @@ export function prepareKnowledge(request: SmartAiRequest): PreparedKnowledge | n
 export async function askSmartAi(request: SmartAiRequest): Promise<SmartAiResponse | null> {
   const question = request.question.trim();
   const level = request.level || request.lesson?.level || 'غير محدد';
+  // تُحمَّل النصوص الرسمية الحرفية مرة واحدة قبل أول تحضير؛ الدالة تُعيد
+  // الوعد نفسه في الاستدعاءات التالية فلا كلفة تكرار.
+  if (request.knowledge?.enabled !== false && loadKnowledgeSettings().includeOfficialSources !== false) {
+    await preloadOfficialSources();
+  }
   const knowledge = prepareKnowledge(request);
 
   // وضع الاستخراج المباشر: جواب موثق من القاعدة دون انتظار مزود الذكاء الاصطناعي.

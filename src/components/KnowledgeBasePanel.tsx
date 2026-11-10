@@ -1,10 +1,15 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Database, ExternalLink, FilePlus2, Search, Trash2, X } from 'lucide-react';
 import {
   getKnowledgeStats,
   searchKnowledge,
   type IndexBuildOptions,
 } from '../services/knowledgeBase';
+import {
+  OFFICIAL_SOURCES_TOTAL,
+  getOfficialSourcesManifest,
+  loadOfficialSources,
+} from '../services/knowledgeOfficialSources';
 import {
   deleteKnowledgeDoc,
   loadKnowledgeDocs,
@@ -21,6 +26,7 @@ import {
   type KnowledgeFacet,
   type KnowledgeLevel,
   type KnowledgeSourceKind,
+  type OfficialKnowledgeDoc,
   type TeacherKnowledgeDoc,
 } from '../types/knowledge';
 
@@ -61,6 +67,14 @@ export const KnowledgeBasePanel: React.FC<Props> = ({
   onClose,
 }) => {
   const [docs, setDocs] = useState<TeacherKnowledgeDoc[]>(() => loadKnowledgeDocs());
+  const [officialDocs, setOfficialDocs] = useState<OfficialKnowledgeDoc[]>([]);
+
+  // النصوص الرسمية كبيرة (~473 ألف حرف) فتُحمَّل كسولياً مرة واحدة عند فتح اللوحة.
+  useEffect(() => {
+    let active = true;
+    void loadOfficialSources().then(loaded => { if (active) setOfficialDocs(loaded); });
+    return () => { active = false; };
+  }, []);
   const [query, setQuery] = useState('');
   const [searched, setSearched] = useState('');
   const [formOpen, setFormOpen] = useState(false);
@@ -70,9 +84,10 @@ export const KnowledgeBasePanel: React.FC<Props> = ({
   const indexOptions = useMemo<IndexBuildOptions>(() => ({
     lessons,
     teacherDocs: settings.includeTeacherDocs ? [...docs, ...extraDocs] : extraDocs,
+    officialDocs: settings.includeOfficialSources ? officialDocs : [],
     includeCorpus: settings.includeCorpus,
     includeProgression: settings.includeProgression,
-  }), [lessons, docs, extraDocs, settings.includeTeacherDocs, settings.includeCorpus, settings.includeProgression]);
+  }), [lessons, docs, extraDocs, officialDocs, settings.includeTeacherDocs, settings.includeOfficialSources, settings.includeCorpus, settings.includeProgression]);
 
   const stats = useMemo(() => getKnowledgeStats(indexOptions), [indexOptions]);
 
@@ -199,12 +214,43 @@ export const KnowledgeBasePanel: React.FC<Props> = ({
         </span>
       </p>
 
+      <section className="rounded-xl border border-teal-200 bg-teal-50/60 p-2.5 space-y-1.5">
+        <h4 className="text-[11.5px] font-black text-teal-900">
+          الوثائق الرسمية المفهرسة
+          <span className="mr-1 font-bold text-teal-700">
+            ({OFFICIAL_SOURCES_TOTAL.pages} صفحة · {Math.round(OFFICIAL_SOURCES_TOTAL.chars / 1000)} ألف حرف)
+          </span>
+        </h4>
+        <ul className="space-y-1">
+          {getOfficialSourcesManifest().map(entry => (
+            <li key={entry.id} className="flex items-start gap-1.5 text-[10.5px] leading-snug text-teal-900">
+              <span className={`mt-0.5 shrink-0 rounded border px-1 py-px font-black ${KIND_STYLE[entry.kind] || 'bg-white text-slate-700 border-slate-300'}`}>
+                {KNOWLEDGE_KIND_LABELS[entry.kind] || entry.kind}
+              </span>
+              <span className="min-w-0">
+                {entry.title}
+                <span className="block font-bold text-teal-700">
+                  {entry.pages} صفحة · مطابقة {entry.quality}%
+                  {entry.level !== 'all' ? ` · ${KNOWLEDGE_LEVEL_LABELS[entry.level as KnowledgeLevel]}` : ''}
+                </span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      </section>
+
       <section className="rounded-xl border border-gray-200 bg-white p-2.5 space-y-2">
         <h4 className="text-[11.5px] font-black text-slate-800">إعدادات البحث</h4>
         <div className="grid grid-cols-1 gap-1.5">
           <Toggle
-            label="التوجيهات المنهجية (المنهاج، الوثيقة المرافقة، دليل الأستاذ)"
-            hint="ملخصات بنيوية ومنهجية تُستعمل لمعايير الصياغة والاستخراج."
+            label={`الوثائق الرسمية الحرفية (${officialDocs.length}/${OFFICIAL_SOURCES_TOTAL.documents} محمَّلة)`}
+            hint="نص الوزارة الأصلي كما هو: المنهاج 2016، الوثيقة المرافقة، دليل الأستاذ س4، والمخططات السنوية — بأرقام الصفحات للاستشهاد."
+            checked={settings.includeOfficialSources}
+            onChange={value => updateSettings({ includeOfficialSources: value })}
+          />
+          <Toggle
+            label="التوجيهات المنهجية (ملخصات بنيوية)"
+            hint="ملخصات تُستعمل لمعايير الصياغة والاستخراج؛ أولويتها أدنى من النص الرسمي الحرفي."
             checked={settings.includeCorpus}
             onChange={value => updateSettings({ includeCorpus: value })}
           />

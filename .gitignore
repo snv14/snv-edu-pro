@@ -33,6 +33,10 @@ Thumbs.db
 .history/
 .env.test
 
+# بايثون (سكربت تفريغ الوثائق الرسمية)
+__pycache__/
+*.pyc
+
 # ملفات الإصدار
 *.tgz
 *.zip

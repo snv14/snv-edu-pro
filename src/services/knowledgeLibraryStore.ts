@@ -13,6 +13,8 @@ export const MAX_DOC_CHARS = 400_000;
 export const MAX_DOCS = 40;
 
 export interface KnowledgeSettings {
+  /** تضمين النصوص الرسمية الحرفية (المنهاج، الوثيقة المرافقة، دليل الأستاذ، المخططات). */
+  includeOfficialSources: boolean;
   /** تضمين وثائق الأستاذ المرفوعة في البحث. */
   includeTeacherDocs: boolean;
   /** تضمين النص الخام (OCR) لمذكرات 1AM. */
@@ -28,6 +30,9 @@ export interface KnowledgeSettings {
 }
 
 export const DEFAULT_KNOWLEDGE_SETTINGS: KnowledgeSettings = {
+  // المصادر الرسمية الحرفية هي عمود القاعدة: مفعّلة افتراضياً، ولها أولوية
+  // أعلى من الملخصات المنهجية في محرك الترتيب.
+  includeOfficialSources: true,
   includeTeacherDocs: true,
   includeOcrSupplement: false,
   includeCorpus: true,
