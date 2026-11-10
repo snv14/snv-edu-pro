@@ -7,6 +7,17 @@ import fs from 'node:fs';
 import { buildGeminiSystemPrompt } from '../services/geminiPrompts';
 import { generateTextWithGateway, getAIProviderStatus } from './aiGateway';
 import { sourcePriorityOf } from '../services/aiSourcePriority';
+import {
+  buildKnowledgeContext,
+  buildLocalKnowledgeAnswer,
+  extractKnowledge,
+  getKnowledgeStats,
+  resolveScope,
+  searchKnowledge,
+  serializeExtraction,
+  toKnowledgeReferences,
+} from '../services/knowledgeBase';
+import { KNOWLEDGE_FACET_LABELS, KNOWLEDGE_KIND_LABELS, type TeacherKnowledgeDoc } from '../types/knowledge';
 
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
@@ -124,6 +135,10 @@ apiApp.post('/api/gemini/smart-assistant', async (req, res) => {
       expertMode = true,
       assistantMode = 'expert',
       history = [],
+      knowledge = [],
+      knowledgeContext = '',
+      knowledgeScope = '',
+      knowledgeSummary = null,
     } = req.body;
 
     if (!String(question || '').trim()) {
@@ -191,7 +206,9 @@ apiApp.post('/api/gemini/smart-assistant', async (req, res) => {
             ta3alom: item.ta3alom,
             markaba: item.markaba,
             taqwim: item.taqwim,
-            activityTitles: Array.isArray(item.anshita) ? item.anshita.map((a: any) => a.title).slice(0, 8) : [],
+            activityTitles: Array.isArray(item.activityTitles)
+              ? item.activityTitles.slice(0, 8)
+              : (Array.isArray(item.anshita) ? item.anshita.map((a: any) => a.title).slice(0, 8) : []),
           }))
       : [];
 
@@ -221,9 +238,69 @@ apiApp.post('/api/gemini/smart-assistant', async (req, res) => {
           .map((item: any) => ({ role: item.role, text: String(item.text).slice(0, 4000) }))
       : [];
 
+    // قاعدة المعرفة: مقتطفات مسترجعة من المنهاج والوثيقة المرافقة ودليل الأستاذ والمذكرات.
+    const clientKnowledge = Array.isArray(knowledge)
+      ? knowledge
+          .filter((item: any) => item && typeof item.text === 'string' && item.text.trim())
+          .slice(0, 24)
+          .map((item: any) => ({
+            id: String(item.id || ''),
+            kind: String(item.kind || 'memo'),
+            title: String(item.title || '').slice(0, 200),
+            section: String(item.section || '').slice(0, 200),
+            facet: String(item.facet || 'reference'),
+            level: String(item.level || 'all'),
+            status: String(item.status || 'platform'),
+            sourceLabel: String(item.sourceLabel || ''),
+            scopeLabel: String(item.scopeLabel || ''),
+            url: typeof item.url === 'string' && /^https?:\/\//i.test(item.url) ? item.url.slice(0, 500) : undefined,
+            text: String(item.text).slice(0, 2000),
+          }))
+      : [];
+
+    let knowledgeBlock = String(knowledgeContext || '').slice(0, 20000);
+    let knowledgeRefs: unknown[] = clientKnowledge;
+    let usedScope = String(knowledgeScope || '');
+    let usedSummary = knowledgeSummary;
+
+    if (!knowledgeBlock) {
+      // لم يرسل العميل نتائج البحث (طلب API مباشر): نبنيها على الخادم من نفس القاعدة.
+      try {
+        const serverExtraction = extractKnowledge(String(question), {
+          level: String(level || currentLesson?.level || ''),
+          lesson: currentLesson || null,
+        });
+        knowledgeBlock = buildKnowledgeContext(serverExtraction);
+        knowledgeRefs = toKnowledgeReferences(serverExtraction.hits, 8);
+        usedScope = [
+          serverExtraction.scope.midan,
+          serverExtraction.scope.maqta,
+          serverExtraction.scope.mawrid,
+          serverExtraction.scope.ta3alom,
+        ].filter(Boolean).join(' ← ');
+        usedSummary = serializeExtraction(serverExtraction, { textLimit: 200 });
+      } catch (knowledgeError) {
+        console.warn('[knowledge-base] retrieval failed:', knowledgeError instanceof Error ? knowledgeError.message : knowledgeError);
+      }
+    }
+
+    const knowledgeInstructions = knowledgeBlock
+      ? [
+        'قاعدة معرفة المنصة (المنهاج، الوثيقة المرافقة، دليل الأستاذ، المذكرات، وثائق الأستاذ) — مقتطفات مسترجعة لهذا السؤال:',
+        knowledgeBlock,
+        usedScope ? `النطاق المستنتج: ${usedScope}` : '',
+        'قواعد استعمال قاعدة المعرفة:',
+        '- هذه المقتطفات مصدرك الأول: انقل النصوص الرسمية كما هي واستشهد برقمها [1]، [2]…',
+        '- إن وُجدت أكثر من قيمة موثقة، اعرضها كاحتمالات مرقمة مع مصدر كل احتمال.',
+        '- إن لم تكفِ المقتطفات، اكتب ذلك صراحة ثم قدّم اقتراحاً موسوماً «اقتراح تربوي — يحتاج مراجعة الأستاذ».',
+        '- لا تنسب إلى المنهاج أو الوثيقة المرافقة نصاً غير موجود في المقتطفات.',
+      ].filter(Boolean).join('\n')
+      : 'لا توجد مقتطفات مطابقة في قاعدة المعرفة لهذا السؤال؛ اعتمد على سياسة المصادر وبيّن ذلك في جوابك.';
+
     const knowledgeSnapshot = getKnowledgeSnapshot();
     const context = [
       sourcePolicy,
+      knowledgeInstructions,
       'لقطة المعرفة المحدثة من زيارات الويب المجدولة:',
       JSON.stringify({
         updatedAt: knowledgeSnapshot.updatedAt,
@@ -255,11 +332,44 @@ apiApp.post('/api/gemini/smart-assistant', async (req, res) => {
           webSearchQueries: [],
           usedWeb: false,
           usedAttachments: [],
+          knowledgeUsed: knowledgeRefs,
+          knowledgeScope: usedScope,
+          knowledgeSummary: usedSummary,
           fallbackNotice: useWeb
             ? `تمت صياغة الإجابة عبر المزود الاحتياطي (${generated.provider}) لعدم توفر مفتاح GEMINI_API_KEY على الخادم. أُجيب على السؤال كنص تربوي مباشر دون بحث ويب، لأن البحث الشبكي التفاعلي يتطلب تفعيل Gemini.`
             : `تمت الإجابة عبر المزود الاحتياطي (${generated.provider}).`,
         });
       } catch (fallbackError: any) {
+        // لا يوجد أي مزود ذكاء اصطناعي: نُجيب من قاعدة المعرفة بدل ترك الأستاذ بلا نتيجة.
+        try {
+          const localExtraction = extractKnowledge(String(question), {
+            level: String(level || currentLesson?.level || ''),
+            lesson: currentLesson || null,
+          });
+          const candidates = localExtraction.facets.reduce((sum, group) => sum + group.candidates.length, 0);
+          if (candidates > 0) {
+            return res.json({
+              text: buildLocalKnowledgeAnswer(localExtraction),
+              provider: 'knowledge-base',
+              sources: [],
+              webSearchQueries: [],
+              usedWeb: false,
+              usedAttachments: [],
+              localAnswer: true,
+              knowledgeUsed: toKnowledgeReferences(localExtraction.hits, 8),
+              knowledgeScope: [
+                localExtraction.scope.midan,
+                localExtraction.scope.maqta,
+                localExtraction.scope.mawrid,
+                localExtraction.scope.ta3alom,
+              ].filter(Boolean).join(' ← '),
+              knowledgeSummary: serializeExtraction(localExtraction, { textLimit: 300 }),
+              fallbackNotice: `لا يوجد مزود ذكاء اصطناعي مُعدّ على الخادم (${fallbackError?.message || 'خطأ غير معروف'}). عُرضت نتائج البحث الموثقة من قاعدة المعرفة (المنهاج، الوثيقة المرافقة، دليل الأستاذ، المذكرات) مباشرة؛ أضف GEMINI_API_KEY للحصول على تحليل أعمق واقتراحات.`,
+            });
+          }
+        } catch {
+          // نكمل إلى خطأ 503 إذا تعذّر الاستخراج المحلي أيضاً.
+        }
         return res.status(503).json({
           error: `تعذر الاتصال بالمزود النصي الاحتياطي: ${fallbackError?.message || 'خطأ غير معروف'}. يرجى إضافة GEMINI_API_KEY على الخادم أو التحقق من مفاتيح المزودات البديلة.`,
         });
@@ -323,6 +433,9 @@ apiApp.post('/api/gemini/smart-assistant', async (req, res) => {
               webSearchQueries: [],
               usedWeb: false,
               usedAttachments: [],
+              knowledgeUsed: knowledgeRefs,
+              knowledgeScope: usedScope,
+              knowledgeSummary: usedSummary,
               fallbackNotice: `تعذر الاتصال بـ Gemini (${geminiCallError?.message || 'انقطاع مؤقت'})، وتم التحويل تلقائياً إلى المزود الاحتياطي (${fallbackResult.provider}) لتقديم الإجابة بدون بحث ويب.`,
             });
           } catch {
@@ -349,6 +462,9 @@ apiApp.post('/api/gemini/smart-assistant', async (req, res) => {
         webSearchQueries: grounding?.webSearchQueries || [],
         usedWeb: sources.length > 0 || Boolean(grounding?.webSearchQueries?.length),
         usedAttachments: uploadedFiles.map((file) => file.displayName || file.name),
+        knowledgeUsed: knowledgeRefs,
+        knowledgeScope: usedScope,
+        knowledgeSummary: usedSummary,
       });
     } finally {
       await Promise.allSettled(uploadedFiles.map((file) => ai.files.delete({ name: file.name })));
@@ -366,6 +482,105 @@ apiApp.post('/api/gemini/smart-assistant', async (req, res) => {
       });
     }
     return res.status(500).json({ error: message });
+  }
+});
+
+/* ─────────────── قاعدة معرفة المساعد: المنهاج، الوثيقة المرافقة، دليل الأستاذ، المذكرات ─────────────── */
+
+const KNOWLEDGE_DOC_LIMIT = 24;
+const KNOWLEDGE_DOC_CHARS = 200_000;
+
+const sanitizeTeacherDocs = (input: unknown): TeacherKnowledgeDoc[] => {
+  if (!Array.isArray(input)) return [];
+  return input.slice(0, KNOWLEDGE_DOC_LIMIT).map((item: any) => ({
+    id: String(item?.id || `kb-inline-${Math.random().toString(36).slice(2, 8)}`),
+    kind: ['curriculum', 'progression', 'companionDocument', 'teacherGuide', 'memo', 'teacherDocument'].includes(item?.kind) ? item.kind : 'teacherDocument',
+    title: String(item?.title || 'وثيقة الأستاذ').slice(0, 160),
+    level: ['all', '1am', '2am', '3am', '4am'].includes(item?.level) ? item.level : 'all',
+    text: String(item?.text || '').slice(0, KNOWLEDGE_DOC_CHARS),
+    authority: item?.authority ? String(item.authority).slice(0, 160) : undefined,
+    url: typeof item?.url === 'string' && /^https?:\/\//i.test(item.url) ? item.url.slice(0, 500) : undefined,
+    createdAt: String(item?.createdAt || new Date().toISOString()),
+    source: (item?.source === 'ocr' ? 'ocr' : 'teacher') as 'ocr' | 'teacher',
+  })).filter((item) => item.text.trim());
+};
+
+const resolveScopeForApi = (query: string, level?: unknown) => {
+  const scope = resolveScope(query, { level: String(level || '') });
+  return {
+    level: scope.level,
+    midan: scope.midan,
+    maqta: scope.maqta,
+    mawrid: scope.mawrid,
+    ta3alom: scope.ta3alom,
+    lessonIds: scope.lessonIds.slice(0, 20),
+    candidates: scope.candidates,
+  };
+};
+
+// حالة قاعدة المعرفة: العائلات، الأحجام، وأنواع المعلومة المفهرسة.
+apiApp.get('/api/knowledge/status', (_req, res) => {
+  const stats = getKnowledgeStats();
+  res.json({
+    chunks: stats.chunks,
+    byKind: Object.fromEntries(Object.entries(stats.byKind).map(([kind, count]) => [kind, { count, label: KNOWLEDGE_KIND_LABELS[kind as keyof typeof KNOWLEDGE_KIND_LABELS] || kind }])),
+    byFacet: Object.fromEntries(Object.entries(stats.byFacet).map(([facet, count]) => [facet, { count, label: KNOWLEDGE_FACET_LABELS[facet as keyof typeof KNOWLEDGE_FACET_LABELS] || facet }])),
+    byLevel: stats.byLevel,
+    documents: stats.documents.map((document) => ({
+      id: document.id,
+      kind: document.kind,
+      kindLabel: KNOWLEDGE_KIND_LABELS[document.kind] || document.kind,
+      title: document.title,
+      authority: document.authority,
+      url: document.url,
+      level: document.level,
+      status: document.status,
+      role: document.role,
+      chunkCount: document.chunkCount || 0,
+    })),
+  });
+});
+
+// بحث حر في قاعدة المعرفة (بدون ذكاء اصطناعي).
+apiApp.post('/api/knowledge/search', (req, res) => {
+  try {
+    const query = String(req.body?.query || '').slice(0, 2000);
+    if (!query.trim()) return res.status(400).json({ error: 'نص البحث مطلوب' });
+    const hits = searchKnowledge(query, {
+      level: String(req.body?.level || ''),
+      kinds: Array.isArray(req.body?.kinds) ? req.body.kinds : undefined,
+      facets: Array.isArray(req.body?.facets) ? req.body.facets : undefined,
+      topK: Math.min(30, Number(req.body?.topK) || 12),
+      teacherDocs: sanitizeTeacherDocs(req.body?.teacherDocs),
+    });
+    res.json({
+      query,
+      references: toKnowledgeReferences(hits, 30),
+      scope: resolveScopeForApi(query, req.body?.level),
+    });
+  } catch (error: unknown) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'تعذر البحث في قاعدة المعرفة' });
+  }
+});
+
+// استخراج موجه: يعيد عدة احتمالات موثقة لكل نوع معلومة (أنشطة، مشكلة، فرضية، إرساء، تقويم…).
+apiApp.post('/api/knowledge/extract', (req, res) => {
+  try {
+    const query = String(req.body?.query || '').slice(0, 4000);
+    if (!query.trim()) return res.status(400).json({ error: 'نص الطلب مطلوب' });
+    const extraction = extractKnowledge(query, {
+      level: String(req.body?.level || ''),
+      facets: Array.isArray(req.body?.facets) ? req.body.facets : undefined,
+      maxCandidates: Math.min(8, Number(req.body?.maxCandidates) || 5),
+      teacherDocs: sanitizeTeacherDocs(req.body?.teacherDocs),
+    });
+    res.json({
+      extraction: serializeExtraction(extraction),
+      answer: buildLocalKnowledgeAnswer(extraction),
+      context: buildKnowledgeContext(extraction).slice(0, 20000),
+    });
+  } catch (error: unknown) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'تعذر الاستخراج من قاعدة المعرفة' });
   }
 });
 

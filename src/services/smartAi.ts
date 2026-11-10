@@ -1,4 +1,13 @@
 import { LessonMemo } from '../types';
+import type { KnowledgeFacet, TeacherKnowledgeDoc } from '../types/knowledge';
+import {
+  buildKnowledgeContext,
+  buildLocalKnowledgeAnswer,
+  extractKnowledge,
+  toKnowledgeReferences,
+  type KnowledgeReference,
+} from './knowledgeBase';
+import { loadKnowledgeDocs, loadKnowledgeSettings, type KnowledgeSettings } from './knowledgeLibraryStore';
 
 export interface SmartAiAttachment {
   name: string;
@@ -16,6 +25,21 @@ export interface SmartAiMessage {
   text: string;
 }
 
+export interface SmartAiKnowledgeOptions {
+  /** تفعيل/تعطيل البحث في قاعدة المعرفة. */
+  enabled?: boolean;
+  /** إعدادات محفوظة أو معدّلة لهذه الجلسة. */
+  settings?: Partial<KnowledgeSettings>;
+  /** وثائق إضافية تُفهرس مع القاعدة (مثل النص الخام OCR). */
+  extraDocs?: TeacherKnowledgeDoc[];
+  /** تقييد الاستخراج بأنواع معلومة محددة. */
+  facets?: KnowledgeFacet[];
+  /** عدد المقاطع المسترجعة. */
+  topK?: number;
+  /** الاعتماد على الاستخراج المباشر من القاعدة دون استدعاء مزود الذكاء الاصطناعي. */
+  localOnly?: boolean;
+}
+
 export interface SmartAiRequest {
   question: string;
   lesson?: LessonMemo | null;
@@ -26,6 +50,7 @@ export interface SmartAiRequest {
   expertMode?: boolean;
   history?: SmartAiMessage[];
   signal?: AbortSignal;
+  knowledge?: SmartAiKnowledgeOptions;
 }
 
 export interface SmartAiLabBlock {
@@ -37,6 +62,15 @@ export interface SmartAiLabBlock {
   sources?: SmartAiSource[];
 }
 
+export interface SmartAiExtractionSummary {
+  scopeLabel: string;
+  task: string;
+  requestedFacets: string[];
+  missing: string[];
+  notes: string[];
+  candidateCount: number;
+}
+
 export interface SmartAiResponse {
   text: string;
   sources: SmartAiSource[];
@@ -45,11 +79,34 @@ export interface SmartAiResponse {
   usedAttachments: string[];
   provider?: string;
   fallbackNotice?: string;
+  /** مقاطع قاعدة المعرفة التي بُني عليها الجواب (المنهاج، الوثيقة المرافقة، دليل الأستاذ، المذكرات). */
+  knowledge?: KnowledgeReference[];
+  /** هل الجواب مستخرج محلياً من قاعدة المعرفة دون مزود ذكاء اصطناعي. */
+  localAnswer?: boolean;
+  extraction?: SmartAiExtractionSummary;
 }
 
 const compact = (value: unknown, max = 1800): string => {
   const text = typeof value === 'string' ? value : JSON.stringify(value ?? '');
   return text.length > max ? text.slice(0, max) + '…' : text;
+};
+
+/** حمولة مضغوطة لقاعدة الدروس بدل إرسال كل القاعدة في كل طلب. */
+const compactCurriculumPayload = ({ lesson, curriculum, level }: SmartAiRequest) => {
+  const targetLevel = level || lesson?.level;
+  const pool = targetLevel ? curriculum.filter(item => item.level === targetLevel) : curriculum;
+  const scoped = lesson?.maqta ? pool.filter(item => item.maqta === lesson.maqta) : pool;
+  return scoped.slice(0, 30).map(item => ({
+    level: item.level,
+    midan: item.midan,
+    maqta: item.maqta,
+    mawrid: item.mawrid,
+    ta3alom: item.ta3alom,
+    markaba: item.markaba,
+    moshkila: compact(item.moshkila, 220),
+    irsae: compact(item.irsae, 220),
+    activityTitles: (item.anshita || []).map(activity => activity.title).slice(0, 6),
+  }));
 };
 
 const buildContext = ({ lesson, curriculum }: SmartAiRequest) => {
@@ -60,7 +117,7 @@ const buildContext = ({ lesson, curriculum }: SmartAiRequest) => {
     : [];
 
   const relevantLessons = (lesson ? [lesson, ...sameMaqta.filter(x => x !== lesson)] : sameLevel)
-    .slice(0, 80)
+    .slice(0, 40)
     .map(item => ({
       level: item.level,
       midan: item.midan,
@@ -97,87 +154,223 @@ const buildContext = ({ lesson, curriculum }: SmartAiRequest) => {
   }, null, 2);
 };
 
-export async function askSmartAi(request: SmartAiRequest): Promise<SmartAiResponse | null> {
+export type AssistantMode =
+  | 'irsae'
+  | 'problem-hypothesis'
+  | 'exercise'
+  | 'diagram'
+  | 'experiment'
+  | 'activity'
+  | 'extraction'
+  | 'resources'
+  | 'alternatives'
+  | 'assessment-answer'
+  | 'expert';
+
+export const ASSISTANT_MODE_LABELS: Record<AssistantMode, string> = {
+  irsae: 'إرساء الموارد',
+  'problem-hypothesis': 'المشكلة والفرضيات',
+  exercise: 'التمارين والتقويم',
+  diagram: 'الرسومات والمخططات',
+  experiment: 'التجارب المخبرية',
+  activity: 'الأنشطة',
+  extraction: 'استخراج البيانات',
+  resources: 'الوثائق والموارد',
+  alternatives: 'البدائل التربوية',
+  'assessment-answer': 'الإجابة والتقويم',
+  expert: 'الوضع الخبير',
+};
+
+/** تحديد نمط المهمة من صيغة سؤال الأستاذ. */
+export function detectAssistantMode(question: string): AssistantMode {
+  const q = String(question || '').toLowerCase();
+  if (/ارساء|إرساء|خلاصه|خلاصة|الحصيلة|التركيب النهائي/.test(q)) return 'irsae';
+  if (/مشكل|إشكالي|اشكالي|فرضي|الوضعيه الانطلاقيه|الوضعية الانطلاقية/.test(q)) return 'problem-hypothesis';
+  if (/(اقترح|اقتراح|صمم|ابن|أعطني|اعطني).*(تمرين|تطبيق|فرض|اختبار|تقويم|سؤال)/.test(q)
+    || /تمرين|تمارين|فرض محروس|اختبار|وضعيه إدماجيه|وضعية إدماجية|سلم التنقيط|سلّم التنقيط/.test(q)) return 'exercise';
+  if (/رسم|مخطط|سكيما|schéma|diagram/.test(q)) return 'diagram';
+  if (/تجربة|تجربه|بروتوكول|مخبر|تجريبي|experiment/.test(q)) return 'experiment';
+  if (/نشاط|أنشطة|انشطه|نشاطين|نشاط تعليمي|مهمة/.test(q)) return 'activity';
+  if (/استخرج|استخراج|استخرج البيانات|جداول|بيانات|تعليمات|ما هي|ما هو|اذكر|حدد/.test(q)) return 'extraction';
+  if (/صورة|صور|وثيقة|وثيقه|سند|ملف|pdf|word/.test(q)) return 'resources';
+  if (/بديل|بدائل|بديل عن|بدائل للوسائل/.test(q)) return 'alternatives';
+  if (/اختبار|فرض|تقويم|سؤال|أجب|اجب|إجابة|اجابه|حل|اشرح|فسر|لماذا|كيف/.test(q)) return 'assessment-answer';
+  return 'expert';
+}
+
+const MODE_INSTRUCTIONS: Record<AssistantMode, string> = {
+  irsae: [
+    'وضع إرساء الموارد: اعرض أولاً خلاصة الإرساء الموثقة في المصدر حرفياً مع رقم المذكرة ومسارها.',
+    'إذا وجدت أكثر من صياغة موثقة (مذكرة أخرى أو مورد مجاور)، اعرضها كاحتمالات مرقمة مع مصدر كل احتمال.',
+    'أضف بعد الخلاصة: المورد المنهجي المرتبط بها، والمصطلحات الأساسية بمقابلاتها، وسؤال تقويم سريع للتحقق من تدوينها.',
+    'إن لم توجد خلاصة موثقة، اقترح صياغة موسومة «اقتراح تربوي — يحتاج مراجعة الأستاذ» مبنية على المورد المعرفي للمذكرة.',
+  ].join('\n'),
+  'problem-hypothesis': [
+    'وضع المشكلة والفرضيات: اعرض الوضعية الانطلاقية (السند والمعطيات) ثم المشكلة المطروحة حرفياً ثم الفرضيات كما وردت.',
+    'قدم عدة احتمالات موثقة إن وجدت (مشكلات أو فرضيات من مذكرات/موارد مجاورة) مع مصدر كل احتمال.',
+    'اذكر ما يختبر كل فرضية (وثيقة، تجربة، قياس) كما هو موثق في النشاط.',
+    'إن غابت الفرضيات في المصدر، قل ذلك صراحة ثم اقترح فرضيتين (صحيحة وشائعة الخطأ) بوسم «اقتراح تربوي».',
+  ].join('\n'),
+  exercise: [
+    'وضع التمارين والتقويم: ابدأ بما هو موثق في المصدر (تقويم المذكرة، تمارين الكتاب، وضعيات التقويم) مع ذكر المصدر.',
+    'ثم اقترح 2–3 تمارين متدرجة الصعوبة: استرجاع، تطبيق (تصنيف/جدول/تسمية رسم)، تحليل سند أو وضعية إدماجية قصيرة.',
+    'لكل تمرين: المورد المستهدف، السند، التعليمات المرقمة، الجواب المرتقب، والتنقيط المقترح مع مؤشرات النجاح.',
+    'وسم كل تمرين جديد بـ«اقتراح تربوي — يحتاج مراجعة الأستاذ» ولا تنسبه إلى المنهاج أو الوثيقة المرافقة.',
+  ].join('\n'),
+  diagram: [
+    'وضع الرسومات: اقترح أولاً الرسومات الموجودة أو المشار إليها في المصادر، ثم الرسومات البديلة المقترحة.',
+    'لكل رسم: العنوان، الغرض البيداغوجي، العناصر التي يجب أن تظهر، الأسهم/العلاقات، والتسميات.',
+    'أعط وصفاً جاهزاً لرسم تعليمي واضح بالأبيض والأسود عند الحاجة للطباعة.',
+    'لا تدّعِ أن صورة موجودة أو مولدة ما لم تكن متاحة فعلاً؛ يمكن تقديم مخطط نصي ووصف جاهز للرسم.',
+  ].join('\n'),
+  experiment: [
+    'وضع التجارب: الهدف، الإشكالية، الفرضية، المتغيرات، الأدوات، الخطوات، الشاهد/الضابط، الملاحظات المتوقعة، التفسير، والاستنتاج.',
+    'اقترح بديلاً مدرسياً آمناً عند غياب أداة، مع بيان ما إذا كان البديل يغير قيمة التجربة.',
+    'لا تقدم مادة خطرة أو بروتوكولاً غير مناسب للمدرسة؛ عند وجود خطر، اقترح محاكاة/وثيقة/تجربة آمنة.',
+    'ميز بوضوح بين التجربة الموثقة في المصدر وبين الاقتراح الجديد.',
+  ].join('\n'),
+  activity: [
+    'وضع الأنشطة: افصل بين (1) عناوين الأنشطة المستخرجة حرفياً من المصادر و(2) أنشطة بديلة جديدة.',
+    'لا تنسب نشاطاً إلى المنهاج أو مذكرة إلا إذا كان موجوداً فعلاً في السياق.',
+    'لكل نشاط موثق: العنوان، المصدر، الهدف إن كان موثقاً، والسند/الأداة إن كانت موثقة.',
+    'لكل اقتراح جديد: اكتب «اقتراح تربوي — يحتاج مراجعة الأستاذ» واذكر المستوى والموارد والمدة.',
+    'إذا كان هناك أكثر من نشاط موثق مناسب، اذكرها دون اختراع نشاط ثالث على أنه رسمي.',
+  ].join('\n'),
+  extraction: [
+    'وضع الاستخراج: انقل المعلومة المطلوبة من قاعدة المعرفة كما هي دون إعادة صياغة تُغيّر المعنى أو الترقيم.',
+    'لكل عنصر مستخرج: النص، نوع المعلومة (نشاط/تعليمات/مشكلة/فرضية/إرساء/تقويم/وسائل/جدول)، والمصدر بمساره الكامل.',
+    'عند وجود أكثر من قيمة موثقة في النطاق، اعرضها كلها كاحتمالات مرقمة بدل اختيار واحدة.',
+    'إذا كان المطلوب غير موجود في القاعدة، اكتب «غير موثق في قاعدة المعرفة» ثم اقترح بديلاً موسوماً.',
+    'الجداول تُنقل برؤوسها وأسطرها، والمصطلحات بمقابلاتها إن وُجدت.',
+  ].join('\n'),
+  resources: [
+    'وضع الموارد: ابحث عن وثائق/صور/ملفات تعليمية مرتبطة مباشرة بالموضوع والمستوى.',
+    'افصل: المصدر الأصلي، سبب ملاءمته، ما الذي يمكن استخراجُه منه، وكلمات البحث البديلة.',
+    'عند استخدام الويب أدرج روابط المصادر التي أعادها البحث، ولا تعتبر نتيجة بحث واحدة دليلاً رسمياً.',
+    'إذا طلب الأستاذ ملفاً جاهزاً ولم يوجد ملف متاح، أعطه بنية المحتوى المطلوبة وطريقة البحث عنه بدلاً من اختلاق رابط.',
+  ].join('\n'),
+  alternatives: [
+    'وضع البدائل: اقترح 2–4 بدائل تربوية مختلفة عند الحاجة، مثل بديل تجريبي، وثائقي، رقمي، ورسم تخطيطي.',
+    'لكل بديل: الهدف، الوسائل المطلوبة، الزمن التقريبي، مستوى الصعوبة، ومتى يستخدم.',
+    'لا تخلط البدائل المقترحة مع النشاط الرسمي؛ ضعها في قسم مستقل بعنوان «بدائل مقترحة».',
+  ].join('\n'),
+  'assessment-answer': [
+    'وضع الإجابة والتقويم: أجب عن السؤال مباشرة أولاً، ثم فسّر علمياً وبصياغة مناسبة للمستوى.',
+    'إذا كان السؤال مأخوذاً من ورقة أو صورة مرفقة، حافظ على نصه وترتيبه ولا تغيّر المعطيات.',
+    'عند طلب حل تمرين: المعطيات ← المطلوب ← الاستدلال/التحليل ← الجواب النهائي.',
+    'عند اقتراح أسئلة تقويمية جديدة، وسمها «اقتراح تربوي» ولا تقدمها كسؤال رسمي من المنهاج.',
+  ].join('\n'),
+  expert: [
+    'الوضع الخبير العام: حدد أولاً ما الذي يريده الأستاذ فعلياً، ثم أعطه نتيجة عملية قابلة للتطبيق.',
+    'عند الحاجة، اجمع بين النشاط والرسم والسند والتجربة والتقويم والبدائل في خطة قصيرة.',
+    'لا تملأ الإجابة بمحتوى لا علاقة له بالسؤال.',
+  ].join('\n'),
+};
+
+const SOURCE_POLICY = [
+  'هرم المصادر الإلزامي:',
+  '1. المنهاج الرسمي وبيانات المنصة والتدرج الرسمي.',
+  '2. الوثيقة المرافقة.',
+  '3. دليل الأستاذ والكتاب المدرسي الرسمي.',
+  '4. المذكرات والموارد التي يرفعها الأستاذ.',
+  '5. المنصات التعليمية الجزائرية وموارد المعلمين عند الحاجة.',
+  '6. البحث على الويب للمعلومات الحديثة أو لاستكشاف موارد إضافية.',
+  '7. الاستدلال التربوي والاقتراحات التي يولدها الذكاء الاصطناعي.',
+  '',
+  'قواعد الإثبات:',
+  '- لا تحوّل نتيجة الويب أو رأي أستاذ إلى معلومة رسمية.',
+  '- عند تعارض مصدرين، اعرض التعارض بوضوح وامنح الأولوية للمصدر الرسمي المتاح.',
+  '- عند عدم كفاية الدليل اكتب: «يحتاج مراجعة الأستاذ».',
+  '- ضع وسم «معلومة موثقة» للمحتوى المستخرج من المصدر، و«اقتراح تربوي» للمحتوى الجديد.',
+  '- إذا استخدمت الويب، اذكر المصادر في نهاية الإجابة.',
+].join('\n');
+
+interface PreparedKnowledge {
+  context: string;
+  references: KnowledgeReference[];
+  scopeLabel: string;
+  summary: SmartAiExtractionSummary;
+  localAnswer: string;
+  candidateCount: number;
+}
+
+/** البحث في قاعدة المعرفة وتحضير سياقها للاستشهاد أو للجواب المحلي. */
+export function prepareKnowledge(request: SmartAiRequest): PreparedKnowledge | null {
+  if (request.knowledge?.enabled === false) return null;
+  const stored = loadKnowledgeSettings();
+  const settings: KnowledgeSettings = { ...stored, ...(request.knowledge?.settings || {}) };
+  const teacherDocs = [
+    ...(settings.includeTeacherDocs ? loadKnowledgeDocs() : []),
+    ...(request.knowledge?.extraDocs || []),
+  ];
+
   try {
-    const question = request.question.trim();
-    const level = request.level || request.lesson?.level || 'غير محدد';
-    const q = question.toLowerCase();
+    const extraction = extractKnowledge(request.question, {
+      lessons: request.curriculum && request.curriculum.length ? request.curriculum : undefined,
+      lesson: request.lesson || null,
+      level: request.level || request.lesson?.level,
+      teacherDocs,
+      includeCorpus: settings.includeCorpus,
+      includeProgression: settings.includeProgression,
+      facets: request.knowledge?.facets,
+      topK: request.knowledge?.topK || settings.topK,
+    });
 
-    const detectMode = () => {
-      if (/رسم|مخطط|سكيما|schéma|diagram/.test(q)) return 'diagram';
-      if (/تجربة|بروتوكول|مخبر|تجريبي|experiment/.test(q)) return 'experiment';
-      if (/نشاط|أنشطة|نشاطين|نشاط تعليمي|مهمة/.test(q)) return 'activity';
-      if (/صورة|صور|وثيقة|سند|ملف|pdf|word/.test(q)) return 'resources';
-      if (/بديل|بدائل|بديل عن|بدائل للوسائل/.test(q)) return 'alternatives';
-      if (/اختبار|فرض|تقويم|سؤال|أجب|إجابة|حل|اشرح|فسر|لماذا|كيف/.test(q)) return 'assessment-answer';
-      return 'expert';
+    const scopeLabel = [
+      extraction.scope.midan,
+      extraction.scope.maqta,
+      extraction.scope.mawrid,
+      extraction.scope.ta3alom,
+    ].filter(Boolean).join(' ← ');
+
+    return {
+      context: buildKnowledgeContext(extraction),
+      references: toKnowledgeReferences(extraction.hits, 8),
+      scopeLabel,
+      candidateCount: extraction.facets.reduce((sum, group) => sum + group.candidates.length, 0),
+      summary: {
+        scopeLabel,
+        task: extraction.task,
+        requestedFacets: extraction.requestedFacets.slice(),
+        missing: extraction.missing.slice(),
+        notes: extraction.notes.slice(),
+        candidateCount: extraction.facets.reduce((sum, group) => sum + group.candidates.length, 0),
+      },
+      localAnswer: buildLocalKnowledgeAnswer(extraction),
     };
+  } catch (error) {
+    console.warn('[smart-ai] knowledge retrieval failed', error);
+    return null;
+  }
+}
 
-    const mode = detectMode();
+export async function askSmartAi(request: SmartAiRequest): Promise<SmartAiResponse | null> {
+  const question = request.question.trim();
+  const level = request.level || request.lesson?.level || 'غير محدد';
+  const knowledge = prepareKnowledge(request);
 
-    const modeInstructions: Record<string, string> = {
-      activity: [
-        'وضع الأنشطة: افصل بين (1) عناوين الأنشطة المستخرجة حرفياً من المصادر و(2) أنشطة بديلة جديدة.',
-        'لا تنسب نشاطاً إلى المنهاج أو مذكرة إلا إذا كان موجوداً فعلاً في السياق.',
-        'لكل نشاط موثق: العنوان، المصدر، الهدف إن كان موثقاً، والسند/الأداة إن كانت موثقة.',
-        'لكل اقتراح جديد: اكتب "اقتراح تربوي — يحتاج مراجعة الأستاذ" واذكر المستوى والموارد والمدة.',
-        'إذا كان هناك أكثر من نشاط موثق مناسب، اذكرها دون اختراع نشاط ثالث على أنه رسمي.',
-      ].join('\n'),
-      diagram: [
-        'وضع الرسومات: اقترح أولاً الرسومات الموجودة أو المشار إليها في المصادر، ثم الرسومات البديلة المقترحة.',
-        'لكل رسم: العنوان، الغرض البيداغوجي، العناصر التي يجب أن تظهر، الأسهم/العلاقات، والتسميات.',
-        'أعط وصفاً جاهزاً لرسم تعليمي واضح بالأبيض والأسود عند الحاجة للطباعة.',
-        'لا تدّعِ أن صورة موجودة أو مولدة ما لم تكن متاحة فعلاً؛ يمكن تقديم مخطط نصي ووصف جاهز للرسم.',
-      ].join('\n'),
-      experiment: [
-        'وضع التجارب: الهدف، الإشكالية، الفرضية، المتغيرات، الأدوات، الخطوات، الشاهد/الضابط، الملاحظات المتوقعة، التفسير، والاستنتاج.',
-        'اقترح بديلاً مدرسياً آمناً عند غياب أداة، مع بيان ما إذا كان البديل يغير قيمة التجربة.',
-        'لا تقدم مادة خطرة أو بروتوكولاً غير مناسب للمدرسة؛ عند وجود خطر، اقترح محاكاة/وثيقة/تجربة آمنة.',
-        'ميز بوضوح بين التجربة الموثقة في المصدر وبين الاقتراح الجديد.',
-      ].join('\n'),
-      resources: [
-        'وضع الموارد: ابحث عن وثائق/صور/ملفات تعليمية مرتبطة مباشرة بالموضوع والمستوى.',
-        'افصل: المصدر الأصلي، سبب ملاءمته، ما الذي يمكن استخراجُه منه، وكلمات البحث البديلة.',
-        'عند استخدام الويب أدرج روابط المصادر التي أعادها البحث، ولا تعتبر نتيجة بحث واحدة دليلاً رسمياً.',
-        'إذا طلب الأستاذ ملفاً جاهزاً ولم يوجد ملف متاح، أعطه بنية المحتوى المطلوبة وطريقة البحث عنه بدلاً من اختلاق رابط.',
-      ].join('\n'),
-      alternatives: [
-        'وضع البدائل: اقترح 2–4 بدائل تربوية مختلفة عند الحاجة، مثل بديل تجريبي، وثائقي، رقمي، ورسم تخطيطي.',
-        'لكل بديل: الهدف، الوسائل المطلوبة، الزمن التقريبي، مستوى الصعوبة، ومتى يستخدم.',
-        'لا تخلط البدائل المقترحة مع النشاط الرسمي؛ ضعها في قسم مستقل بعنوان "بدائل مقترحة".',
-      ].join('\n'),
-      'assessment-answer': [
-        'وضع الإجابة والتقويم: أجب عن السؤال مباشرة أولاً، ثم فسّر علمياً وبصياغة مناسبة للمستوى.',
-        'إذا كان السؤال مأخوذاً من ورقة أو صورة مرفقة، حافظ على نصه وترتيبه ولا تغيّر المعطيات.',
-        'عند طلب حل تمرين: المعطيات ← المطلوب ← الاستدلال/التحليل ← الجواب النهائي.',
-        'عند اقتراح أسئلة تقويمية جديدة، وسمها "اقتراح تربوي" ولا تقدمها كسؤال رسمي من المنهاج.',
-      ].join('\n'),
-      expert: [
-        'الوضع الخبير العام: حدد أولاً ما الذي يريده الأستاذ فعلياً، ثم أعطه نتيجة عملية قابلة للتطبيق.',
-        'عند الحاجة، اجمع بين النشاط والرسم والسند والتجربة والتقويم والبدائل في خطة قصيرة.',
-        'لا تملأ الإجابة بمحتوى لا علاقة له بالسؤال.',
-      ].join('\n'),
+  // وضع الاستخراج المباشر: جواب موثق من القاعدة دون انتظار مزود الذكاء الاصطناعي.
+  // المرفقات تحتاج مزوداً يدعم الرؤية، لذلك تتجاوز هذا الوضع.
+  const hasAttachments = Boolean(request.attachments && request.attachments.length);
+  const localOnly = (request.knowledge?.localOnly === true || loadKnowledgeSettings().localFirst) && !hasAttachments;
+  if (localOnly) {
+    if (!knowledge) throw new Error('قاعدة المعرفة غير متاحة في هذا الوضع.');
+    return {
+      text: knowledge.localAnswer,
+      sources: [],
+      webSearchQueries: [],
+      usedWeb: false,
+      usedAttachments: [],
+      provider: 'knowledge-base',
+      knowledge: knowledge.references,
+      localAnswer: true,
+      extraction: knowledge.summary,
     };
+  }
 
-    const sourcePolicy = [
-      'هرم المصادر الإلزامي:',
-      '1. المنهاج الرسمي وبيانات المنصة والتدرج الرسمي.',
-      '2. الوثيقة المرافقة.',
-      '3. دليل الأستاذ والكتاب المدرسي الرسمي.',
-      '4. المذكرات والموارد التي يرفعها الأستاذ.',
-      '5. المنصات التعليمية الجزائرية وموارد المعلمين عند الحاجة.',
-      '6. البحث على الويب للمعلومات الحديثة أو لاستكشاف موارد إضافية.',
-      '7. الاستدلال التربوي والاقتراحات التي يولدها الذكاء الاصطناعي.',
-      '',
-      'قواعد الإثبات:',
-      '- لا تحوّل نتيجة الويب أو رأي أستاذ إلى معلومة رسمية.',
-      '- عند تعارض مصدرين، اعرض التعارض بوضوح وامنح الأولوية للمصدر الرسمي المتاح.',
-      '- عند عدم كفاية الدليل اكتب: "يحتاج مراجعة الأستاذ".',
-      '- ضع وسم "معلومة موثقة" للمحتوى المستخرج من المصدر، و"اقتراح تربوي" للمحتوى الجديد.',
-      '- إذا استخدمت الويب، اذكر المصادر في نهاية الإجابة.',
-    ].join('\n');
+  try {
+    const mode = detectAssistantMode(question);
 
-    const context = buildContext(request);
     const history = Array.isArray(request.history)
       ? request.history
           .filter(item => item && (item.role === 'user' || item.role === 'assistant') && typeof item.text === 'string' && item.text.trim())
@@ -187,37 +380,55 @@ export async function askSmartAi(request: SmartAiRequest): Promise<SmartAiRespon
     const conversationBlock = history.length
       ? ['سجل المحادثة السابق (الأقدم أولاً، استعمله كسياق متتابع وأكمل عليه):', JSON.stringify(history, null, 2)].join('\n')
       : 'هذه أول رسالة في المحادثة.';
+
+    const knowledgeBlock = knowledge
+      ? [
+        '',
+        'قاعدة معرفة المنصة (المنهاج، الوثيقة المرافقة، دليل الأستاذ، المذكرات، وثائق الأستاذ) — مقتطفات مسترجعة لهذا السؤال:',
+        knowledge.context,
+        '',
+        `النطاق المستنتج: ${knowledge.scopeLabel || 'غير محدد'}`,
+        'قواعد استعمال قاعدة المعرفة:',
+        '- هذه المقتطفات هي مصدرك الأول: انقل منها النصوص الرسمية كما هي واستشهد برقمها [1]، [2]…',
+        '- إذا وُجدت أكثر من قيمة موثقة، اعرضها كاحتمالات مرقمة مع مصدر كل احتمال، ولا تختر واحدة بصمت.',
+        '- إذا لم تكفِ المقتطفات، اكتب ذلك صراحة ثم قدّم اقتراحاً موسوماً «اقتراح تربوي — يحتاج مراجعة الأستاذ».',
+        '- لا تعتبر المقتطفات بديلاً عن نص الوثيقة الرسمية الكامل عند طلب نص حرفي كامل.',
+      ].join('\n')
+      : '';
+
     const prompt = [
       'أنت الآن تعمل كمساعد خبير للأستاذ في تعليم علوم الطبيعة والحياة في التعليم المتوسط بالجزائر (1AM–4AM).',
       'مهمتك ليست مجرد الدردشة: ساعد الأستاذ على اتخاذ خطوة بيداغوجية عملية، مع احترام المنهاج ومصادره وعدم اختلاق البيانات.',
       '',
       'قدراتك المطلوبة:',
+      '• البحث في قاعدة المعرفة: المنهاج، الوثيقة المرافقة، دليل الأستاذ، والمذكرات المفهرسة.',
+      '• استخراج الأنشطة وتعليماتها وأجوبتها، المشكلة والفرضيات، إرساء الموارد، التقويم، الوسائل، والجداول والبيانات.',
       '• تحديد المورد والمقطع والميدان وتعلم المورد من بيانات المنصة عند توفرها.',
-      '• تحديد عناوين الأنشطة الموثقة، ثم اقتراح بدائل منفصلة.',
+      '• اقتراح أنشطة وتمارين وبدائل منفصلة بوضوح عن المحتوى الموثق.',
       '• اقتراح/وصف الرسومات والمخططات والسندات والصور التعليمية.',
       '• تحليل الملفات والصور وPDF/Word المرفقة واستخراج المعلومات اللازمة منها.',
       '• بناء تجارب مدرسية آمنة وبدائل للوسائل.',
       '• الإجابة عن أسئلة الأستاذ والأسئلة العلمية وتمارين التلاميذ خطوة بخطوة.',
-      '• اقتراح تقويمات وفروض وأسئلة مع سلم إجابة عند الطلب.',
       '• البحث في الإنترنت عن موارد تعليمية عند الحاجة، مع إظهار المصادر.',
       '• تكييف النشاط حسب المستوى والزمن والوسائل المتاحة.',
       '',
-      sourcePolicy,
+      SOURCE_POLICY,
       '',
       'نمط المهمة الحالي: ' + mode,
-      modeInstructions[mode],
+      MODE_INSTRUCTIONS[mode],
+      knowledgeBlock,
       '',
       'قالب الإجابة الافتراضي:',
-      '1) الجواب/النتيجة المباشرة.',
-      '2) المصدر أو درجة التوثيق.',
+      '1) الجواب/النتيجة المباشرة (مع الاحتمالات الموثقة مرقمة إن وُجد أكثر من احتمال).',
+      '2) المصدر أو درجة التوثيق لكل عنصر.',
       '3) التطبيق البيداغوجي إن كان مفيداً.',
-      '4) البدائل المقترحة عند الحاجة.',
-      '5) تنبيه "يحتاج مراجعة الأستاذ" عند وجود عدم يقين.',
+      '4) البدائل أو الاقتراحات الجديدة في قسم مستقل.',
+      '5) تنبيه «يحتاج مراجعة الأستاذ» عند وجود عدم يقين.',
       '',
       conversationBlock,
       '',
       'سياق المنهاج والمذكرات:',
-      context,
+      buildContext(request),
       '',
       'المستوى الحالي: ' + level,
       'نمط الأستاذ الخبير: ' + (request.expertMode !== false ? 'مفعل' : 'متوقف'),
@@ -234,12 +445,28 @@ export async function askSmartAi(request: SmartAiRequest): Promise<SmartAiRespon
         prompt,
         level,
         currentLesson: request.lesson || null,
-        curriculum: request.curriculum,
+        curriculum: compactCurriculumPayload(request),
         attachments: request.attachments || [],
         useWeb: request.useWeb !== false,
         expertMode: request.expertMode !== false,
         assistantMode: mode,
         history,
+        knowledge: knowledge?.references.map(reference => ({
+          id: reference.id,
+          kind: reference.kind,
+          title: reference.title,
+          section: reference.section,
+          facet: reference.facet,
+          level: reference.level,
+          status: reference.status,
+          sourceLabel: reference.sourceLabel,
+          scopeLabel: reference.scopeLabel,
+          url: reference.url,
+          text: reference.snippet,
+        })) || [],
+        knowledgeContext: knowledge?.context || '',
+        knowledgeScope: knowledge?.scopeLabel || '',
+        knowledgeSummary: knowledge?.summary || null,
       }),
       signal: request.signal,
     });
@@ -254,6 +481,7 @@ export async function askSmartAi(request: SmartAiRequest): Promise<SmartAiRespon
     }
 
     const data = await res.json();
+    const serverKnowledge: KnowledgeReference[] = Array.isArray(data.knowledgeUsed) ? data.knowledgeUsed : [];
     return {
       text: String(data.text || '').trim(),
       sources: Array.isArray(data.sources) ? data.sources : [],
@@ -262,8 +490,30 @@ export async function askSmartAi(request: SmartAiRequest): Promise<SmartAiRespon
       usedAttachments: Array.isArray(data.usedAttachments) ? data.usedAttachments : [],
       provider: data.provider,
       fallbackNotice: data.fallbackNotice,
+      knowledge: knowledge?.references.length ? knowledge.references : serverKnowledge,
+      localAnswer: false,
+      extraction: knowledge?.summary,
     };
   } catch (error) {
+    const aborted = request.signal?.aborted;
+    if (aborted) throw error;
+    // عند تعذّر المزود: نقدّم جواباً موثقاً من قاعدة المعرفة بدل ترك الأستاذ بلا نتيجة.
+    if (knowledge && (knowledge.candidateCount > 0 || knowledge.references.length > 0)) {
+      console.warn('[smart-ai] provider unavailable, answering from the knowledge base', error);
+      const reason = error instanceof Error ? error.message : 'تعذر الاتصال بالمزود';
+      return {
+        text: knowledge.localAnswer,
+        sources: [],
+        webSearchQueries: [],
+        usedWeb: false,
+        usedAttachments: [],
+        provider: 'knowledge-base',
+        fallbackNotice: `تعذر الوصول إلى مزود الذكاء الاصطناعي (${reason})، فعُرِضت نتائج البحث الموثقة في قاعدة المعرفة مباشرة. أعد المحاولة للحصول على تحليل أعمق.`,
+        knowledge: knowledge.references,
+        localAnswer: true,
+        extraction: knowledge.summary,
+      };
+    }
     console.error('[smart-ai] generation failed', error);
     throw error;
   }

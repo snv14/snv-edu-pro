@@ -1,8 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Bot, Check, Clipboard, Paperclip, Send, User, X } from 'lucide-react';
+import { Bot, Check, Clipboard, Database, Paperclip, Send, Sparkles, User, X } from 'lucide-react';
 import { LessonMemo } from '../types';
+import type { TeacherKnowledgeDoc } from '../types/knowledge';
 import { askSmartAi, SmartAiMessage, SmartAiSource } from '../services/smartAi';
 import { clearConversation, conversationContext, loadConversation, saveConversation } from '../services/conversationHistory';
+import { loadKnowledgeSettings, saveKnowledgeSettings, type KnowledgeSettings } from '../services/knowledgeLibraryStore';
+import { loadOcrSupplement } from '../services/knowledgeSupplements';
+import { buildQuickTaskPrompt, describeScope, KNOWLEDGE_QUICK_TASKS } from '../services/knowledgeQuickTasks';
+import type { KnowledgeReference } from '../services/knowledgeBase';
+import { KnowledgeBasePanel } from './KnowledgeBasePanel';
 
 interface ChatAttachment {
   id: string;
@@ -19,6 +25,12 @@ interface ChatEntry {
   sources?: SmartAiSource[];
   notice?: string;
   failed?: boolean;
+  /** مقاطع قاعدة المعرفة التي استُند إليها الجواب. */
+  knowledge?: KnowledgeReference[];
+  /** النطاق (المستوى/المقطع/المورد) الذي بُحث فيه. */
+  scopeLabel?: string;
+  /** الجواب مستخرج محلياً من القاعدة دون مزود ذكاء اصطناعي. */
+  fromKnowledgeBase?: boolean;
 }
 
 const MAX_ATTACHMENTS = 4;
@@ -31,7 +43,11 @@ const ACCEPTED_TYPES = new Set([
   'application/msword',
 ]);
 
-const GREETING = 'مرحباً زميلي الأستاذ(ة). اكتب سؤالك في الأسفل، وسنتابع المحادثة خطوة بخطوة.';
+const GREETING = [
+  'مرحباً زميلي الأستاذ(ة). أنا أبحث في قاعدة المعرفة: المنهاج، الوثيقة المرافقة، دليل الأستاذ، والمذكرات المفهرسة.',
+  'اسألني مثلاً: «استخرج الأنشطة والتعليمات»، «ما المشكلة والفرضيات؟»، «إرساء الموارد»، «اقترح تمريناً»، أو اختر مهمة جاهزة من الأزرار أسفل.',
+  'كل جواب يعرض المصادر التي استُخرج منها، ومعها عدة احتمالات موثقة إن وُجدت.',
+].join('\n');
 
 const makeId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -64,6 +80,9 @@ export const AIAssistantDrawer: React.FC<{
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [fileError, setFileError] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [showKnowledge, setShowKnowledge] = useState(false);
+  const [knowledgeSettings, setKnowledgeSettings] = useState<KnowledgeSettings>(() => loadKnowledgeSettings());
+  const [ocrDocs, setOcrDocs] = useState<TeacherKnowledgeDoc[]>([]);
   const threadRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -88,6 +107,34 @@ export const AIAssistantDrawer: React.FC<{
   }, [isOpen]);
 
   useEffect(() => () => abortRef.current?.abort(), []);
+
+  // النص الخام (OCR) يُحمَّل عند الطلب فقط لأنه كبير الحجم.
+  useEffect(() => {
+    if (!isOpen || !knowledgeSettings.includeOcrSupplement) {
+      setOcrDocs([]);
+      return;
+    }
+    let active = true;
+    void loadOcrSupplement().then(doc => { if (active) setOcrDocs(doc ? [doc] : []); });
+    return () => { active = false; };
+  }, [isOpen, knowledgeSettings.includeOcrSupplement]);
+
+  const taskScope = useMemo(() => ({
+    level: selectedLevel || currentLesson?.level,
+    midan: currentLesson?.midan,
+    maqta: currentLesson?.maqta,
+    mawrid: currentLesson?.mawrid,
+    ta3alom: currentLesson?.ta3alom,
+  }), [selectedLevel, currentLesson]);
+
+  const useQuickTask = (taskId: string) => {
+    const task = KNOWLEDGE_QUICK_TASKS.find(item => item.id === taskId);
+    if (!task) return;
+    const prompt = buildQuickTaskPrompt(task, taskScope);
+    setDraft(prompt);
+    setShowKnowledge(false);
+    inputRef.current?.focus();
+  };
 
   const history = useMemo<SmartAiMessage[]>(() => conversationContext(
     entries
@@ -177,6 +224,12 @@ export const AIAssistantDrawer: React.FC<{
         expertMode: true,
         history: previousHistory,
         signal: controller.signal,
+        knowledge: {
+          enabled: true,
+          settings: knowledgeSettings,
+          extraDocs: ocrDocs,
+          topK: knowledgeSettings.topK,
+        },
       });
 
       const text = (reply?.text || '').trim();
@@ -198,6 +251,9 @@ export const AIAssistantDrawer: React.FC<{
         time: clock(),
         sources: reply?.sources?.length ? reply.sources : undefined,
         notice: reply?.fallbackNotice,
+        knowledge: reply?.knowledge?.length ? reply.knowledge : undefined,
+        scopeLabel: reply?.extraction?.scopeLabel || undefined,
+        fromKnowledgeBase: reply?.localAnswer,
       }]);
     } catch (error) {
       if (controller.signal.aborted) return;
@@ -249,6 +305,17 @@ export const AIAssistantDrawer: React.FC<{
           <div className="flex items-center gap-1 shrink-0">
             <button
               type="button"
+              onClick={() => setShowKnowledge(open => !open)}
+              title="قاعدة المعرفة: المنهاج، الوثيقة المرافقة، دليل الأستاذ، المذكرات"
+              aria-label="قاعدة المعرفة"
+              aria-expanded={showKnowledge}
+              className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10.5px] font-bold transition ${showKnowledge ? 'bg-white text-emerald-800' : 'bg-white/10 hover:bg-white/20'}`}
+            >
+              <Database className="w-3.5 h-3.5" />
+              القاعدة
+            </button>
+            <button
+              type="button"
               onClick={resetConversation}
               title="محادثة جديدة"
               aria-label="محادثة جديدة"
@@ -262,7 +329,23 @@ export const AIAssistantDrawer: React.FC<{
           </div>
         </header>
 
-        <div ref={threadRef} className="flex-1 overflow-y-auto px-3.5 py-4 space-y-3 bg-slate-50">
+        {showKnowledge && (
+          <KnowledgeBasePanel
+            selectedLevel={selectedLevel || currentLesson?.level}
+            lessons={curriculumLessons}
+            extraDocs={ocrDocs}
+            settings={knowledgeSettings}
+            onSettingsChange={setKnowledgeSettings}
+            onUseQuery={text => {
+              setDraft(text);
+              setShowKnowledge(false);
+              inputRef.current?.focus();
+            }}
+            onClose={() => setShowKnowledge(false)}
+          />
+        )}
+
+        <div ref={threadRef} className={`overflow-y-auto px-3.5 py-4 space-y-3 bg-slate-50 ${showKnowledge ? 'hidden' : 'flex-1'}`}>
           {entries.map(entry => (
             <article key={entry.id} className={`group flex gap-2 ${entry.sender === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
               <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${entry.sender === 'user' ? 'bg-slate-800 text-white' : 'bg-emerald-700 text-white'}`}>
@@ -279,6 +362,34 @@ export const AIAssistantDrawer: React.FC<{
                   <p className="mb-2 text-[10.5px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1">{entry.notice}</p>
                 )}
                 <p>{entry.text}</p>
+                {entry.fromKnowledgeBase && (
+                  <p className="mb-2 inline-flex items-center gap-1 text-[10px] font-black text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-1">
+                    <Database className="w-3 h-3" />
+                    استخراج مباشر من قاعدة المعرفة (دون مزود ذكاء اصطناعي)
+                  </p>
+                )}
+                {entry.scopeLabel && (
+                  <p className="mb-1.5 text-[9.5px] font-bold text-slate-500">النطاق: {entry.scopeLabel}</p>
+                )}
+                {entry.knowledge && entry.knowledge.length > 0 && (
+                  <div className="mt-2 pt-2 border-t border-emerald-100 space-y-1">
+                    <p className="text-[10px] font-black text-emerald-800">من قاعدة المعرفة ({entry.knowledge.length}):</p>
+                    {entry.knowledge.slice(0, 6).map(reference => (
+                      <details key={reference.id} className="rounded-lg border border-emerald-200 bg-emerald-50/60 px-2 py-1">
+                        <summary className="cursor-pointer list-none text-[10px] font-bold text-emerald-900 truncate">
+                          {reference.kindLabel} · {reference.facetLabel} — {reference.section}
+                        </summary>
+                        <p className="mt-1 text-[10px] text-slate-700 whitespace-pre-line leading-relaxed">{reference.snippet}</p>
+                        <p className="mt-1 text-[9px] text-slate-500">
+                          {reference.title}{reference.scopeLabel ? ` — ${reference.scopeLabel}` : ''} [{reference.statusLabel}]
+                          {reference.url ? (
+                            <a href={reference.url} target="_blank" rel="noreferrer" className="mr-1 text-blue-700 hover:underline">فتح المصدر</a>
+                          ) : null}
+                        </p>
+                      </details>
+                    ))}
+                  </div>
+                )}
                 {entry.sources && entry.sources.length > 0 && (
                   <div className="mt-2 pt-2 border-t border-gray-200 space-y-1">
                     <p className="text-[10px] font-black text-teal-700">مصادر الويب:</p>
@@ -316,6 +427,34 @@ export const AIAssistantDrawer: React.FC<{
         </div>
 
         <footer className="border-t border-gray-200 bg-white px-3 py-2.5 space-y-2">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5" role="toolbar" aria-label="مهام الاستخراج والاقتراح الجاهزة">
+            {KNOWLEDGE_QUICK_TASKS.map(task => (
+              <button
+                key={task.id}
+                type="button"
+                onClick={() => useQuickTask(task.id)}
+                title={`${task.hint} — ${describeScope(taskScope)}`}
+                className="shrink-0 inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-900 hover:bg-emerald-100 transition"
+              >
+                <Sparkles className="w-3 h-3" />
+                {task.label}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setKnowledgeSettings(saveKnowledgeSettings({ localFirst: !knowledgeSettings.localFirst }))}
+              title={knowledgeSettings.localFirst
+                ? 'الاستخراج المباشر مفعل: الجواب يأتي من قاعدة المعرفة فوراً دون ذكاء اصطناعي'
+                : 'تفعيل الاستخراج المباشر من قاعدة المعرفة دون انتظار مزود الذكاء الاصطناعي'}
+              aria-pressed={knowledgeSettings.localFirst}
+              className={`shrink-0 inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-bold transition ${knowledgeSettings.localFirst
+                ? 'border-teal-700 bg-teal-700 text-white'
+                : 'border-gray-300 bg-white text-slate-600 hover:border-teal-400'}`}
+            >
+              <Database className="w-3 h-3" />
+              استخراج مباشر
+            </button>
+          </div>
           {fileError && <p className="text-[10.5px] font-bold text-red-700">{fileError}</p>}
           {attachments.length > 0 && (
             <div className="flex flex-wrap gap-1.5">

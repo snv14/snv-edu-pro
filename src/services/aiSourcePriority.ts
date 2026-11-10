@@ -4,6 +4,7 @@ export type AISourceType =
   | 'companionDocument'
   | 'teacherGuide'
   | 'memo'
+  | 'teacherDocument'
   | 'attachment'
   | 'web'
   | 'library'
@@ -15,6 +16,7 @@ export const AI_SOURCE_PRIORITY: Record<AISourceType, number> = {
   companionDocument: 2,
   teacherGuide: 3,
   memo: 4,
+  teacherDocument: 5,
   attachment: 5,
   web: 6,
   library: 7,
