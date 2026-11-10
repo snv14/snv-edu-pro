@@ -1,4 +1,4 @@
-import { DailyLogEntry } from '../types';
+import { DailyLogEntry } from '../../types';
 
 export const INITIAL_DAILY_LOGS: DailyLogEntry[] = [
   {

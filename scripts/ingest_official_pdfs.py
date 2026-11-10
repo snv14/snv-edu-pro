@@ -65,7 +65,10 @@ from pypdf import PdfReader
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT_DIR = os.path.join(REPO, "src", "data", "official")
 
-MIN_QUALITY = 40.0  # أدنى نسبة مطابقة مقبولة لاعتماد نص ما
+MIN_QUALITY = 40.0
+# حد أدنى لحجم المفردات المرجعية (القياس الفعلي 12109 كلمات مطويّة) — حارس ضد
+# فقدان صامت لمدخلات load_vocabulary() عند أي نقل مستقبلي لملفات البيانات.
+MIN_VOCABULARY = 10000  # أدنى نسبة مطابقة مقبولة لاعتماد نص ما
 
 # ───────────────────────────── تعريف الوثائق ─────────────────────────────
 # كل مدخلة: مطابقة اسم الملف، المعرّف، العائلة، المستوى، العنوان، الجهة، المسار الرسمي
@@ -513,10 +516,13 @@ def build_source_vocabulary(pages: list[str], floor: int = 5) -> set[str]:
 def load_vocabulary() -> set[str]:
     """مفردات رسمية محصودة من قاعدة المنصة نفسها؛ تُستعمل للتسجيل ولإصلاح «امل»."""
     vocabulary: set[str] = set()
+    # بيانات المذكرات انتقلت إلى src/data/memos/ ضمن إعادة تنظيم القاعدة الموحدة.
+    # الحارس أسفل هذه الدالة يمنع أن يتسبب نقلٌ مستقبلي في فقدان المفردات صمتاً
+    # (فالمفردات تحدد قياس الجودة وإصلاح «امل»، أي أنها تغير الناتج الملتزم).
     patterns = [
-        os.path.join(REPO, "src", "data", "official_*.ts"),
-        os.path.join(REPO, "src", "data", "lessons*.ts"),
-        os.path.join(REPO, "src", "data", "curriculumDb.ts"),
+        os.path.join(REPO, "src", "data", "memos", "official_*.ts"),
+        os.path.join(REPO, "src", "data", "memos", "lessons*.ts"),
+        os.path.join(REPO, "src", "data", "memos", "curriculumDb.ts"),
     ]
     for pattern in patterns:
         for path in glob.glob(pattern):
@@ -530,6 +536,13 @@ def load_vocabulary() -> set[str]:
                 vocabulary.add(folded)
                 if folded.startswith("ال") and len(folded) > 4:
                     vocabulary.add(folded[2:])
+    if len(vocabulary) < MIN_VOCABULARY:
+        raise SystemExit(
+            f"المفردات المرجعية {len(vocabulary)} كلمة فقط (الحد الأدنى {MIN_VOCABULARY}). "
+            "الأرجح أن ملفات src/data/memos/ (official_*.ts وlessons*.ts وcurriculumDb.ts) "
+            "نُقلت أو حُذفت، فأنماط glob في load_vocabulary() لم تعد تجدها. "
+            "المتابعة ستغيّر قياس الجودة وإصلاح «امل» وبالتالي الناتج الملتزم."
+        )
     return vocabulary
 
 

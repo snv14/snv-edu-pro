@@ -1,4 +1,4 @@
-import { LessonMemo } from '../types';
+import { LessonMemo } from '../../types';
 import { DIAGRAMS_4AM } from './diagrams4am';
 
 // ================= المقطع الثالث: انتقال الصفات الوراثية (4AM) =================

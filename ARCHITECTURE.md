@@ -21,8 +21,13 @@
     ├── services/             # 20 ملفًا: الذكاء الاصطناعي، قاعدة المعرفة، ومصادر المذكرات
     ├── utils/                # 16 ملفًا: التصدير (Word/PDF) والتعقيم والتوزيع
     ├── server/               # api.ts وaiGateway.ts وsecurity.ts وenv.ts
-    ├── data/                 # 43 ملفًا: المنهاج والتدرج والدفتر ومرجع قاعدة المعرفة
-    │   └── official/         # 13 ملفًا مُولَّدًا: متن الوثائق الوزارية الحرفي (386 صفحة) + البيان والمحمِّلات
+    ├── data/                 # القاعدة الموحدة للمنصة + قاعدة الدفتر الخاصة
+    │   ├── platform/         # الواجهة الموحدة: العائلات الأربع بالترتيب المرجعي (مصدر حقيقة الأولوية)
+    │   ├── curriculum/       # 1) المنهاج — التدرجات السنوية الرسمية (3 ملفات)
+    │   ├── memos/            # 4) المذكرات — بيانات الدروس والأنشطة والرسومات (31 ملفًا)
+    │   ├── official/         # متن الوثائق الوزارية الحرفي لكل العائلات (13 ملفًا مُولَّدًا، 386 صفحة)
+    │   ├── logbook/          # قاعدة الدفتر اليومي الخاصة — معزولة (6 ملفات)
+    │   └── knowledgeBaseCorpus.ts …  # ملخصات منهجية (العائلتان 2 و3) ومصادر متفرقة
     └── types/                # أنواع إضافية (pedagogicalNote.ts وknowledge.ts)
 ```
 
@@ -30,7 +35,8 @@
 - **components**: `AIAssistantChat.tsx`, `KnowledgeBasePanel.tsx`, `AccountSettings.tsx`, `AnnualDistribution.tsx`, `Auth.tsx`, `CalendarAdjustmentModal.tsx`, `CorrectionMemoDrawer.tsx`, `CurriculumDatabaseManager.tsx`, `DailyLogSheetTemplate.tsx`, `DailyLogbook.tsx`, `ErrorBoundary.tsx`, `FirebaseDataSync.tsx`, `InteractiveMaqta1.tsx`, `LevelsHomePage.tsx`, `MemoSheet.tsx`, `OfficialAnnualDistribution.tsx`, `PedagogicalNoteModal.tsx`, `PlatformInfoModal.tsx`, `PlatformNavigationDrawer.tsx`, `PreviewModal.tsx`, `SidebarControls.tsx`, `SourceMemo1AMViewer.tsx`, `TeacherOfficialStamp.tsx`, `UserProfile.tsx`
 - **services**: `aiProviderRegistry.ts`, `aiSourcePriority.ts`, `conversationHistory.ts`, `correctionMemoAi.ts`, `correctionMemoImport.ts`, `correctionMemoModel.ts`, `expertLabStore.ts`, `geminiPedagogicalService.ts`, `geminiPrompts.ts`, `knowledgeBase.ts`, `knowledgeLibraryStore.ts`, `knowledgeOfficialSources.ts`, `knowledgeQuickTasks.ts`, `knowledgeSupplements.ts`, `memoAttachmentStore.ts`, `memoLearningStore.ts`, `memoSuggestionEngine.ts`, `officialPedagogicalSources.ts`, `scienceMemoModelLibrary.ts`, `smartAi.ts`
 - **types**: `pedagogicalNote.ts`, `knowledge.ts` (عائلات المصادر، أنواع المعلومة، نتائج الاستخراج)
-- **data (قاعدة المعرفة)**: `knowledgeBaseCorpus.ts` (المرجع المنهجي للمنهاج والوثيقة المرافقة ودليل الأستاذ وبنية المذكرة)، و`official/` (مُولَّد بـ `scripts/ingest_official_pdfs.py`: `types.ts` + `index.ts` فيه `OFFICIAL_SOURCES_MANIFEST` و`OFFICIAL_SOURCE_LOADERS` بمحمِّلات `import()` كسولة + 11 وحدة صفحات حرفية)
+- **data (القاعدة الموحدة)**: `platform/index.ts` (العائلات الأربع بالترتيب + التغطية + الفجوات) · `curriculum/` (التدرجات السنوية الرسمية) · `memos/` (قاعدة المذكرات: `curriculumDb.ts` و`lessons*.ts` و`official_*.ts` و`diagrams*.ts` و`schema.ts`) · `official/` (مُولَّد بـ `scripts/ingest_official_pdfs.py`: `types.ts` + `index.ts` فيه `OFFICIAL_SOURCES_MANIFEST` و`OFFICIAL_SOURCE_LOADERS` بمحمِّلات `import()` كسولة + 11 وحدة صفحات حرفية) · `knowledgeBaseCorpus.ts` (الملخصات المنهجية للوثيقة المرافقة ودليل الأستاذ وبنية المذكرة)
+- **data (قاعدة الدفتر الخاصة)**: `logbook/` — `dailyLogbookProgram1am…4am.ts` و`dailyLogData.ts` و`index.ts` الذي يصرّح بما يملكه الدفتر وما يشاركه مع القاعدة الموحدة
 - **utils**: `annualDistributionDateUtils.ts`, `annualDistributionGenerator.ts`, `correctionMemoExport.ts`, `dailyLogbookGenerator.ts`, `designerPhoto.ts`, `docxExport.ts`, `docxExportDistribution.ts`, `docxExportLogbook.ts`, `html2canvasSanitizer.ts`, `pdfExport.ts`, `pdfExportDistribution.ts`, `pdfExportLogbook.ts`, `sanitize.ts`
 - **server**: `aiGateway.ts`, `api.ts`, `env.ts`, `security.ts`
 
@@ -68,6 +74,32 @@
 | `POST /api/knowledge/search` | بحث حر في قاعدة المعرفة |
 | `POST /api/knowledge/extract` | استخراج موجه يعيد عدة احتمالات موثقة |
 
+## القاعدة الموحدة للمنصة وقاعدة الدفتر الخاصة
+
+المنصة كلها تقرأ من **قاعدة موحدة** منظَّمة في عائلات أربع بترتيب مرجعي ثابت
+(`src/data/platform/index.ts`)، والدفتر اليومي وحده له **قاعدة خاصة** (`src/data/logbook/`).
+
+| # | العائلة | أنواع المصادر | البيانات المهيكلة | النص الرسمي الحرفي |
+|---|---|---|---|---|
+| 1 | المنهاج | `curriculum`, `progression` | `data/curriculum/` | 9 وثائق · 181 ص · 266 520 حرفًا (كل المستويات) |
+| 2 | الوثيقة المرافقة | `companionDocument` | `knowledgeBaseCorpus.ts` | وثيقة · 58 ص · 87 779 حرفًا |
+| 3 | دليل الأستاذ | `teacherGuide` | `knowledgeBaseCorpus.ts` | وثيقة · 147 ص (4AM فقط) |
+| 4 | المذكرات | `memo` | `data/memos/` | لا شيء بعد |
+
+**الترتيب مرجعٌ واحد للأولوية:** `AI_SOURCE_PRIORITY` في `services/aiSourcePriority.ts` **مشتق** من
+`PLATFORM_FAMILIES` لا معرَّف بجانبها، فأرقام العائلات (1–4) وما بعدها (وثائق الأستاذ 5، المرفقات 5،
+الويب 6، المكتبة 7، الذكاء الاصطناعي 8) تتحدّث من مكان واحد. وكان هذا الترتيب معرَّفًا بأنواع مصادر
+متناثرة؛ فلو عُكس ترتيب العائلات هناك انعكس في بحث قاعدة المعرفة وترتيب المزودات معًا.
+
+**الفجوات مُصرَّح بها آليًا:** `platformCoverageGaps()` تُبنى من بيان الوثائق نفسها، فتظهر في
+`GET /api/knowledge/status` ضمن `platformDatabase.gaps` (حاليًا: دليل الأستاذ بلا وثيقة لـ1AM–3AM،
+والمذكرات بلا نص حرفي). لا تُكتشف بالصدفة ولا تُنسى.
+
+**حدود قاعدة الدفتر:** يملك الدفتر برامجه (`DAILY_LOGBOOK_PROGRAM_1AM…4AM`) ومدخلاته الابتدائية،
+ويقرأ — ولا ينسخ — التدرجات السنوية الرسمية من العائلة الأولى وعناوين الدروس من العائلة الرابعة؛
+فنسخها كان سيخلق مصدرَي حقيقة يتباعدان. اعتماده على `curriculumDb` قرار معلَّق موثَّق في
+`src/data/logbook/index.ts`.
+
 ## قواعد نظافة المستودع
 
 الشيفرة الحيّة كلها داخل `src/` (+ `server.ts` و`vite.config.ts`)، و`tsconfig.json` يفحص
@@ -77,9 +109,11 @@
   ونسخ أقدم من `src/`) لا تُفحَص ولا تُحزَم ولا تُستورد، وأُزيلت؛ وكانت مصيدة تحرير: من يفتح
   `DailyLogbook.tsx` الجذري (188 ك.ب) يضيّع عمله لأن الحيّ هو `src/components/DailyLogbook.tsx` (204 ك.ب).
 - **`src/data/official/` مولَّد** — مصدر الحقيقة `scripts/ingest_official_pdfs.py`.
-- **`src/data/lessons*.ts` و`src/data/official_*.ts` و`curriculumDb.ts` مدخلات لخط التفريغ**: يبني منها
-  `load_vocabulary()` مفردات المادة (12 109 كلمة) المستخدمة في قياس الجودة وإصلاح «امل». بعضها غير
-  مستورد وقت التشغيل (مثل `lessons3am_maqta1..4.ts`) لكنه **ليس ميتاً** — حذفه يغيّر ناتج التفريغ.
+- **`src/data/memos/lessons*.ts` و`src/data/memos/official_*.ts` و`curriculumDb.ts` مدخلات لخط التفريغ**:
+  يبني منها `load_vocabulary()` مفردات المادة (12 109 كلمة) المستخدمة في قياس الجودة وإصلاح «امل».
+  بعضها غير مستورد وقت التشغيل (مثل `lessons3am_maqta1..4.ts`) لكنه **ليس ميتاً** — حذفه يغيّر ناتج
+  التفريغ. ولهذا وضع `load_vocabulary()` حارس `MIN_VOCABULARY = 10000` يوقف التفريغ بصوت مسموع
+  إن لم يجد الملفات، بدل أن يُنتج متنًا بجودة مختلفة صمتًا.
 - بيانات س1 غير الموصولة حالياً (`validate1am.ts`، `diagramSources1am.ts`، `diagrams1am.ts`) محفوظة
   عمداً: محتواها يخص قاعدة بيانات السنة الأولى وقد يُوصَل لاحقاً.
 

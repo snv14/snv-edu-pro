@@ -1,4 +1,4 @@
-import { LessonMemo } from '../types';
+import { LessonMemo } from '../../types';
 import { EXACT_LESSONS_1AM } from './official_1am_exact_db';
 
 /**

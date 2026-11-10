@@ -16,7 +16,7 @@ import {
   stemToken,
   tokenize,
 } from '../src/services/knowledgeBase';
-import { getOfficialCurriculumDatabase } from '../src/data/curriculumDb';
+import { getOfficialCurriculumDatabase } from '../src/data/memos/curriculumDb';
 import { buildQuickTaskPrompt, describeScope, KNOWLEDGE_QUICK_TASKS } from '../src/services/knowledgeQuickTasks';
 import { detectAssistantMode } from '../src/services/smartAi';
 import type { TeacherKnowledgeDoc } from '../src/types/knowledge';

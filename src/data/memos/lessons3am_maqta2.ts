@@ -1,4 +1,4 @@
-import { LessonMemo } from '../types';
+import { LessonMemo } from '../../types';
 import { DIAGRAMS_3AM } from './diagrams3am';
 
 // ================= المقطع الثاني: الديناميكية الخارجية للكرة الأرضية (المذكرات 15 - 21) =================

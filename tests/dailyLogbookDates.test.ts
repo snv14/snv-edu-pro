@@ -117,7 +117,7 @@ test('daily logbook steps strictly respect the official annual distribution chro
     OFFICIAL_2AM_DISTRIBUTION,
     OFFICIAL_3AM_DISTRIBUTION,
     OFFICIAL_4AM_DISTRIBUTION,
-  } = await import('../src/data/officialAnnualDistributionData');
+  } = await import('../src/data/curriculum/officialAnnualDistributionData');
 
   // Level 1AM
   const steps1am = buildPedagogicalStepsForLevel('1م', 1);

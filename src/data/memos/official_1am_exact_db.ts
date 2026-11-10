@@ -1,4 +1,4 @@
-import { LessonMemo } from '../types';
+import { LessonMemo } from '../../types';
 
 /**
  * قاعدة البيانات الرسمية لمذكرات السنة الأولى متوسط

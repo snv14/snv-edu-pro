@@ -1,4 +1,4 @@
-import type { LessonMemo } from '../types';
+import type { LessonMemo } from '../../types';
 
 const EXPECTED_1AM_UNITS = [
   'مصدر الأغذية','تركيب الأغذية','دور الأغذية في الجسم','الرواتب الغذائية','التوازن الغذائي',

@@ -1,4 +1,4 @@
-import { LessonMemo, Activity } from '../types';
+import { LessonMemo, Activity } from '../../types';
 import { seq_1 } from './official_2am_maqta1';
 import { seq_2 } from './official_2am_maqta2';
 import { seq_3 } from './official_2am_maqta3';

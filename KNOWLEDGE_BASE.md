@@ -11,6 +11,12 @@
 
 ## 1) عائلات المصادر المفهرسة
 
+العائلات الأربع مرتبة ترتيباً مرجعياً ثابتاً في `src/data/platform/index.ts` — **المنهاج ← الوثيقة
+المرافقة ← دليل الأستاذ ← المذكرات** — وهذا الترتيب هو مصدر الحقيقة لأولوية المصادر
+(`AI_SOURCE_PRIORITY` مشتقة منه، لا معرَّفة بجانبه). ولكل عائلة طبقتان: نص رسمي حرفي
+(`official`، من `src/data/official/`) وبيانات مهيكلة (`platform`/`reference`).
+والدفتر اليومي خارج هذه العائلات: له قاعدة خاصة في `src/data/logbook/`.
+
 | العائلة | النوع (`kind`) | الحالة (`status`) | المحتوى | الأولوية |
 |---|---|---|---|---|
 | **الوثائق الرسمية الحرفية** | `curriculum` · `companionDocument` · `teacherGuide` · `progression` | `official` | نص وزاري حرفي مُفرَّغ من 11 وثيقة PDF (386 صفحة / ≈ 469 000 حرف)، مقطعٌ لكل صفحة ومُستشهدٌ به برقمها | **0.4** |
@@ -113,7 +119,7 @@
 
 | الطريقة | المسار | الوظيفة |
 |---|---|---|
-| GET | `/api/knowledge/status` | أحجام الفهرس: العائلات، الأنواع، المستويات، قائمة الوثائق، وكتلة `officialSources: {count, manifest[]}` (المعرّف، النوع، العنوان، الجهة، الرابط، المستوى، الصفحات، الأحرف، محرك التفريغ، الجودة، نسبة الشذوذ) |
+| GET | `/api/knowledge/status` | أحجام الفهرس: العائلات، الأنواع (مع `familyPriority` لكل نوع)، المستويات، قائمة الوثائق، وكتلتا `officialSources: {count, manifest[]}` (المعرّف، النوع، العنوان، الجهة، الرابط، المستوى، الصفحات، الأحرف، محرك التفريغ، الجودة، نسبة الشذوذ) و`platformDatabase: {order, families[], coverage[], gaps[], logbookDatabase}` |
 | POST | `/api/knowledge/search` | بحث حر: `{query, level?, kinds?, facets?, topK?, teacherDocs?}` ← مقاطع + النطاق المستنتج |
 | POST | `/api/knowledge/extract` | استخراج موجه: `{query, level?, facets?, maxCandidates?, teacherDocs?}` ← احتمالات موثقة + جواب جاهز + سياق النموذج |
 | POST | `/api/gemini/smart-assistant` | يقبل `knowledge` و`knowledgeContext` من العميل؛ وإن غابت يبنيها الخادم من نفس القاعدة. يعيد `knowledgeUsed` و`knowledgeScope` و`knowledgeSummary` |
@@ -129,7 +135,12 @@
 
 ```
 scripts/ingest_official_pdfs.py           # تفريغ وثائق PDF الوزارية ← وحدات TS حرفية (يُولَّد src/data/official/)
+src/data/platform/index.ts                # القاعدة الموحدة: العائلات الأربع بالترتيب المرجعي + التغطية + الفجوات
 src/data/official/                        # مُولَّد: types.ts + index.ts (بيان ومحمِّلات كسولة) + 11 وحدة صفحات
+src/data/curriculum/                      # 1) المنهاج: التدرجات السنوية الرسمية
+src/data/memos/                           # 4) المذكرات: curriculumDb وlessons* وofficial_* وdiagrams*
+src/data/logbook/                         # قاعدة الدفتر اليومي الخاصة (معزولة عن العائلات)
+src/services/aiSourcePriority.ts          # أولوية المصادر — مشتقة من ترتيب العائلات لا معرَّفة بجانبها
 src/types/knowledge.ts                    # الأنواع والتسميات العربية
 src/data/knowledgeBaseCorpus.ts           # المرجع المنهجي (المنهاج، الوثيقة المرافقة، دليل الأستاذ، بنية المذكرة)
 src/services/knowledgeBase.ts             # الفهرسة + البحث + تحديد النطاق + الاستخراج + صياغة الجواب

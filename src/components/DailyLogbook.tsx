@@ -39,10 +39,10 @@ import { generateLogbookEntries, isLogbookRowOnOrAfter } from '../utils/dailyLog
 import { collectPreservedRows, preservedRowsInPeriod } from '../utils/logbookPreservation';
 import { DailyLogSheetTemplate, ScienceHeaderLeft, ScienceHeaderRight, CornerLeaves } from './DailyLogSheetTemplate';
 import { TealLogSheetTemplate } from './TealLogSheetTemplate';
-import { DAILY_LOGBOOK_PROGRAM_1AM } from '../data/dailyLogbookProgram1am';
-import { DAILY_LOGBOOK_PROGRAM_2AM } from '../data/dailyLogbookProgram2am';
-import { DAILY_LOGBOOK_PROGRAM_3AM } from '../data/dailyLogbookProgram3am';
-import { DAILY_LOGBOOK_PROGRAM_4AM } from '../data/dailyLogbookProgram4am';
+import { DAILY_LOGBOOK_PROGRAM_1AM } from '../data/logbook/dailyLogbookProgram1am';
+import { DAILY_LOGBOOK_PROGRAM_2AM } from '../data/logbook/dailyLogbookProgram2am';
+import { DAILY_LOGBOOK_PROGRAM_3AM } from '../data/logbook/dailyLogbookProgram3am';
+import { DAILY_LOGBOOK_PROGRAM_4AM } from '../data/logbook/dailyLogbookProgram4am';
 
 interface DailyLogbookProps {
   selectedLevel?: '1am' | '2am' | '3am' | '4am';

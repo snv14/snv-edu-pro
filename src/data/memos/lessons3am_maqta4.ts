@@ -1,4 +1,4 @@
-import { LessonMemo } from '../types';
+import { LessonMemo } from '../../types';
 import { DIAGRAMS_3AM } from './diagrams3am';
 
 // ================= المقطع الرابع: التربة ثروة طبيعية هشة (المذكرات 28 - 33) =================

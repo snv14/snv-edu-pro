@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { OFFICIAL_2AM_DISTRIBUTION, OFFICIAL_1AM_DISTRIBUTION } from '../src/data/officialAnnualDistributionData';
+import { OFFICIAL_2AM_DISTRIBUTION, OFFICIAL_1AM_DISTRIBUTION } from '../src/data/curriculum/officialAnnualDistributionData';
 import { getDefaultCalendarSettings, recalculateDistributionRows } from '../src/utils/annualDistributionDateUtils';
 import { annualDistributionVersion, migrateSecondYearDistribution, SECOND_YEAR_BACKUP_KEY } from '../src/utils/annualDistributionMigration';
 

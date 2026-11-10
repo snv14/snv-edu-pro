@@ -1,4 +1,4 @@
-import { LessonMemo } from '../types';
+import { LessonMemo } from '../../types';
 import { DIAGRAMS_3AM } from './diagrams3am';
 
 // ================= المقطع الثالث: استغلال الموارد الطبيعية الباطنية (المذكرات 22 - 27) =================

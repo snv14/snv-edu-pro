@@ -1,4 +1,4 @@
-import type { GeneratedSession } from '../utils/annualDistributionGenerator';
+import type { GeneratedSession } from '../../utils/annualDistributionGenerator';
 
 export type OfficialAnnualDistributionRow = GeneratedSession & { percent?: string; sourceYear?: string; week?: number | string; weekInMonth?: number; referenceMonthlySchedule?: boolean };
 

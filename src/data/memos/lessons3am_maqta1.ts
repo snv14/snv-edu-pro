@@ -1,4 +1,4 @@
-import { LessonMemo } from '../types';
+import { LessonMemo } from '../../types';
 import { DIAGRAMS_3AM } from './diagrams3am';
 
 // ================= المقطع الأول: الديناميكية الداخلية للكرة الأرضية (المذكرات 1 - 14) =================

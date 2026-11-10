@@ -1,4 +1,4 @@
-import { LessonMemo } from '../types';
+import { LessonMemo } from '../../types';
 import { LESSONS_1AM } from './lessons1am';
 import { LESSONS_2AM } from './lessons2am';
 import { LESSONS_3AM } from './lessons3am';

@@ -1,4 +1,4 @@
-import type { OfficialAnnualDistributionRow } from '../data/officialAnnualDistributionData';
+import type { OfficialAnnualDistributionRow } from '../data/curriculum/officialAnnualDistributionData';
 import { ANNUAL_SCHEDULE_DATA_VERSION } from './annualDistributionDateUtils';
 
 export const SECOND_YEAR_REFERENCE_VERSION = '2026-2027-2am-supplied-reference-v1';

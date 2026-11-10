@@ -17,7 +17,7 @@ import {
   preloadOfficialSources,
   resetOfficialSourcesCache,
 } from '../src/services/knowledgeOfficialSources';
-import { getOfficialCurriculumDatabase } from '../src/data/curriculumDb';
+import { getOfficialCurriculumDatabase } from '../src/data/memos/curriculumDb';
 import type { KnowledgeSourceKind } from '../src/types/knowledge';
 
 const lessons = getOfficialCurriculumDatabase();

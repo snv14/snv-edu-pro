@@ -19,6 +19,7 @@ import {
 } from '../services/knowledgeBase';
 import { KNOWLEDGE_FACET_LABELS, KNOWLEDGE_KIND_LABELS, type TeacherKnowledgeDoc } from '../types/knowledge';
 import { getOfficialSourcesManifest, loadOfficialSources } from '../services/knowledgeOfficialSources';
+import { PLATFORM_DATABASE, familyPriorityOf } from '../data/platform';
 
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
@@ -526,6 +527,23 @@ apiApp.get('/api/knowledge/status', async (_req, res) => {
   const officialDocs = await loadOfficialSources();
   const stats = getKnowledgeStats({ officialDocs });
   res.json({
+    // القاعدة الموحدة للمنصة: العائلات الأربع بالترتيب المرجعي وتغطية كل منها وفجواتها.
+    platformDatabase: {
+      order: PLATFORM_DATABASE.order,
+      families: PLATFORM_DATABASE.families.map((family) => ({
+        order: family.order,
+        id: family.id,
+        label: family.label,
+        role: family.role,
+        kinds: family.kinds,
+        priority: family.order,
+        structuredModules: family.structuredModules,
+      })),
+      coverage: PLATFORM_DATABASE.coverage,
+      gaps: PLATFORM_DATABASE.gaps,
+      // الدفتر اليومي خارج العائلات: له قاعدة خاصة في src/data/logbook/.
+      logbookDatabase: 'src/data/logbook/',
+    },
     officialSources: {
       count: officialDocs.length,
       manifest: getOfficialSourcesManifest().map((entry) => ({
@@ -544,7 +562,11 @@ apiApp.get('/api/knowledge/status', async (_req, res) => {
       })),
     },
     chunks: stats.chunks,
-    byKind: Object.fromEntries(Object.entries(stats.byKind).map(([kind, count]) => [kind, { count, label: KNOWLEDGE_KIND_LABELS[kind as keyof typeof KNOWLEDGE_KIND_LABELS] || kind }])),
+    byKind: Object.fromEntries(Object.entries(stats.byKind).map(([kind, count]) => [kind, {
+      count,
+      label: KNOWLEDGE_KIND_LABELS[kind as keyof typeof KNOWLEDGE_KIND_LABELS] || kind,
+      familyPriority: familyPriorityOf(kind as Parameters<typeof familyPriorityOf>[0]),
+    }])),
     byFacet: Object.fromEntries(Object.entries(stats.byFacet).map(([facet, count]) => [facet, { count, label: KNOWLEDGE_FACET_LABELS[facet as keyof typeof KNOWLEDGE_FACET_LABELS] || facet }])),
     byLevel: stats.byLevel,
     documents: stats.documents.map((document) => ({
