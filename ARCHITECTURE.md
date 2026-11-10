@@ -14,15 +14,14 @@
 ├── data/aiKnowledge.json     # لقطة معرفة المساعد (تُحدَّث بـ npm run refresh:ai-knowledge)
 ├── KNOWLEDGE_BASE.md         # دليل قاعدة معرفة المساعد (المنهاج/الوثيقة المرافقة/دليل الأستاذ/المذكرات)
 ├── scripts/                  # أدوات صيانة: refresh-ai-knowledge.mjs وingest_official_pdfs.py (تفريغ الوثائق الوزارية)
-├── archive/                  # ملفات مصدرية قديمة غير مستعملة في التشغيل
-├── public/                   # favicon وصور ثابتة
+├── public/                   # favicon وصور وخلفيات ثابتة
 └── src/
     ├── main.tsx, App.tsx, types.ts, index.css, vite-env.d.ts
     ├── components/           # 27 مكوّنًا
     ├── services/             # 20 ملفًا: الذكاء الاصطناعي، قاعدة المعرفة، ومصادر المذكرات
     ├── utils/                # 16 ملفًا: التصدير (Word/PDF) والتعقيم والتوزيع
     ├── server/               # api.ts وaiGateway.ts وsecurity.ts وenv.ts
-    ├── data/                 # 44 ملفًا: المنهاج والتدرج والدفتر ومرجع قاعدة المعرفة
+    ├── data/                 # 43 ملفًا: المنهاج والتدرج والدفتر ومرجع قاعدة المعرفة
     │   └── official/         # 13 ملفًا مُولَّدًا: متن الوثائق الوزارية الحرفي (386 صفحة) + البيان والمحمِّلات
     └── types/                # أنواع إضافية (pedagogicalNote.ts وknowledge.ts)
 ```
@@ -69,5 +68,22 @@
 | `POST /api/knowledge/search` | بحث حر في قاعدة المعرفة |
 | `POST /api/knowledge/extract` | استخراج موجه يعيد عدة احتمالات موثقة |
 
+## قواعد نظافة المستودع
+
+الشيفرة الحيّة كلها داخل `src/` (+ `server.ts` و`vite.config.ts`)، و`tsconfig.json` يفحص
+`["src", "server.ts", "vite.config.ts"]` فقط. لذلك:
+
+- **لا تُنشئ نسخاً من ملفات `src/` عند جذر المستودع.** كان هناك 100 ملف جذري قديم (نسخ مطابقة
+  ونسخ أقدم من `src/`) لا تُفحَص ولا تُحزَم ولا تُستورد، وأُزيلت؛ وكانت مصيدة تحرير: من يفتح
+  `DailyLogbook.tsx` الجذري (188 ك.ب) يضيّع عمله لأن الحيّ هو `src/components/DailyLogbook.tsx` (204 ك.ب).
+- **`src/data/official/` مولَّد** — مصدر الحقيقة `scripts/ingest_official_pdfs.py`.
+- **`src/data/lessons*.ts` و`src/data/official_*.ts` و`curriculumDb.ts` مدخلات لخط التفريغ**: يبني منها
+  `load_vocabulary()` مفردات المادة (12 109 كلمة) المستخدمة في قياس الجودة وإصلاح «امل». بعضها غير
+  مستورد وقت التشغيل (مثل `lessons3am_maqta1..4.ts`) لكنه **ليس ميتاً** — حذفه يغيّر ناتج التفريغ.
+- بيانات س1 غير الموصولة حالياً (`validate1am.ts`، `diagramSources1am.ts`، `diagrams1am.ts`) محفوظة
+  عمداً: محتواها يخص قاعدة بيانات السنة الأولى وقد يُوصَل لاحقاً.
+
 ## التشغيل
 `npm install` ← انسخ `.env.example` إلى `.env.local` ← `npm run dev` (تطوير) أو `npm run build && npm start` (إنتاج).
+
+التقرير التفصيلي لقاعدة بيانات السنة الأولى متوسط وسجل التنظيف: [DATA_REPORT_1AM.md](DATA_REPORT_1AM.md).
