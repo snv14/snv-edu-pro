@@ -345,6 +345,16 @@ export const SourceMemo1AMViewer: React.FC<Props> = ({ lessons }) => {
                 <span>طباعة المعاينة الكاملة</span>
               </button>
 
+              <a
+                href="/assets/aistudio/plans_annuels2023-sciences1am_6aafcda9.pdf"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-xs font-black shadow-sm transition"
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+                <span>دليل الأستاذ والمخططات السنوية (PDF)</span>
+              </a>
+
               <button
                 type="button"
                 onClick={handleExportHtml}

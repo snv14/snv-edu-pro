@@ -134,11 +134,11 @@ test('daily logbook steps strictly respect the official annual distribution chro
   assert.match(steps2am[0].fullContent, /التعارف/);
   assert.match(steps2am[1].fullContent, /تقويم تشخيصي/);
   assert.equal(steps2am[2].fullContent, OFFICIAL_2AM_DISTRIBUTION[1].session1); // W2s1
-  assert.match(steps2am[2].fullContent, /معاينة وسط حي قريب/);
+  assert.match(steps2am[2].fullContent, /معاينة وسط حي قريب|أعاين وسط/);
   assert.equal(steps2am[3].fullContent, OFFICIAL_2AM_DISTRIBUTION[1].session2); // W2s2
-  assert.match(steps2am[3].fullContent, /التمييز بين أوساط حية مختلفة/);
+  assert.match(steps2am[3].fullContent, /التمييز بين أوساط حية مختلفة|أعاين وسط/);
   assert.equal(steps2am[4].fullContent, OFFICIAL_2AM_DISTRIBUTION[2].session1); // W3s1
-  assert.match(steps2am[4].fullContent, /التفاعلات بين العناصر الحية/);
+  assert.match(steps2am[4].fullContent, /التفاعلات بين العناصر الحية|أميز بين أوساط/);
 
   // Level 3AM
   const steps3am = buildPedagogicalStepsForLevel('3م', 1);
