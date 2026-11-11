@@ -36,7 +36,8 @@ export const DEFAULT_KNOWLEDGE_SETTINGS: KnowledgeSettings = {
   includeTeacherDocs: true,
   includeOcrSupplement: false,
   includeCorpus: true,
-  includeProgression: true,
+  // مستثنى من المساعد التربوي بطلب صريح: المساعد متصل بجميع المصادر ما عدا التدرج
+  includeProgression: false,
   topK: 12,
   localFirst: false,
 };

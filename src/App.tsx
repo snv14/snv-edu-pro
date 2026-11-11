@@ -41,6 +41,9 @@ const AnnualDistribution = lazy(() => import('./components/AnnualDistribution').
 const DailyLogbook = lazy(() => import('./components/DailyLogbook').then(module => ({ default: module.DailyLogbook })));
 const AccountSettings = lazy(() => import('./components/AccountSettings').then(module => ({ default: module.AccountSettings })));
 const SourceMemo1AMViewer = lazy(() => import('./components/SourceMemo1AMViewer').then(module => ({ default: module.SourceMemo1AMViewer })));
+const SourceGuide2AMViewer = lazy(() => import('./components/SourceGuide2AMViewer').then(module => ({ default: module.SourceGuide2AMViewer })));
+const SourceGuide3AMViewer = lazy(() => import('./components/SourceGuide3AMViewer').then(module => ({ default: module.SourceGuide3AMViewer })));
+const SourceGuide4AMViewer = lazy(() => import('./components/SourceGuide4AMViewer').then(module => ({ default: module.SourceGuide4AMViewer })));
 const CurriculumDatabaseManager = lazy(() => import('./components/CurriculumDatabaseManager').then(module => ({ default: module.CurriculumDatabaseManager })));
 
 const SectionLoading = () => (
@@ -537,7 +540,7 @@ export const App: React.FC = () => {
                         }`}
                       >
                         <Database className="w-3.5 h-3.5" />
-                        <span>{selectedLevel === '1am' ? 'عرض المحتوى الكامل للمصدر' : 'المصدر الكامل'}</span>
+                        <span>{selectedLevel === '1am' ? 'عرض المحتوى الكامل للمصدر' : selectedLevel === '2am' ? 'دليل الأستاذ والمخطط الرسمي' : selectedLevel === '3am' ? 'دليل الأستاذ والكتاب المدرسي' : 'المخطط السنوي الرسمي ودليل BEM'}</span>
                       </button>
 
                       <button
@@ -764,10 +767,18 @@ export const App: React.FC = () => {
             <Suspense fallback={<SectionLoading />}>
               <SourceMemo1AMViewer lessons={curriculumLessons} />
             </Suspense>
+          ) : selectedLevel === '2am' ? (
+            <Suspense fallback={<SectionLoading />}>
+              <SourceGuide2AMViewer lessons={curriculumLessons} />
+            </Suspense>
+          ) : selectedLevel === '3am' ? (
+            <Suspense fallback={<SectionLoading />}>
+              <SourceGuide3AMViewer lessons={curriculumLessons} />
+            </Suspense>
           ) : (
-            <div dir="rtl" className="h-full flex items-center justify-center p-6 bg-slate-50 text-slate-600 font-bold">
-              عارض المصدر الكامل متاح حاليًا داخل قسم السنة الأولى متوسط.
-            </div>
+            <Suspense fallback={<SectionLoading />}>
+              <SourceGuide4AMViewer lessons={curriculumLessons} />
+            </Suspense>
           )}
         </div>
       )}

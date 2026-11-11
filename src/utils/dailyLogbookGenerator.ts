@@ -237,8 +237,12 @@ export function buildPedagogicalStepsForLevel(
       let text = s.text.trim();
 
       // توحيد مصطلح التعارف البيداغوجي لضمان التطابق مع التسمية الرسمية
-      if (isWeek1 && /تعارف/.test(text) && !/التعارف/.test(text)) {
-        text = text.replace(/تعارف/, 'التعارف');
+      if (isWeek1 && !/التعارف/.test(text)) {
+        if (/تعارف/.test(text)) {
+          text = text.replace(/تعارف/, 'التعارف');
+        } else if (/استقبال|توجيهات|الافتتاح/.test(text)) {
+          text = `التعارف، ${text}`;
+        }
       }
 
       // تصنيف الحصة البيداغوجية
