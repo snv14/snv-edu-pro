@@ -1,7 +1,16 @@
 import type { OfficialAnnualDistributionRow } from './officialAnnualDistributionData';
 
-// Transcribed from the two-page 2026–2027 schedule supplied by the teacher.
-// The source gives weeks within each month, not date ranges for each row.
+// Transcribed from the official two-page annual distribution for 2026–2027
+// (متوسطة حسناوي عبد القادر — السواقر، تيارت؛ الأستاذ جمال الدين أمين شعلال؛
+//  موقَّعة من السيد المدير والسيد المفتش).
+// The sheet prints weeks within each month; the ISO ranges below are derived from
+// the Sunday→Thursday school week, anchored on the two official holiday spans the
+// sheet prints verbatim (winter: Thu 2026-12-17 evening → Sun 2027-01-03 morning;
+// spring: Thu 2027-03-18 evening → Sun 2027-04-04 morning). Two fully-off weeks are
+// absent from the sheet and therefore from these rows: the week of 2026-11-01 and
+// the week of 2027-03-28 (inside the spring holiday).
+// Week 1 reproduces the sheet's single merged cell split in two, per the teacher's
+// instruction: session1 = الاستقبال والتوجيهات وأسبوع الصحة المدرسية، session2 = التقويم التشخيصي.
 const MIDAN = 'الإنسان والمحيط';
 const M1 = 'المقطع الأول: الوسط الحي';
 const M2 = 'المقطع الثاني: توزع الكائنات الحية في أوساطها';
@@ -29,7 +38,7 @@ const activity = (resource: string, text: string) => `${resource}\n${text}`;
 
 type Input = Omit<OfficialAnnualDistributionRow, 'id' | 'week' | 'dates' | 'midan' | 'sourceYear' | 'referenceMonthlySchedule'>;
 const rows: Input[] = [
-  { month:'سبتمبر', weekInMonth:4, maqta:'', mawrid:'الافتتاح', session1:'استقبال التلاميذ، توجيهات، أسبوع الصحة المدرسية (الدرس الافتتاحي: تأثير الإضرار بالغابة على الصحة؛ ورشات حول النظافة الشخصية، الغذاء المتوازن، مخاطر مشروبات الطاقة على صحة الإنسان، الرياضة وتأثيرها على صحة التلميذ، الصحة النفسية والعقلية، التنمر، مخاطر الإدمان على المخدرات)، التقويم التشخيصي', session2:'', isIntroductory:true },
+  { month:'سبتمبر', weekInMonth:4, maqta:'', mawrid:'الافتتاح', session1:'استقبال التلاميذ، توجيهات، أسبوع الصحة المدرسية (الدرس الافتتاحي: تأثير الإضرار بالغابة على الصحة؛ ورشات حول النظافة الشخصية، الغذاء المتوازن، مخاطر مشروبات الطاقة على صحة الإنسان، الرياضة وتأثيرها على صحة التلميذ، الصحة النفسية والعقلية، التنمر، مخاطر الإدمان على المخدرات)', session2:'التقويم التشخيصي', isIntroductory:true },
   { month:'أكتوبر', weekInMonth:1, percent:'3.2%', maqta:M1, mawrid:R11, session1:`وضعية الانطلاق الشاملة، ${M1} / وضعية الانطلاق\n${activity(R11, 'النشاط 1: أعاين وسطا حيا قريبا (1)')}`, session2:activity(R11,'النشاط 1: أعاين وسطا حيا قريبا (2)') },
   { month:'أكتوبر', weekInMonth:2, percent:'6.4%', maqta:M1, mawrid:`${R11} / ${R12}`, session1:activity(R11,'النشاط 2: أميز بين أوساط حية مختلفة'), session2:activity(R12,'النشاط 1: أحدد مختلف التفاعلات بين العناصر الحية في الأوساط الحية (1)') },
   { month:'أكتوبر', weekInMonth:3, percent:'9.7%', maqta:M1, mawrid:R12, session1:activity(R12,'النشاط 1: أحدد مختلف التفاعلات بين العناصر الحية في الأوساط الحية (2)'), session2:activity(R12,'النشاط 2: أبين تنظيم العلاقات الغذائية في أوساط حية (1)') },
@@ -65,8 +74,34 @@ const rows: Input[] = [
   { month:'جوان', weekInMonth:3, percent:'100%', maqta:'', mawrid:'اختبارات الفصل الثالث', session1:'اختبارات الفصل الثالث', session2:'اختبارات الفصل الثالث', isExam:true },
 ];
 
+// ── الترتيب الزمني: أيام الأحد البداية لكل أسبوع مطبوع في الورقة الرسمية ──
+// الأسبوع الدراسي الأحد→الخميس. المرتكزان: نهاية آخر أسبوع تدريس قبل عطلة الشتاء
+// الخميس 2026-12-17 (ديسمبر ش2)، ونهاية مارس ش3 الخميس 2027-03-18؛ والاستئناف
+// الأحد 2027-01-03 (جانفي ش1) والأحد 2027-04-04 (أفريل ش1) كما تطبعهما الورقة.
+const WEEK_SUNDAYS: Record<string, string> = {
+  'سبتمبر/4': '2026-09-27',
+  'أكتوبر/1': '2026-10-04', 'أكتوبر/2': '2026-10-11', 'أكتوبر/3': '2026-10-18', 'أكتوبر/4': '2026-10-25',
+  'نوفمبر/1': '2026-11-08', 'نوفمبر/2': '2026-11-15', 'نوفمبر/3': '2026-11-22', 'نوفمبر/4': '2026-11-29',
+  'ديسمبر/1': '2026-12-06', 'ديسمبر/2': '2026-12-13', 'ديسمبر/3': '2026-12-20', 'ديسمبر/4': '2026-12-27',
+  'جانفي/1': '2027-01-03', 'جانفي/2': '2027-01-10', 'جانفي/3': '2027-01-17', 'جانفي/4': '2027-01-24',
+  'فيفري/1': '2027-01-31', 'فيفري/2': '2027-02-07', 'فيفري/3': '2027-02-14', 'فيفري/4': '2027-02-21',
+  'مارس/1': '2027-02-28', 'مارس/2': '2027-03-07', 'مارس/3': '2027-03-14', 'مارس/4': '2027-03-21',
+  'أفريل/1': '2027-04-04', 'أفريل/2': '2027-04-11', 'أفريل/3': '2027-04-18', 'أفريل/4': '2027-04-25',
+  'ماي/1': '2027-05-02', 'ماي/2': '2027-05-09', 'ماي/3': '2027-05-16', 'ماي/4': '2027-05-23',
+  'جوان/1': '2027-05-30', 'جوان/2': '2027-06-06', 'جوان/3': '2027-06-13',
+};
+const plusDays = (iso: string, days: number): string => {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+};
+const weekRange = (month: string, weekInMonth: number | undefined): string => {
+  const sunday = weekInMonth ? WEEK_SUNDAYS[`${month}/${weekInMonth}`] : undefined;
+  return sunday ? `${sunday} → ${plusDays(sunday, 4)}` : '';
+};
+
 export const OFFICIAL_2AM_DISTRIBUTION: OfficialAnnualDistributionRow[] = rows.map((row, index) => ({
   ...row, id: `2am-reference-2026-${index + 1}`, week: index + 1,
-  dates: '', midan: row.maqta ? MIDAN : '', sourceYear: '2026-2027', referenceMonthlySchedule: true,
+  dates: weekRange(row.month, row.weekInMonth), midan: row.maqta ? MIDAN : '', sourceYear: '2026-2027', referenceMonthlySchedule: true,
   isExam: row.isExam ?? false, isHoliday: row.isHoliday ?? false,
 }));
