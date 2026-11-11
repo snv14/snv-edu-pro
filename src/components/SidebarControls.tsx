@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { GraduationCap, Layers, Columns, BookmarkCheck, Copy, Check } from 'lucide-react';
 import { LessonMemo, MemoConfig } from '../types';
-import { LEVELS, MAQATI_BY_LEVEL } from '../data/lessonsData';
+import { LEVELS, MAQATI_BY_LEVEL } from '../data/memos/lessonsData';
 
 interface SidebarControlsProps {
   selectedLevel: '1am' | '2am' | '3am' | '4am';

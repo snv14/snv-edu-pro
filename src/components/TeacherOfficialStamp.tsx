@@ -6,6 +6,11 @@ interface TeacherOfficialStampProps {
   size?: 'sm' | 'md' | 'lg';
   color?: 'blue' | 'purple' | 'red' | 'teal';
   className?: string;
+  /**
+   * الحجم الطبيعي للطباعة بالمليمتر (وحدة CSS مطلقة: 1mm حقيقية على الورق).
+   * عند تمريره يُتجاهل `size` ويُطبع الختم بمقاسه الفيزيائي الحقيقي.
+   */
+  sizeMm?: number;
 }
 
 export const TeacherOfficialStamp: React.FC<TeacherOfficialStampProps> = ({
@@ -13,7 +18,10 @@ export const TeacherOfficialStamp: React.FC<TeacherOfficialStampProps> = ({
   size = 'md',
   color = 'blue',
   className = '',
+  sizeMm,
 }) => {
+  const naturalStyle = sizeMm ? { width: `${sizeMm}mm`, height: `${sizeMm}mm` } : undefined;
+
   // If custom uploaded image exists, render it
   if (config.teacherStamp) {
     const sizeClasses = {
@@ -22,7 +30,10 @@ export const TeacherOfficialStamp: React.FC<TeacherOfficialStampProps> = ({
       lg: 'w-48 h-48',
     };
     return (
-      <div className={`inline-flex items-center justify-center ${sizeClasses[size]} ${className}`}>
+      <div
+        className={naturalStyle ? `inline-flex items-center justify-center ${className}` : `inline-flex items-center justify-center ${sizeClasses[size]} ${className}`}
+        style={naturalStyle}
+      >
         <img
           src={config.teacherStamp}
           alt="ختم وتوقيع الأستاذ"

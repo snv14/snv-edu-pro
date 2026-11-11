@@ -23,14 +23,14 @@ import {
   type TeacherKnowledgeDoc,
   type OfficialKnowledgeDoc,
 } from '../types/knowledge';
-import { getOfficialCurriculumDatabase } from '../data/curriculumDb';
+import { getOfficialCurriculumDatabase } from '../data/memos/curriculumDb';
 import {
   OFFICIAL_1AM_DISTRIBUTION,
   OFFICIAL_2AM_DISTRIBUTION,
   OFFICIAL_3AM_DISTRIBUTION,
   OFFICIAL_4AM_DISTRIBUTION,
   type OfficialAnnualDistributionRow,
-} from '../data/officialAnnualDistributionData';
+} from '../data/curriculum/officialAnnualDistributionData';
 import { KNOWLEDGE_BASE_CORPUS } from '../data/knowledgeBaseCorpus';
 import { sourcePriorityOf } from './aiSourcePriority';
 

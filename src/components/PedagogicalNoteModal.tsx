@@ -36,8 +36,8 @@ import { MemoConfig } from '../types';
 import { TeacherOfficialStamp } from './TeacherOfficialStamp';
 import { getScienceMemoModels, getMemoModelStatusLabel, ScienceMemoModel } from '../services/scienceMemoModelLibrary';
 import { ExpertLabBlock, consumePendingExpertLabBlock, subscribeExpertLab } from '../services/expertLabStore';
-import { OFFICIAL_1AM_DISTRIBUTION, OFFICIAL_2AM_DISTRIBUTION, OFFICIAL_3AM_DISTRIBUTION, OFFICIAL_4AM_DISTRIBUTION } from '../data/officialAnnualDistributionData';
-import { loadCurriculumDatabase } from '../data/curriculumDb';
+import { OFFICIAL_1AM_DISTRIBUTION, OFFICIAL_2AM_DISTRIBUTION, OFFICIAL_3AM_DISTRIBUTION, OFFICIAL_4AM_DISTRIBUTION } from '../data/curriculum/officialAnnualDistributionData';
+import { loadCurriculumDatabase } from '../data/memos/curriculumDb';
 import { buildOfficialSourceContext } from '../services/officialPedagogicalSources';
 import sourceMemo1AMFullText from '../data/sourceMemo1amFullText.md?raw';
 import {

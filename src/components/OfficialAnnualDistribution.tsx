@@ -4,10 +4,10 @@ import { generateDistributionPdf } from "../utils/pdfExportDistribution";
 import { LessonMemo, MemoConfig } from '../types';
 import { TeacherOfficialStamp } from './TeacherOfficialStamp';
 import { ActionMenu } from './ActionMenu';
-import { LESSONS_1AM } from '../data/lessons1am';
-import { LESSONS_2AM } from '../data/lessons2am';
-import { LESSONS_3AM } from '../data/lessons3am';
-import { LESSONS_4AM } from '../data/lessons4am';
+import { LESSONS_1AM } from '../data/memos/lessons1am';
+import { LESSONS_2AM } from '../data/memos/lessons2am';
+import { LESSONS_3AM } from '../data/memos/lessons3am';
+import { LESSONS_4AM } from '../data/memos/lessons4am';
 import { generateAnnualDistribution, AnnualCalendarEvent } from '../utils/annualDistributionGenerator';
 import { 
   OFFICIAL_1AM_DISTRIBUTION, 
@@ -15,7 +15,7 @@ import {
   OFFICIAL_3AM_DISTRIBUTION, 
   OFFICIAL_4AM_DISTRIBUTION,
   OfficialAnnualDistributionRow 
-} from '../data/officialAnnualDistributionData';
+} from '../data/curriculum/officialAnnualDistributionData';
 import { CalendarAdjustmentModal } from './CalendarAdjustmentModal';
 import { annualDistributionVersion, migrateSecondYearDistribution } from '../utils/annualDistributionMigration';
 import { 

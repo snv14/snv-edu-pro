@@ -117,7 +117,7 @@ test('daily logbook steps strictly respect the official annual distribution chro
     OFFICIAL_2AM_DISTRIBUTION,
     OFFICIAL_3AM_DISTRIBUTION,
     OFFICIAL_4AM_DISTRIBUTION,
-  } = await import('../src/data/officialAnnualDistributionData');
+  } = await import('../src/data/curriculum/officialAnnualDistributionData');
 
   // Level 1AM
   const steps1am = buildPedagogicalStepsForLevel('1م', 1);
@@ -129,16 +129,17 @@ test('daily logbook steps strictly respect the official annual distribution chro
   assert.equal(steps1am[6].fullContent, OFFICIAL_1AM_DISTRIBUTION[3].session1);
   assert.match(steps1am[6].fullContent, /مصدر الأغذية/);
 
-  // Level 2AM
+  // Level 2AM — the official 2026-2027 sheet opens with «استقبال التلاميذ…» (not «تعارف»),
+  // and its week-1 merged cell is split: session1 = الافتتاح، session2 = التقويم التشخيصي.
   const steps2am = buildPedagogicalStepsForLevel('2م', 1);
-  assert.match(steps2am[0].fullContent, /التعارف/);
-  assert.match(steps2am[1].fullContent, /تقويم تشخيصي/);
+  assert.match(steps2am[0].fullContent, /استقبال التلاميذ/);
+  assert.match(steps2am[1].fullContent, /التقويم التشخيصي/);
   assert.equal(steps2am[2].fullContent, OFFICIAL_2AM_DISTRIBUTION[1].session1); // W2s1
-  assert.match(steps2am[2].fullContent, /معاينة وسط حي قريب|أعاين وسط/);
+  assert.match(steps2am[2].fullContent, /أعاين وسطا حيا قريبا/);
   assert.equal(steps2am[3].fullContent, OFFICIAL_2AM_DISTRIBUTION[1].session2); // W2s2
-  assert.match(steps2am[3].fullContent, /التمييز بين أوساط حية مختلفة|أعاين وسط/);
+  assert.match(steps2am[3].fullContent, /أعاين وسطا حيا قريبا \(2\)/);
   assert.equal(steps2am[4].fullContent, OFFICIAL_2AM_DISTRIBUTION[2].session1); // W3s1
-  assert.match(steps2am[4].fullContent, /التفاعلات بين العناصر الحية|أميز بين أوساط/);
+  assert.match(steps2am[4].fullContent, /أميز بين أوساط حية مختلفة/);
 
   // Level 3AM
   const steps3am = buildPedagogicalStepsForLevel('3م', 1);
@@ -175,7 +176,7 @@ test('multi-level timetable progresses through the respective annual distributio
   assert.equal(row2am.level, '2م');
   assert.equal(row3am.level, '3م');
   assert.equal(row4am.level, '4م');
-  assert.match(row2am.content, /التعارف/);
+  assert.match(row2am.content, /استقبال التلاميذ/);
   assert.match(row3am.content, /التعارف/);
   assert.match(row4am.content, /التعارف/);
 });

@@ -5,12 +5,12 @@ import {
   OFFICIAL_3AM_DISTRIBUTION,
   OFFICIAL_4AM_DISTRIBUTION,
   type OfficialAnnualDistributionRow,
-} from '../data/officialAnnualDistributionData';
+} from '../data/curriculum/officialAnnualDistributionData';
 import { ANNUAL_STORAGE_KEY } from './annualDistributionDateUtils';
-import { DAILY_LOGBOOK_PROGRAM_1AM, type DailyLogbookProgramItem } from '../data/dailyLogbookProgram1am';
-import { DAILY_LOGBOOK_PROGRAM_2AM } from '../data/dailyLogbookProgram2am';
-import { DAILY_LOGBOOK_PROGRAM_3AM } from '../data/dailyLogbookProgram3am';
-import { DAILY_LOGBOOK_PROGRAM_4AM } from '../data/dailyLogbookProgram4am';
+import { DAILY_LOGBOOK_PROGRAM_1AM, type DailyLogbookProgramItem } from '../data/logbook/dailyLogbookProgram1am';
+import { DAILY_LOGBOOK_PROGRAM_2AM } from '../data/logbook/dailyLogbookProgram2am';
+import { DAILY_LOGBOOK_PROGRAM_3AM } from '../data/logbook/dailyLogbookProgram3am';
+import { DAILY_LOGBOOK_PROGRAM_4AM } from '../data/logbook/dailyLogbookProgram4am';
 
 /** A merged group row may contain more than one ISO date. */
 export function isLogbookRowOnOrAfter(dateStr: string, startDate: string): boolean {

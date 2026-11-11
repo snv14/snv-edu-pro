@@ -8,7 +8,7 @@ import {
   OFFICIAL_SOURCE_LOADERS,
   OFFICIAL_SOURCES_TOTAL_CHARS,
   OFFICIAL_SOURCES_TOTAL_PAGES,
-} from '../data/official';
+} from '../data/official/index';
 import type { OfficialSourceManifestEntry, OfficialSourcePages } from '../data/official/types';
 
 /**

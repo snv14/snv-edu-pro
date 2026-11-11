@@ -1,4 +1,4 @@
-import { OfficialAnnualDistributionRow } from '../data/officialAnnualDistributionData';
+import { OfficialAnnualDistributionRow } from '../data/curriculum/officialAnnualDistributionData';
 
 export const ANNUAL_SCHEDULE_DATA_VERSION = '2026-10-14-1am-exact-user-v1';
 export const ANNUAL_STORAGE_KEY = 'algeria_sciences_annual_dist_exact_user_v1';

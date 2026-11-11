@@ -4,7 +4,7 @@ import { LessonMemo, Activity } from '../types';
 
 const normalizeKey = (v: string) => v.trim().replace(/\s+/g, ' ').toLowerCase();
 const lessonKey = (l: LessonMemo) => l.sourceLearningUnitId || [l.level, l.maqta, l.mawrid, l.ta3alom].map(normalizeKey).join('|');
-import { saveCurriculumDatabase, exportCurriculumDatabase } from '../data/curriculumDb';
+import { saveCurriculumDatabase, exportCurriculumDatabase } from '../data/memos/curriculumDb';
 
 interface Props {
   lessons: LessonMemo[];

@@ -23,7 +23,7 @@ import {
   Camera,
   Upload,
 } from 'lucide-react';
-import { LESSONS_DATA } from '../data/lessonsData';
+import { LESSONS_DATA } from '../data/memos/lessonsData';
 import { MemoConfig } from '../types';
 import card1amImg from '../assets/images/card_1am_plant_1790373274426.jpg';
 import card2amImg from '../assets/images/card_2am_ecosystem_1790373285211.jpg';

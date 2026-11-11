@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { KnowledgeBasePanel } from '../src/components/KnowledgeBasePanel';
 import { AIAssistantDrawer } from '../src/components/AIAssistantChat';
 import { DEFAULT_KNOWLEDGE_SETTINGS } from '../src/services/knowledgeLibraryStore';
-import { getOfficialCurriculumDatabase } from '../src/data/curriculumDb';
+import { getOfficialCurriculumDatabase } from '../src/data/memos/curriculumDb';
 
 const lessons = getOfficialCurriculumDatabase();
 

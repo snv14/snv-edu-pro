@@ -35,14 +35,15 @@ import {
 } from 'lucide-react';
 import { LessonMemo, MemoConfig, Activity } from '../types';
 import { TeacherOfficialStamp } from './TeacherOfficialStamp';
+import { LogbookPrintBook } from './LogbookPrintBook';
 import { generateLogbookEntries, isLogbookRowOnOrAfter } from '../utils/dailyLogbookGenerator';
 import { collectPreservedRows, preservedRowsInPeriod } from '../utils/logbookPreservation';
 import { DailyLogSheetTemplate, ScienceHeaderLeft, ScienceHeaderRight, CornerLeaves } from './DailyLogSheetTemplate';
 import { TealLogSheetTemplate } from './TealLogSheetTemplate';
-import { DAILY_LOGBOOK_PROGRAM_1AM } from '../data/dailyLogbookProgram1am';
-import { DAILY_LOGBOOK_PROGRAM_2AM } from '../data/dailyLogbookProgram2am';
-import { DAILY_LOGBOOK_PROGRAM_3AM } from '../data/dailyLogbookProgram3am';
-import { DAILY_LOGBOOK_PROGRAM_4AM } from '../data/dailyLogbookProgram4am';
+import { DAILY_LOGBOOK_PROGRAM_1AM } from '../data/logbook/dailyLogbookProgram1am';
+import { DAILY_LOGBOOK_PROGRAM_2AM } from '../data/logbook/dailyLogbookProgram2am';
+import { DAILY_LOGBOOK_PROGRAM_3AM } from '../data/logbook/dailyLogbookProgram3am';
+import { DAILY_LOGBOOK_PROGRAM_4AM } from '../data/logbook/dailyLogbookProgram4am';
 
 interface DailyLogbookProps {
   selectedLevel?: '1am' | '2am' | '3am' | '4am';
@@ -1043,6 +1044,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
   const [isElementsModalOpen, setIsElementsModalOpen] = useState<boolean>(false);
   const [modalFilterLevel, setModalFilterLevel] = useState<string>('assigned');
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState<boolean>(false);
+  const [showBooklet, setShowBooklet] = useState<boolean>(false);
   const [previewMode, setPreviewMode] = useState<"all" | "single">("all");
   const [previewZoom, setPreviewZoom] = useState<number>(85);
   const [showEmptyWarning, setShowEmptyWarning] = useState<boolean>(false);
@@ -3903,6 +3905,15 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       )}
 
       {/* Full-Screen Print & Preview Modal */}
+      {showBooklet && (
+        <LogbookPrintBook
+          config={config}
+          gridRows={gridRows}
+          entries={rows}
+          onClose={() => setShowBooklet(false)}
+        />
+      )}
+
       {isPreviewModalOpen && (
         <div className={`fixed inset-0 z-[100] flex flex-col bg-[#1f2937] print-preview-root print-orientation-${orientation}`} dir="rtl">
           {/* Preview Modal Header */}
@@ -3937,6 +3948,15 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
               >
                 <FileText className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">تصدير</span> Word
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowBooklet(true)}
+                className="inline-flex items-center gap-1.5 bg-[#006233] hover:bg-[#0f7f74] text-white px-2.5 sm:px-3 py-1.5 rounded-full text-[11px] font-bold transition shadow-sm cursor-pointer"
+                title="كتاب الدفتر: غلاف، معلومات واستعمال الزمن، إحصائيات، وأسبوع لكل صفحة أو صفحتين — بالختم بحجمه الطبيعي"
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+                <span>كتاب الدفتر</span>
               </button>
               <button
                 type="button"

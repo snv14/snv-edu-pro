@@ -20,7 +20,7 @@ import {
   HelpCircle,
 } from 'lucide-react';
 import { LessonMemo, MemoConfig } from './types';
-import { LEVELS } from './data/lessonsData';
+import { LEVELS } from './data/memos/lessonsData';
 import { SidebarControls } from './components/SidebarControls';
 import { MemoSheet } from './components/MemoSheet';
 import { PreviewModal } from './components/PreviewModal';
@@ -30,7 +30,7 @@ import { ActionMenu } from './components/ActionMenu';
 import { PlatformInfoModal } from './components/PlatformInfoModal';
 import { UserProfile } from './components/UserProfile';
 import { FirebaseDataSync } from './components/FirebaseDataSync';
-import { loadCurriculumDatabase } from './data/curriculumDb';
+import { loadCurriculumDatabase } from './data/memos/curriculumDb';
 import designerPortraitImg from './assets/images/designer_portrait_1790463396414.jpg';
 import { getDesignerPhoto } from './utils/designerPhoto';
 
