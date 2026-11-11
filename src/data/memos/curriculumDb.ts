@@ -3,6 +3,7 @@ import { LESSONS_1AM } from './lessons1am';
 import { LESSONS_2AM } from './lessons2am';
 import { LESSONS_3AM } from './lessons3am';
 import { LESSONS_4AM } from './lessons4am';
+import { mergeOfficialDiagrams1am } from './diagrams1amAttach';
 
 export const CURRICULUM_DB_STORAGE_KEY = 'mizaniyati_curriculum_db_v2027_1am_exact_v1';
 
@@ -21,7 +22,9 @@ export const loadCurriculumDatabase = (): LessonMemo[] => {
     if (oneAmUnits.length !== 22 || !oneAmUnits.some(u => u.sourceLearningUnitId === 'lu_1am_1_1_1')) {
       return resetCurriculumDatabase();
     }
-    return parsed as LessonMemo[];
+    // النسخ المحفوظة قبل إلحاق رسومات س1 تُثرى عند التحميل: تُضاف الرسومات
+    // الرسمية للأنشطة المرتبطة بها مع الحفاظ الكامل على تعديلات الأستاذ.
+    return mergeOfficialDiagrams1am(parsed as LessonMemo[]);
   } catch { return getOfficialCurriculumDatabase(); }
 };
 
@@ -52,5 +55,5 @@ export const importCurriculumDatabase = async (file: File): Promise<LessonMemo[]
   const parsed = JSON.parse(await file.text());
   const lessons = Array.isArray(parsed) ? parsed : parsed?.lessons;
   if (!Array.isArray(lessons)) throw new Error('Invalid curriculum database file');
-  return lessons as LessonMemo[];
+  return mergeOfficialDiagrams1am(lessons as LessonMemo[]);
 };

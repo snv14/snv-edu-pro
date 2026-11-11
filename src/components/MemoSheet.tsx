@@ -1,6 +1,7 @@
 import React from 'react';
 import { LessonMemo, MemoConfig } from '../types';
 import { TeacherOfficialStamp } from './TeacherOfficialStamp';
+import { memoDiagramList } from '../utils/memoDiagrams';
 
 interface MemoSheetProps {
   lesson: LessonMemo | null;
@@ -107,6 +108,12 @@ export const MemoSheet: React.FC<MemoSheetProps> = ({
 
   const isMergedFormat = config.memoFormat === 'merged_teacher';
   const theme = THEMES[config.level || '2am'] || THEMES['2am'];
+
+  /**
+   * رسومات المذكرة موحّدة من شكلين: مستوى المذكرة ({title, svg}) ومستوى
+   * النشاط ({diagram_title, diagram_svg}) كما في قاعدة البيانات ومُلحِق س1.
+   */
+  const memoDiagrams = memoDiagramList(lesson);
 
   const situationTextClass = 'text-[13.5px] font-medium text-right leading-relaxed';
   const situationBoxClass = `p-2.5 rounded-lg border transition-all ${theme.boxBg} text-gray-900`;
@@ -573,7 +580,7 @@ export const MemoSheet: React.FC<MemoSheetProps> = ({
       </div>
 
       {/* 5.5. الرسومات والسندات العلمية المرفقة بالمذكرة */}
-      {((lesson.diagrams && lesson.diagrams.length > 0) || lesson.diagramSvg || lesson.diagram) && (
+      {memoDiagrams.length > 0 && (
         <div
           className="memo-diagram-block mt-6 p-4 rounded-xl border border-[#cfe7e2] bg-[#f1faf7]/80 print:border-gray-400 print:bg-white page-break-inside-avoid break-inside-avoid"
           style={{ position: 'relative', top: 'auto', bottom: 'auto', transform: 'none', float: 'none', clear: 'both' }}
@@ -587,21 +594,12 @@ export const MemoSheet: React.FC<MemoSheetProps> = ({
               </span>
             </div>
             <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-white border border-gray-200 text-gray-600 print:hidden">
-              وثائق المذكرة
+              {memoDiagrams.length > 1 ? `${memoDiagrams.length} سندات` : 'وثائق المذكرة'}
             </span>
           </div>
 
           <div className="space-y-4">
-            {(lesson.diagrams && lesson.diagrams.length > 0
-              ? lesson.diagrams
-              : [{
-                  title: lesson.diagramTitle,
-                  svg: typeof lesson.diagram === 'string'
-                    ? lesson.diagram
-                    : (lesson.diagramSvg || lesson.diagram?.svg || ''),
-                  description: lesson.diagramDescription || (typeof lesson.diagram === 'object' ? lesson.diagram?.description : undefined)
-                }]
-            ).map((diagram, index) => (
+            {memoDiagrams.map((diagram, index) => (
               <div
                 key={index}
                 className="memo-diagram-item page-break-inside-avoid break-inside-avoid"
@@ -620,6 +618,16 @@ export const MemoSheet: React.FC<MemoSheetProps> = ({
                 {diagram.description && (
                   <p className="mt-2 text-[12px] text-gray-600 leading-relaxed font-medium text-center">
                     {diagram.description}
+                  </p>
+                )}
+                {(diagram.fidelity || (diagram.sourcePages && diagram.sourcePages.length > 0)) && (
+                  <p className="mt-1.5 text-[10px] text-gray-500 font-medium text-center leading-relaxed">
+                    {diagram.fidelity === 'source-page-reference'
+                      ? 'سند مأخوذ من صفحة المصدر'
+                      : 'رسم تخطيطي معاد بناؤه (ليس نسخة حرفية من صفحة المصدر)'}
+                    {diagram.sourcePages && diagram.sourcePages.length > 0
+                      ? ` — المرجع: مذكرات السنة الأولى متوسط كاملة، ص ${diagram.sourcePages.join('، ')}`
+                      : ''}
                   </p>
                 )}
               </div>

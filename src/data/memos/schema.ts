@@ -62,6 +62,10 @@ export interface DB_Diagram {
   diagram_title: string;
   diagram_svg?: string;
   diagram_image_url?: string;
+  /** توثيق المصدر: صفحات الوثيقة التي يوجد فيها السند الأصلي للرسم. */
+  diagram_source_pages?: number[];
+  /** درجة الأمانة تجاه المصدر: نسخة صفحة المصدر أو رسم معاد بناؤه. */
+  diagram_fidelity?: 'source-page-reference' | 'reconstructed-svg';
 }
 
 export interface DB_Table {

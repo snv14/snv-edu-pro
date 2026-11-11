@@ -1,3 +1,4 @@
+import { memoDiagramList } from './memoDiagrams';
 import {  
   Document, 
   Packer, 
@@ -205,37 +206,29 @@ export const generateDocx = async (lesson: LessonMemo, config: MemoConfig, activ
     transformation: { width: 72, height: 72 }
   });
 
-  const diagramParagraphs = lesson.diagrams && lesson.diagrams.length > 0
-    ? (await Promise.all(
-        lesson.diagrams.map(async (diagram) => [
-          ...(diagram.title ? [createParagraph(diagram.title, true, theme.hex, 22, AlignmentType.CENTER)] : []),
-          new Paragraph({
+  /**
+   * رسومات المذكرة موحّدة من شكلين: مستوى المذكرة ({title, svg}) ومستوى
+   * النشاط ({diagram_title, diagram_svg}) كما في قاعدة البيانات ومُلحِق
+   * رسومات س1، حتى لا يسقط أي سند من ملف Word.
+   */
+  const memoDiagrams = memoDiagramList(lesson);
+  const diagramParagraphs = (await Promise.all(
+    memoDiagrams.map(async (diagram) => [
+      ...(diagram.title ? [createParagraph(diagram.title, true, theme.hex, 22, AlignmentType.CENTER)] : []),
+      ...(diagram.svg
+        ? [new Paragraph({
             alignment: AlignmentType.CENTER,
             children: [new ImageRun({
               type: "png",
-              data: await svgToPngData(diagram.svg || "", 860, 590),
+              data: await svgToPngData(diagram.svg, 860, 590),
               transformation: { width: 430, height: 295 }
             })]
-          }),
-          ...(diagram.description ? [createParagraph(diagram.description, false, "333333", 20)] : []),
-          new Paragraph({ text: "", spacing: { after: 300 } })
-        ])
-      )).flat()
-    : lesson.diagramSvg
-      ? [
-          createParagraph(lesson.diagramTitle || "المخطط", true, theme.hex, 22, AlignmentType.CENTER),
-          new Paragraph({
-            alignment: AlignmentType.CENTER,
-            children: [new ImageRun({
-              type: "png",
-              data: await svgToPngData(lesson.diagramSvg, 860, 590),
-              transformation: { width: 430, height: 295 }
-            })]
-          }),
-          ...(lesson.diagramDescription ? [createParagraph(lesson.diagramDescription, false, "333333", 20)] : []),
-          new Paragraph({ text: "", spacing: { after: 300 } })
-        ]
-      : [];
+          })]
+        : []),
+      ...(diagram.description ? [createParagraph(diagram.description, false, "333333", 20)] : []),
+      new Paragraph({ text: "", spacing: { after: 300 } })
+    ])
+  )).flat();
 
   const doc = new Document({
     styles: {
