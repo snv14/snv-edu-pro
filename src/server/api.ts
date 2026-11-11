@@ -546,6 +546,23 @@ apiApp.get('/api/knowledge/status', async (_req, res) => {
       })),
       coverage: PLATFORM_DATABASE.coverage,
       gaps: PLATFORM_DATABASE.gaps,
+      // طبقة السجل الوزاري: وثائق معروفة المرجع لكن نصها الحرفي لم يُدخَل بعد.
+      registry: {
+        documents: PLATFORM_DATABASE.registry.documents,
+        byFamily: PLATFORM_DATABASE.registry.byFamily,
+        withoutFamily: PLATFORM_DATABASE.registry.withoutFamily,
+        sources: PLATFORM_DATABASE.registry.sources.map((source) => ({
+          id: source.id,
+          kind: source.kind,
+          level: source.level,
+          family: source.family,
+          title: source.title,
+          authority: source.authority,
+          url: source.url,
+          status: source.status,
+          role: source.role,
+        })),
+      },
       // الدفتر اليومي خارج العائلات: له قاعدة خاصة في src/data/logbook/.
       logbookDatabase: 'src/data/logbook/',
     },
