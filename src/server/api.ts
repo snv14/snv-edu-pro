@@ -20,6 +20,18 @@ import {
 import { KNOWLEDGE_FACET_LABELS, KNOWLEDGE_KIND_LABELS, type TeacherKnowledgeDoc } from '../types/knowledge';
 import { getOfficialSourcesManifest, loadOfficialSources } from '../services/knowledgeOfficialSources';
 import { PLATFORM_DATABASE, familyPriorityOf } from '../data/platform';
+import { progressionProgramCoverage } from '../utils/logbookProgramLink';
+import type { LogbookLevel } from '../data/logbook';
+
+/**
+ * اقتران قاعدة الدفتر بجدول التدرج السنوي، مقيساً ومُعلناً.
+ *
+ * الربط بالمطابقة الحرفية بعد التطبيع فقط (src/utils/logbookProgramLink.ts)، فتبقى
+ * نسبة غير المربوط ظاهرة هنا بدل أن تُكتشف بالصدفة في دفتر أستاذ. الأعداد نفسها
+ * مقفلة باختبار في tests/logbookProgramLink.test.ts.
+ */
+const LOGBOOK_PROGRESSION_LINK = (['1am', '2am', '3am', '4am'] as LogbookLevel[])
+  .map(progressionProgramCoverage);
 
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
@@ -565,6 +577,8 @@ apiApp.get('/api/knowledge/status', async (_req, res) => {
       },
       // الدفتر اليومي خارج العائلات: له قاعدة خاصة في src/data/logbook/.
       logbookDatabase: 'src/data/logbook/',
+      // واقترانها بجدول التدرج: كم عنوان مورد وجد وحدته الرسمية، وكم بقي بلا ربط.
+      logbookProgressionLink: LOGBOOK_PROGRESSION_LINK,
     },
     officialSources: {
       count: officialDocs.length,

@@ -11,6 +11,8 @@ import { DAILY_LOGBOOK_PROGRAM_1AM, type DailyLogbookProgramItem } from '../data
 import { DAILY_LOGBOOK_PROGRAM_2AM } from '../data/logbook/dailyLogbookProgram2am';
 import { DAILY_LOGBOOK_PROGRAM_3AM } from '../data/logbook/dailyLogbookProgram3am';
 import { DAILY_LOGBOOK_PROGRAM_4AM } from '../data/logbook/dailyLogbookProgram4am';
+import { resolveProgramFields } from './logbookProgramLink';
+import type { LogbookLevel as ProgramLevel } from '../data/logbook';
 
 /** A merged group row may contain more than one ISO date. */
 export function isLogbookRowOnOrAfter(dateStr: string, startDate: string): boolean {
@@ -172,6 +174,11 @@ export interface PedagogicalStep {
   isPractical?: boolean;
 }
 
+/** مفتاح المستوى في الدفتر («1م») ← مفتاحه في قاعدة البرامج («1am»). */
+const PROGRAM_LEVEL_OF: Record<LogbookLevel, ProgramLevel> = {
+  '1م': '1am', '2م': '2am', '3م': '3am', '4م': '4am',
+};
+
 export const LEVEL_PROGRAMS: Record<LogbookLevel, DailyLogbookProgramItem[]> = {
   '1م': DAILY_LOGBOOK_PROGRAM_1AM,
   '2م': DAILY_LOGBOOK_PROGRAM_2AM,
@@ -255,8 +262,18 @@ export function buildPedagogicalStepsForLevel(
       const isLab = /تحليل|الكشف|تجربة|مخبر|تشريح|ملاحظة مجهرية|فصل|كواشف|هضم كيميائي|البلعمة|مجهر|معاينة/i.test(text);
       const isExam = Boolean(r.isExam || /إ?ختبار|فرض/.test(text));
 
+      // ربط الحصة بقاعدة بيانات الدفتر (التدرج البيداغوجي الرسمي) لاستخراج
+      // «تعلم مورد» والمشكلة والتقويم بنصها الوزاري بدل الاحتياطي العام.
+      // لا يُؤخذ إلا ما تطابق حرفياً بعد التطبيع — انظر logbookProgramLink.ts.
+      const linked = resolveProgramFields(
+        r.mawrid || '',
+        r.maqta || '',
+        PROGRAM_LEVEL_OF[level],
+        text,
+      );
+
       // استخراج المشكلة المطروحة إن وجدت في نص الحصة
-      let moshkila = (r as any).moshkila || '';
+      let moshkila = (r as any).moshkila || linked.moshkila || '';
       if (!moshkila && /المشكلة(?:\s+المطروحة)?\s*:\s*/.test(text)) {
         const m = text.match(/المشكلة(?:\s+المطروحة)?\s*:\s*([^–\-]+?)(?:[–\-]\s*(?:النشاط|المورد)|$)/i);
         if (m) moshkila = m[1].trim();
@@ -284,13 +301,13 @@ export function buildPedagogicalStepsForLevel(
           midan: r.midan || 'علوم الطبيعة والحياة',
           maqta: r.maqta || r.mawrid || 'المقطع التعلمي',
           mawrid: r.mawrid || r.learningUnit || 'المورد التعلمي',
-          ta3alom: r.learningUnit || r.mawrid || 'تعلم المورد',
+          ta3alom: r.learningUnit || linked.ta3alom || r.mawrid || 'تعلم المورد',
           moshkila,
           activityText: text,
           fullContent,
           sessionIndexInActivity: sIdx,
           totalSessionsForActivity: configuredSessions,
-          taqwim: r.taqwim || 'تقويم تكويني ومتابعة الإنجاز',
+          taqwim: r.taqwim || linked.taqwim || 'تقويم تكويني ومتابعة الإنجاز',
           isIntroductory,
           isReview,
           isPractical: isLab,
