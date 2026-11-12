@@ -17,6 +17,17 @@ const M2 = 'المقطع الثاني: توزع الكائنات الحية في
 const M3 = 'المقطع الثالث: التكاثر وإعمار الأوساط';
 const M4 = 'المقطع الرابع: تصنيف الكائنات الحية';
 const M5 = 'المقطع الخامس: المستحاثات';
+
+// تسميات الأسابيع غير المنهجية — مشتقة من محتوى الأسطر نفسها ومن المقاطع
+// المجاورة، حتى لا تبقى خانة الميدان/المقطع فارغة في التدرج (الميدان يُشتق
+// من المقطع في بانية الأسطر أدناه). لا اختراع لمحتوى تعليمي: أسبوع الافتتاح
+// من حصتيه، والعطل من المقطع المحفوظ قبلها وبعدها، والاختبارات والإدماج من
+// مقاطع الفصل الذي تقيسه فعلاً.
+const W_OPEN = 'أسبوع الافتتاح — الصحة المدرسية والتقويم التشخيصي';
+const W_EXAM1 = `اختبارات الفصل الأول — ${M1}`;
+const W_EXAM2 = `اختبارات الفصل الثاني — ${M1} (تتمته: المورد 5) و${M2}`;
+const W_EXAM3 = `اختبارات الفصل الثالث — ${M3}، ${M4}، ${M5}`;
+const W_INTEGRATION = `إدماج كلي — ${M3}، ${M4}، ${M5}`;
 const R11 = 'المورد 1: خصائص الوسط الحي';
 const R12 = 'المورد 2: العلاقات القائمة بين العناصر الحية في الوسط الحي';
 const R13 = 'المورد 3: تأثير العوامل الفيزيوكيميائية على توزع الكائنات الحية ونشاطها';
@@ -38,7 +49,7 @@ const activity = (resource: string, text: string) => `${resource}\n${text}`;
 
 type Input = Omit<OfficialAnnualDistributionRow, 'id' | 'week' | 'dates' | 'midan' | 'sourceYear' | 'referenceMonthlySchedule'>;
 const rows: Input[] = [
-  { month:'سبتمبر', weekInMonth:4, maqta:'', mawrid:'الافتتاح', session1:'استقبال التلاميذ، توجيهات، أسبوع الصحة المدرسية (الدرس الافتتاحي: تأثير الإضرار بالغابة على الصحة؛ ورشات حول النظافة الشخصية، الغذاء المتوازن، مخاطر مشروبات الطاقة على صحة الإنسان، الرياضة وتأثيرها على صحة التلميذ، الصحة النفسية والعقلية، التنمر، مخاطر الإدمان على المخدرات)', session2:'التقويم التشخيصي', isIntroductory:true },
+  { month:'سبتمبر', weekInMonth:4, maqta:W_OPEN, mawrid:'الافتتاح', session1:'استقبال التلاميذ، توجيهات، أسبوع الصحة المدرسية (الدرس الافتتاحي: تأثير الإضرار بالغابة على الصحة؛ ورشات حول النظافة الشخصية، الغذاء المتوازن، مخاطر مشروبات الطاقة على صحة الإنسان، الرياضة وتأثيرها على صحة التلميذ، الصحة النفسية والعقلية، التنمر، مخاطر الإدمان على المخدرات)', session2:'التقويم التشخيصي', isIntroductory:true },
   { month:'أكتوبر', weekInMonth:1, percent:'3.2%', maqta:M1, mawrid:R11, session1:`وضعية الانطلاق الشاملة، ${M1} / وضعية الانطلاق\n${activity(R11, 'النشاط 1: أعاين وسطا حيا قريبا (1)')}`, session2:activity(R11,'النشاط 1: أعاين وسطا حيا قريبا (2)') },
   { month:'أكتوبر', weekInMonth:2, percent:'6.4%', maqta:M1, mawrid:`${R11} / ${R12}`, session1:activity(R11,'النشاط 2: أميز بين أوساط حية مختلفة'), session2:activity(R12,'النشاط 1: أحدد مختلف التفاعلات بين العناصر الحية في الأوساط الحية (1)') },
   { month:'أكتوبر', weekInMonth:3, percent:'9.7%', maqta:M1, mawrid:R12, session1:activity(R12,'النشاط 1: أحدد مختلف التفاعلات بين العناصر الحية في الأوساط الحية (2)'), session2:activity(R12,'النشاط 2: أبين تنظيم العلاقات الغذائية في أوساط حية (1)') },
@@ -47,9 +58,9 @@ const rows: Input[] = [
   { month:'نوفمبر', weekInMonth:2, percent:'19.3%', maqta:M1, mawrid:R13, session1:activity(R13,'النشاط 2: أبرز العلاقة بين تغير الإنارة والحرارة وتوزع الكائنات الحية (2)'), session2:activity(R13,'النشاط 3: أظهر العلاقة بين توزع الكائنات الحية النباتية وخصائص التربة') },
   { month:'نوفمبر', weekInMonth:3, percent:'22.5%', maqta:M1, mawrid:`${R13} / ${R14}`, session1:activity(R13,'النشاط 4: أتعرف على أشكال مقاومة الكائنات الحية للتغيرات الموسمية'), session2:activity(R14,'النشاط 1: أعرف النظام البيئي') },
   { month:'نوفمبر', weekInMonth:4, percent:'25.8%', maqta:M1, mawrid:R14, session1:activity(R14,'النشاط 2: أحدد شروط توازن النظام البيئي'), session2:activity(R14,'النشاط 3: أميز بين الأنواع البيئية') },
-  { month:'ديسمبر', weekInMonth:1, percent:'29%', maqta:'', mawrid:'اختبارات الفصل الأول', session1:'اختبارات الفصل الأول', session2:'اختبارات الفصل الأول', isExam:true },
+  { month:'ديسمبر', weekInMonth:1, percent:'29%', maqta:W_EXAM1, mawrid:'اختبارات الفصل الأول', session1:'اختبارات الفصل الأول', session2:'اختبارات الفصل الأول', isExam:true },
   { month:'ديسمبر', weekInMonth:2, percent:'32.2%', maqta:M1, mawrid:R14, session1:'تصحيح الاختبار الأول', session2:activity(R14,'النشاط 4: أنجز وسطا بيئيا'), isExam:false },
-  ...[3,4].map(weekInMonth => ({ month:'ديسمبر', weekInMonth, maqta:'', mawrid:'عطلة الشتاء', session1:'عطلة الشتاء', session2:'عطلة الشتاء', isHoliday:true, holidayLabel:'عطلة الشتاء: من الخميس 17 ديسمبر 2026 مساء إلى الأحد 03 جانفي 2027 صباحا' })),
+  ...[3,4].map(weekInMonth => ({ month:'ديسمبر', weekInMonth, maqta:M1, mawrid:'عطلة الشتاء', session1:'عطلة الشتاء', session2:'عطلة الشتاء', isHoliday:true, holidayLabel:'عطلة الشتاء: من الخميس 17 ديسمبر 2026 مساء إلى الأحد 03 جانفي 2027 صباحا' })),
   { month:'جانفي', weekInMonth:1, percent:'35.4%', maqta:M1, mawrid:R15, session1:activity(R15,'النشاط 1: أعاين بعض الآثار الهدامة لنشاطات الإنسان على الأنظمة البيئية (1)'), session2:activity(R15,'النشاط 1: أعاين بعض الآثار الهدامة لنشاطات الإنسان على الأنظمة البيئية (2)') },
   { month:'جانفي', weekInMonth:2, percent:'38.6%', maqta:M1, mawrid:R15, session1:activity(R15,'النشاط 2: أبين التدخل الإيجابي للإنسان للحفاظ على التوازن البيئي أو لاستعادته (1)'), session2:activity(R15,'النشاط 2: أبين التدخل الإيجابي للإنسان للحفاظ على التوازن البيئي أو لاستعادته (2)') },
   { month:'جانفي', weekInMonth:3, percent:'41.9%', maqta:`${M1} / ${M2}`, mawrid:R21, session1:evaluation, session2:`${M2} / وضعية الانطلاق\n${activity(R21,'النشاط 1: أظهر التحورات البنيوية تحت الترابية')}` },
@@ -58,9 +69,9 @@ const rows: Input[] = [
   { month:'فيفري', weekInMonth:2, percent:'51.5%', maqta:M2, mawrid:R23, session1:activity(R23,'النشاط الأول: أحلل عواقب صب المياه القذرة في الوديان'), session2:activity(R23,'النشاط الثاني: أبرر الإجراءات المتخذة لضمان بقاء نوع حيواني (التونة الحمراء)') },
   { month:'فيفري', weekInMonth:3, percent:'54.7%', maqta:M2, mawrid:R24, session1:activity(R24,'النشاط 1: أبين العلاقة بين أنماط تنقل الحيوانات والأوساط التي تعيش فيها'), session2:activity(R24,'النشاط 2: أحلل بعض أنماط التنقل') },
   { month:'فيفري', weekInMonth:4, percent:'58%', maqta:`${M2} / ${M3}`, mawrid:R31, session1:evaluation, session2:`${M3} / وضعية الانطلاق\n${activity(R31,'النشاط 1: أعرف استراتيجيات التكاثر الجنسي عند الحيوانات')}` },
-  { month:'مارس', weekInMonth:1, percent:'61.2%', maqta:'', mawrid:'اختبارات الفصل الثاني', session1:'اختبارات الفصل الثاني', session2:'اختبارات الفصل الثاني', isExam:true },
+  { month:'مارس', weekInMonth:1, percent:'61.2%', maqta:W_EXAM2, mawrid:'اختبارات الفصل الثاني', session1:'اختبارات الفصل الثاني', session2:'اختبارات الفصل الثاني', isExam:true },
   { month:'مارس', weekInMonth:2, percent:'64.4%', maqta:M3, mawrid:R31, session1:'تصحيح الاختبار الثاني', session2:activity(R31,'النشاط 2: أميز تطور الجنين حسب نمط الإلقاح (1)'), isExam:false },
-  ...[3,4].map(weekInMonth => ({ month:'مارس', weekInMonth, maqta:'', mawrid:'عطلة الربيع', session1:'عطلة الربيع', session2:'عطلة الربيع', isHoliday:true, holidayLabel:'عطلة الربيع: من الخميس 18 مارس 2027 مساء إلى الأحد 04 أفريل 2027 صباحا' })),
+  ...[3,4].map(weekInMonth => ({ month:'مارس', weekInMonth, maqta:M3, mawrid:'عطلة الربيع', session1:'عطلة الربيع', session2:'عطلة الربيع', isHoliday:true, holidayLabel:'عطلة الربيع: من الخميس 18 مارس 2027 مساء إلى الأحد 04 أفريل 2027 صباحا' })),
   { month:'أفريل', weekInMonth:1, percent:'67.6%', maqta:M3, mawrid:R31, session1:activity(R31,'النشاط 2: أميز تطور الجنين حسب نمط الإلقاح (2)'), session2:activity(R31,'النشاط 3: أضع علاقة بين استراتيجية التكاثر وأشكال غزو الحيوانات للأوساط') },
   { month:'أفريل', weekInMonth:2, percent:'70.8%', maqta:M3, mawrid:R32, session1:activity(R32,'النشاط 1: أحدد مميزات إعمار وغزو الأوساط من طرف النباتات بتدخل نواتج التكاثر'), session2:activity(R32,'النشاط 2: أظهر إمكانية إعمار الأوساط دون تدخل التكاثر الجنسي') },
   { month:'أفريل', weekInMonth:3, percent:'74%', maqta:M3, mawrid:R33, session1:activity(R33,'النشاط 1: أعلل ضرورة تنظيم فترات الصيد'), session2:activity(R33,'النشاط 2: أتعرف على بعض ممارسات الإنسان المرتبطة بتكاثر الحيوانات') },
@@ -70,8 +81,8 @@ const rows: Input[] = [
   { month:'ماي', weekInMonth:3, percent:'86.9%', maqta:`${M4} / ${M5}`, mawrid:R51, session1:evaluation, session2:`${M5} / وضعية الانطلاق\n${activity(R51,'النشاط 1: أتعرف على المستحاثة')}` },
   { month:'ماي', weekInMonth:4, percent:'90.2%', maqta:M5, mawrid:`${R51} / ${R52}`, session1:activity(R51,'النشاط 2: أظهر شروط الاستحاثة'), session2:activity(R52,'النشاط 1: أبرز العلاقة بين المستحاثة ونوع الوسط قبل الاستحاثة') },
   { month:'جوان', weekInMonth:1, percent:'93.4%', maqta:M5, mawrid:R52, session1:activity(R52,'النشاط 2: أحافظ على بيئتي'), session2:evaluation },
-  { month:'جوان', weekInMonth:2, percent:'96.6%', maqta:'', mawrid:'إدماج كلي', session1:'إدماج كلي / مناقشة وضعية الانطلاق الشاملة', session2:'إدماج كلي / مناقشة وضعية الانطلاق الشاملة' },
-  { month:'جوان', weekInMonth:3, percent:'100%', maqta:'', mawrid:'اختبارات الفصل الثالث', session1:'اختبارات الفصل الثالث', session2:'اختبارات الفصل الثالث', isExam:true },
+  { month:'جوان', weekInMonth:2, percent:'96.6%', maqta:W_INTEGRATION, mawrid:'إدماج كلي', session1:'إدماج كلي / مناقشة وضعية الانطلاق الشاملة', session2:'إدماج كلي / مناقشة وضعية الانطلاق الشاملة' },
+  { month:'جوان', weekInMonth:3, percent:'100%', maqta:W_EXAM3, mawrid:'اختبارات الفصل الثالث', session1:'اختبارات الفصل الثالث', session2:'اختبارات الفصل الثالث', isExam:true },
 ];
 
 // ── الترتيب الزمني: أيام الأحد البداية لكل أسبوع مطبوع في الورقة الرسمية ──
