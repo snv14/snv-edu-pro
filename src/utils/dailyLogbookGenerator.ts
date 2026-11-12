@@ -7,10 +7,7 @@ import {
   type OfficialAnnualDistributionRow,
 } from '../data/curriculum/officialAnnualDistributionData';
 import { ANNUAL_STORAGE_KEY } from './annualDistributionDateUtils';
-import { DAILY_LOGBOOK_PROGRAM_1AM, type DailyLogbookProgramItem } from '../data/logbook/dailyLogbookProgram1am';
-import { DAILY_LOGBOOK_PROGRAM_2AM } from '../data/logbook/dailyLogbookProgram2am';
-import { DAILY_LOGBOOK_PROGRAM_3AM } from '../data/logbook/dailyLogbookProgram3am';
-import { DAILY_LOGBOOK_PROGRAM_4AM } from '../data/logbook/dailyLogbookProgram4am';
+import { LOGBOOK_PROGRAMS, type DailyLogbookProgramItem } from '../data/logbook';
 
 /** A merged group row may contain more than one ISO date. */
 export function isLogbookRowOnOrAfter(dateStr: string, startDate: string): boolean {
@@ -173,10 +170,10 @@ export interface PedagogicalStep {
 }
 
 export const LEVEL_PROGRAMS: Record<LogbookLevel, DailyLogbookProgramItem[]> = {
-  '1م': DAILY_LOGBOOK_PROGRAM_1AM,
-  '2م': DAILY_LOGBOOK_PROGRAM_2AM,
-  '3م': DAILY_LOGBOOK_PROGRAM_3AM,
-  '4م': DAILY_LOGBOOK_PROGRAM_4AM,
+  '1م': LOGBOOK_PROGRAMS['1am'],
+  '2م': LOGBOOK_PROGRAMS['2am'],
+  '3م': LOGBOOK_PROGRAMS['3am'],
+  '4م': LOGBOOK_PROGRAMS['4am'],
 };
 
 /**
@@ -198,121 +195,281 @@ export function getAnnualDistributionRowsForLevel(level: LogbookLevel): Official
   return OFFICIAL_4AM_DISTRIBUTION;
 }
 
+/* ------------------------------------------------------------------ *
+ * مطابقة التدرج السنوي مع قاعدة الدفتر
+ * ------------------------------------------------------------------ */
+
+const LEVEL_DB_KEY: Record<LogbookLevel, '1am' | '2am' | '3am' | '4am'> = {
+  '1م': '1am',
+  '2م': '2am',
+  '3م': '3am',
+  '4م': '4am',
+};
+
+/** توحيد الحروف العربية لتمكين مطابقة نصوص التدرج السنوي مع نصوص قاعدة الدفتر. */
+function normalizeArabicText(input: string): string {
+  return String(input || '')
+    .replace(/[\u064B-\u0652\u0670\u0640]/g, '')
+    .replace(/[إأآٱ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ة/g, 'ه')
+    .replace(/[^\u0621-\u064A0-9 ]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+const MATCH_STOPWORDS = new Set(
+  normalizeArabicText(
+    'المورد التعلمي تعلم مورد النشاط المشكلة المطروحة المقطع الأول الثاني الثالث الرابع الخامس السادس السابع الثامن ' +
+    '01 02 03 04 05 06 07 08 09 من في على عند مع الى عن و ثم التي الذي هذا هذه كذلك معين'
+  ).split(' ').filter(Boolean)
+);
+
+function keyTokens(text: string): Set<string> {
+  const tokens = new Set<string>();
+  for (const word of normalizeArabicText(text).split(' ')) {
+    if (word.length > 2 && !MATCH_STOPWORDS.has(word)) tokens.add(word);
+  }
+  return tokens;
+}
+
+/** نسبة الكلمات الدالة المشتركة بين نصين (0 = لا تشابه، 1 = تطابق تام). */
+export function pedagogicalTextSimilarity(a: string, b: string): number {
+  const left = keyTokens(a);
+  const right = keyTokens(b);
+  if (!left.size || !right.size) return 0;
+  let shared = 0;
+  for (const word of left) if (right.has(word)) shared++;
+  return shared / Math.min(left.size, right.size);
+}
+
+/** حصص لا تُسند إلى مورد تعلمي: التعارف، التشخيص، المعالجة، الفروض، الاختبارات، المراجعة. */
+const CHECKPOINT_PATTERN = /(تعارف|استقبال|توجيهات|تشخيصي|معالجة بيداغوجية|استدراك|إدماج|ادماج|فرض|اختبار|تصحيح|مراجعة|حصيلة|الوضعية الانطلاقية)/;
+
+function isCheckpointRow(row: OfficialAnnualDistributionRow): boolean {
+  if (row.isExam || row.isRemediation || row.isIntroductory) return true;
+  const hay = [row.maqta, row.mawrid, row.session1, row.session2].filter(Boolean).join(' ');
+  return CHECKPOINT_PATTERN.test(hay);
+}
+
+/** أسطر العطل لا تُولّد حصصاً: الرزنامة وجدول التوقيت هما من يحجب أيام العطلة. */
+function isHolidayRow(row: OfficialAnnualDistributionRow): boolean {
+  if (row.isHoliday) return true;
+  const hay = [row.maqta, row.mawrid, row.session1, row.session2].filter(Boolean).join(' ');
+  return /عطلة/.test(hay);
+}
+
+/** أدنى درجة تشابه مقبولة لاعتبار صف التدرج السنوي مسنداً إلى وحدة من قاعدة الدفتر. */
+const MIN_UNIT_MATCH = 0.18;
+
+/** أكبر عدد موارد يُفحص انطلاقاً من الموضع الحالي (يمنع القفزات ويحفظ تسلسل التدرج). */
+const MATCH_LOOKAHEAD = 8;
+
+/** أفضل مورد مطابق لنص واحد داخل نافذة محدودة انطلاقاً من الموضع الحالي (‎-1 عند غياب تطابق). */
+function bestUnitIndexForText(
+  text: string,
+  units: DailyLogbookProgramItem[],
+  cursor: number,
+  lookahead = MATCH_LOOKAHEAD
+): number {
+  if (!text || !text.trim()) return -1;
+  const from = Math.max(0, cursor);
+  const to = Math.min(units.length - 1, cursor + lookahead);
+  let bestIndex = -1;
+  let bestScore = 0;
+  for (let index = from; index <= to; index++) {
+    const unit = units[index];
+    const unitText = [unit.mawrid, unit.ta3alom, unit.maqta, ...unit.activities].join(' ');
+    const raw = Math.max(
+      pedagogicalTextSimilarity(text, unitText),
+      pedagogicalTextSimilarity(text, [unit.ta3alom, ...unit.activities].join(' '))
+    );
+    const score = index >= cursor ? raw + 0.01 : raw;
+    if (score > bestScore) {
+      bestScore = score;
+      bestIndex = index;
+    }
+  }
+  return bestScore >= MIN_UNIT_MATCH ? bestIndex : -1;
+}
+
 /**
- * بناء التسلسل الفعلي لأنشطة الدفتر اليومي بالربط التام والمباشر مع التدرج السنوي الرسمي:
- * - يحترم بدقة الترتيب الزمني للتدرج (أسبوع بأسبوع، حصة أولى ثم حصة ثانية).
- * - يضمن التطابق الحرفي لعناوين الميادين والمقاطع والموارد والأنشطة والتقويمات.
- * - يوزع النشاط على عدد الحصص المطلوبة له قبل الانتقال إلى النشاط التالي.
+ * إسناد سطر من التدرج السنوي إلى وحدة من قاعدة الدفتر.
+ * - عمود «المقطع» في التدرجات الرسمية يحمل غالباً اسم المورد نفسه، لذا يدخل في المطابقة.
+ * - تُطابق الحصتان كلٌّ على حدة ويُعتمد أبعد مورد داخل نافذة مقبولة، لأن السطر الواحد
+ *   قد يجمع موردين متتاليين (مثل «التغذية المعدنية» و«مقر الامتصاص»)، وهذا يضبط
+ *   موضع المحطة التقويمية التي تليه ولا يسمح لها بالقفز إلى مقطع لاحق.
+ */
+function findProgramUnitIndex(
+  row: OfficialAnnualDistributionRow,
+  units: DailyLogbookProgramItem[],
+  cursor = -1
+): number {
+  const perSession = [
+    bestUnitIndexForText(String(row.session1 || ''), units, cursor),
+    bestUnitIndexForText(String(row.session2 || ''), units, cursor),
+  ].filter((index) => index >= 0);
+  const whole = bestUnitIndexForText(
+    [row.maqta, row.mawrid, row.session1, row.session2].filter(Boolean).join(' '),
+    units,
+    cursor
+  );
+  const candidates = whole >= 0 ? [...perSession, whole] : perSession;
+  return candidates.length ? Math.max(...candidates) : -1;
+}
+
+/**
+ * خلايا التدرج السنوي للسنة الثانية تحمل عدة أسطر في الخلية نفسها:
+ * «المقطع … / وضعية الانطلاق / المورد … / النشاط …». نُبقي سطر النشاط وحده
+ * حتى لا تُطبع عناوين المقطع والمورد داخل محتوى الحصة.
+ */
+function simplifyDistributionText(text: string): string {
+  const raw = String(text || '').trim();
+  const lines = raw.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+  if (lines.length <= 1) return raw;
+  const activityLines = lines.filter((line) => /^(النشاط|تقويم|إرساء|حل|وضعية|المشكلة|أقترح|أنجز)/.test(line));
+  return activityLines.length ? activityLines.join(' ') : lines[lines.length - 1];
+}
+
+/** هل النص مكرر لمضمون نشاط موجود أصلاً في قاعدة الدفتر؟ (تفادي الحصص المكررة) */
+function duplicatesProgramActivity(text: string, units: DailyLogbookProgramItem[]): boolean {
+  const cleaned = simplifyDistributionText(text);
+  if (cleaned.length < 12) return false;
+  return units.some((unit) =>
+    unit.activities.some((activity) => pedagogicalTextSimilarity(cleaned, activity) >= 0.6)
+  );
+}
+
+const LAB_PATTERN = /(تحليل|الكشف|تجربة|مخبر|تشريح|ملاحظة مجهرية|فحص مجهري|فصل مكونات|كواشف|معاينة|نمذجة|استقصاء)/i;
+
+/**
+ * بناء التسلسل الفعلي لحصص الدفتر اليومي اعتماداً على التدرجات البيداغوجية الرسمية
+ * المحفوظة في قاعدة الدفتر (LOGBOOK_PROGRAMS)، وهي المرجع الوحيد لترتيب التعلمات:
+ *
+ * - الترتيب: ميدان -> مقطع -> مورد -> تعلم مورد -> أنشطة، كما ورد في التدرج الرسمي.
+ * - المحتوى: عنوان النشاط ومشكلة الوحدة وتقويم المورد مأخوذة من قاعدة الدفتر.
+ * - التدرج السنوي (التوزيع الوزاري) لا يحدد المحتوى، بل يحدد مواضع المحطات
+ *   التقويمية فقط: التعارف والتقويم التشخيصي في البداية، ثم الفروض والاختبارات
+ *   والمعالجة والتصحيح بعد آخر مورد تم بلوغه في التدرج.
+ * - بذلك تُدرَّس كل وحدات البرنامج بالترتيب الرسمي دون إسقاط أي مقطع.
  */
 export function buildPedagogicalStepsForLevel(
   level: LogbookLevel,
   sessionsPerActivity = 1,
   activitySessionsMap?: Record<string, number>
 ): PedagogicalStep[] {
-  const steps: PedagogicalStep[] = [];
+  const program = LEVEL_PROGRAMS[level];
   const distRows = getAnnualDistributionRowsForLevel(level);
 
-  // استبعاد العطل المدرسية من قائمة الحصص التعلمية الفعلية (العطل تُدار عبر الرزنامة وجدول التوقيت)
-  const activeRows = distRows.filter((r) => {
-    const isHoliday = Boolean(
-      r.isHoliday ||
-      /عطلة/.test(r.session1 || '') ||
-      /عطلة/.test(r.mawrid || '') ||
-      /عطلة/.test(r.maqta || '')
-    );
-    return !isHoliday;
-  });
-
-  for (const r of activeRows) {
-    const weekNum = r.week || 1;
-    const isWeek1 = weekNum === 1 || weekNum === '1';
-
-    const sessions = [
-      { text: r.session1, num: 1 },
-      { text: r.session2, num: 2 },
-    ];
-
-    for (const s of sessions) {
-      if (!s.text || !s.text.trim()) continue;
-      let text = s.text.trim();
-
-      // توحيد مصطلح التعارف البيداغوجي لضمان التطابق مع التسمية الرسمية
-      if (isWeek1 && !/التعارف/.test(text)) {
-        if (/تعارف/.test(text)) {
-          text = text.replace(/تعارف/, 'التعارف');
-        } else if (/استقبال|توجيهات|الافتتاح/.test(text)) {
-          text = `التعارف، ${text}`;
-        }
-      }
-
-      // تصنيف الحصة البيداغوجية
-      const isIntroductory = isWeek1 && (/التعارف|تعارف|استقبال|توجيهات/.test(text) || Boolean(r.isIntroductory));
-      const isReview = Boolean(
-        r.isRemediation ||
-        /معالجة بيداغوجية|إدماج|ادماج|استدراك|حل الوضعية الانطلاقية|تصحيح الاختبارات/.test(text) ||
-        /معالجة|إدماج/.test(r.mawrid || '')
-      );
-      const isLab = /تحليل|الكشف|تجربة|مخبر|تشريح|ملاحظة مجهرية|فصل|كواشف|هضم كيميائي|البلعمة|مجهر|معاينة/i.test(text);
-      const isExam = Boolean(r.isExam || /إ?ختبار|فرض/.test(text));
-
-      // استخراج المشكلة المطروحة إن وجدت في نص الحصة
-      let moshkila = (r as any).moshkila || '';
-      if (!moshkila && /المشكلة(?:\s+المطروحة)?\s*:\s*/.test(text)) {
-        const m = text.match(/المشكلة(?:\s+المطروحة)?\s*:\s*([^–\-]+?)(?:[–\-]\s*(?:النشاط|المورد)|$)/i);
-        if (m) moshkila = m[1].trim();
-      }
-
-      // الحصص الافتتاحية والتقويمية وحصص المعالجة لا تُمدد لعدة حصص متتالية
-      const configuredSessions = (isIntroductory || isReview || isExam)
-        ? 1
-        : Math.max(1, (activitySessionsMap?.[text] || sessionsPerActivity || 1));
-
-      for (let sIdx = 1; sIdx <= configuredSessions; sIdx++) {
-        let fullContent = text;
-        if (configuredSessions > 1) {
-          if (sIdx === 1) {
-            fullContent = `${text} (الحصة 1: الانطلاق والتقصي)`;
-          } else {
-            fullContent = `متابعة ${text} (الحصة ${sIdx}: ${sIdx === configuredSessions ? 'الاستنتاج والتركيب' : 'المتابعة والتقصي'})`;
-          }
-        }
-
-        const sourceId = r.sourceLearningUnitId || r.id || `${level}_official_w${weekNum}_s${s.num}`;
-
-        steps.push({
-          sourceLearningUnitId: sourceId,
-          midan: r.midan || 'علوم الطبيعة والحياة',
-          maqta: r.maqta || r.mawrid || 'المقطع التعلمي',
-          mawrid: r.mawrid || r.learningUnit || 'المورد التعلمي',
-          ta3alom: r.learningUnit || r.mawrid || 'تعلم المورد',
-          moshkila,
-          activityText: text,
-          fullContent,
-          sessionIndexInActivity: sIdx,
-          totalSessionsForActivity: configuredSessions,
-          taqwim: r.taqwim || 'تقويم تكويني ومتابعة الإنجاز',
-          isIntroductory,
-          isReview,
-          isPractical: isLab,
-        });
-      }
+  // 1) استخراج المحطات التقويمية من التدرج السنوي وتحديد موضعها في تدرج البرنامج.
+  type Checkpoint = { row: OfficialAnnualDistributionRow; afterUnit: number };
+  const checkpoints: Checkpoint[] = [];
+  let matchedCursor = -1;
+  for (const row of distRows) {
+    if (isHolidayRow(row)) continue;
+    if (isCheckpointRow(row)) {
+      checkpoints.push({ row, afterUnit: matchedCursor });
+      continue;
     }
+    const unitIndex = findProgramUnitIndex(row, program, matchedCursor);
+    if (unitIndex >= 0) {
+      matchedCursor = Math.max(matchedCursor, unitIndex);
+      continue;
+    }
+    // صف تعلمي لم يُسند إلى وحدة: يُهمل إن كان تكراراً لنشاط موجود في القاعدة،
+    // وإلا يبقى حصة قائمة بذاتها في موضعه من التدرج حتى لا يضيع أي محتوى رسمي.
+    if (duplicatesProgramActivity([row.session1, row.session2].filter(Boolean).join('\n'), program)) continue;
+    checkpoints.push({ row, afterUnit: matchedCursor });
   }
 
-  // محطة ختامية احتياطية للإدماج والتقويم والمعالجة البيداغوجية لنهاية السنة
+  const steps: PedagogicalStep[] = [];
+
+  const pushCheckpoint = ({ row }: Checkpoint) => {
+    const sessions = [
+      { text: row.session1, num: 1 },
+      { text: row.session2, num: 2 },
+    ];
+    for (const session of sessions) {
+      let text = simplifyDistributionText(session.text || '');
+      if (!text) continue;
+      // توحيد مصطلح التعارف البيداغوجي لضمان التطابق مع التسمية الرسمية.
+      if (!text.includes('التعارف') && text.includes('تعارف')) {
+        text = text.replace('تعارف', 'التعارف');
+      }
+      const isIntroductory = /(تعارف|استقبال|توجيهات|تشخيصي)/.test(text) || Boolean(row.isIntroductory);
+      const isReview = Boolean(row.isRemediation) ||
+        /(معالجة|استدراك|إدماج|ادماج|تصحيح|مراجعة|فرض|اختبار|حصيلة|الوضعية الانطلاقية)/.test(text);
+      const firstLine = (value?: string) => String(value || '').split(/\n+/)[0].trim();
+      const rowMaqta = firstLine(row.maqta);
+      const rowMawrid = firstLine(row.mawrid);
+      steps.push({
+        sourceLearningUnitId: row.sourceLearningUnitId || row.id || `${level}_checkpoint_${steps.length + 1}`,
+        midan: firstLine(row.midan) || 'التقويم والمتابعة',
+        maqta: rowMaqta || rowMawrid || 'محطة تقويمية',
+        mawrid: rowMawrid || 'محطة تقويمية',
+        ta3alom: firstLine(row.learningUnit) || rowMawrid || 'محطة تقويمية',
+        moshkila: (row as { moshkila?: string }).moshkila || '',
+        activityText: text,
+        fullContent: text,
+        sessionIndexInActivity: session.num,
+        totalSessionsForActivity: 1,
+        taqwim: row.taqwim || 'تقويم تكويني ومتابعة الإنجاز',
+        isIntroductory,
+        isReview,
+        isPractical: false,
+      });
+    }
+  };
+
+  // 2) إدراج وحدات البرنامج بترتيبها الرسمي، مع حقن المحطات في مواضعها.
+  program.forEach((unit, unitIndex) => {
+    while (checkpoints.length && checkpoints[0].afterUnit < unitIndex) {
+      pushCheckpoint(checkpoints.shift() as Checkpoint);
+    }
+    unit.activities.forEach((activity) => {
+      const configuredSessions = Math.max(1, activitySessionsMap?.[activity] || sessionsPerActivity || 1);
+      for (let sessionIndex = 1; sessionIndex <= configuredSessions; sessionIndex++) {
+        let fullContent = activity;
+        if (configuredSessions > 1) {
+          fullContent = sessionIndex === 1
+            ? `${activity} (الحصة 1: الانطلاق والتقصي)`
+            : `متابعة ${activity} (الحصة ${sessionIndex}: ${sessionIndex === configuredSessions ? 'الاستنتاج والتركيب' : 'المتابعة والتقصي'})`;
+        }
+        steps.push({
+          sourceLearningUnitId: unit.sourceLearningUnitId,
+          midan: unit.midan,
+          maqta: unit.maqta,
+          mawrid: unit.mawrid,
+          ta3alom: unit.ta3alom,
+          moshkila: unit.moshkila,
+          activityText: activity,
+          fullContent,
+          sessionIndexInActivity: sessionIndex,
+          totalSessionsForActivity: configuredSessions,
+          taqwim: unit.taqwim || 'تقويم تكويني ومتابعة الإنجاز',
+          isPractical: LAB_PATTERN.test(activity),
+        });
+      }
+    });
+  });
+  while (checkpoints.length) {
+    pushCheckpoint(checkpoints.shift() as Checkpoint);
+  }
+
+  // 3) محطة ختامية احتياطية للإدماج والتقويم والمعالجة البيداغوجية لنهاية السنة.
   const finalReview = [
     'تمارين إدماجية ومعالجة التعثرات البيداغوجية الشاملة حول الكفاءات الختامية للمستوى',
     'تقويم المكتسبات وحل الوضعيات الإدماجية التقييمية وحصيلة التعلمات السنوية',
   ];
-  finalReview.forEach((act, actIdx) => {
+  finalReview.forEach((activity, index) => {
     steps.push({
-      sourceLearningUnitId: `official_review_${level}_${actIdx + 1}`,
+      sourceLearningUnitId: `official_review_${level}_${index + 1}`,
       midan: 'الإدماج والتقويم',
       maqta: 'مراجعة التعلمات السنوية',
       mawrid: 'تقويم وإدماج الموارد الشاملة',
       ta3alom: 'تثبيت المكتسبات ومعالجة الصعوبات المسجلة أثناء التعلمات.',
-      activityText: act,
-      fullContent: act,
+      activityText: activity,
+      fullContent: activity,
       sessionIndexInActivity: 1,
       totalSessionsForActivity: 1,
       taqwim: 'تقويم تشخيصي وتكويني لمعرفة مدى التحكم في التعلمات واستدراك الصعوبات.',

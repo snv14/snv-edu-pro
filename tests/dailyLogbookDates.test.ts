@@ -45,7 +45,7 @@ test('late starts continue the projected curriculum rather than repeating school
   const expected = full.find(row => row.dateStr === '2026-09-23');
   assert.equal(later[0].sourceLearningUnitId, expected?.sourceLearningUnitId);
   assert.equal(later[0].content, expected?.content);
-  assert.equal(later[0].lessonType, 'curriculum');
+  assert.equal(later[0].lessonType, expected?.lessonType);
 });
 
 test('activities are assigned in date order, not group-first order', () => {
@@ -78,7 +78,10 @@ test('group crossing display start retains its assigned activity', () => {
 test('exams pause curriculum progression and third session is labelled correctly', async () => {
   const { buildPedagogicalStepsForLevel } = await import('../src/utils/dailyLogbookGenerator');
   const steps = buildPedagogicalStepsForLevel('1م', 3);
-  assert.match(steps[4].fullContent, /الحصة 3/);
+  // الحصص التمهيدية والمحطات التقويمية لا تُمدد؛ التمديد خاص بأنشطة التعلم.
+  const firstActivity = steps.findIndex((step) => !step.isIntroductory && !step.isReview);
+  assert.ok(firstActivity >= 0);
+  assert.match(steps[firstActivity + 2].fullContent, /الحصة 3/);
   const rows = generateLogbookEntries({ startDate: '2026-10-04', period: 'أسبوع', gridRows: grid,
     holidays: [{ startDate: '2026-10-05', label: 'فرض', type: 'test' }] });
   assert.equal(rows[1].lessonType, 'assessment');
@@ -110,52 +113,59 @@ test('mergeConsecutiveGroupEntries and splitMergedGroupEntries work symmetricall
   assert.equal(split[1].section, '1م1 (فوج 2)');
 });
 
-test('daily logbook steps strictly respect the official annual distribution chronological sequence for all 4 levels', async () => {
-  const { buildPedagogicalStepsForLevel } = await import('../src/utils/dailyLogbookGenerator');
-  const {
-    OFFICIAL_1AM_DISTRIBUTION,
-    OFFICIAL_2AM_DISTRIBUTION,
-    OFFICIAL_3AM_DISTRIBUTION,
-    OFFICIAL_4AM_DISTRIBUTION,
-  } = await import('../src/data/curriculum/officialAnnualDistributionData');
+test('logbook sessions follow the official pedagogical progression stored in the logbook database', async () => {
+  const { buildPedagogicalStepsForLevel, LEVEL_PROGRAMS } = await import('../src/utils/dailyLogbookGenerator');
 
-  // Level 1AM
+  const levels = [
+    ['1م', '1am'],
+    ['2م', '2am'],
+    ['3م', '3am'],
+    ['4م', '4am'],
+  ] as const;
+
+  for (const [arabic, key] of levels) {
+    const steps = buildPedagogicalStepsForLevel(arabic, 1);
+    const program = LEVEL_PROGRAMS[arabic];
+    assert.equal(program.length, (await import('../src/data/logbook')).LOGBOOK_PROGRAMS[key].length);
+
+    const order = new Map(program.map((unit, index) => [unit.sourceLearningUnitId, index]));
+
+    // 1) لا يُسقَط أي مورد من قاعدة الدفتر: كل الوحدات لها حصة واحدة على الأقل.
+    const covered = new Set(
+      steps.filter((step) => order.has(step.sourceLearningUnitId)).map((step) => step.sourceLearningUnitId)
+    );
+    assert.equal(covered.size, program.length, `${arabic}: كل موارد التدرج ممثلة في الحصص`);
+
+    // 2) الترتيب تصاعدي صارم على ترتيب التدرج الرسمي، بلا رجوع إلى مقطع سابق.
+    let lastIndex = -1;
+    for (const step of steps) {
+      const index = order.get(step.sourceLearningUnitId);
+      if (index === undefined) continue;
+      assert.ok(index >= lastIndex, `${arabic}: تراجع في الترتيب عند «${step.activityText}»`);
+      lastIndex = index;
+    }
+
+    // 3) الحصة الأولى تمهيدية، وأول حصة تعليمية هي أول نشاط في أول مورد.
+    assert.ok(steps[0].isIntroductory, `${arabic}: الحصة الأولى تمهيدية`);
+    const firstCurricular = steps.find((step) => !step.isIntroductory && !step.isReview);
+    assert.equal(firstCurricular?.sourceLearningUnitId, program[0].sourceLearningUnitId);
+    assert.equal(firstCurricular?.activityText, program[0].activities[0]);
+
+    // 4) المشكلة والتقويم والميدان والمقطع تأتي من قاعدة الدفتر نفسها.
+    const firstStep = steps.find((step) => step.sourceLearningUnitId === program[0].sourceLearningUnitId);
+    assert.equal(firstStep?.taqwim, program[0].taqwim);
+    assert.equal(firstStep?.moshkila, program[0].moshkila);
+    assert.equal(firstStep?.maqta, program[0].maqta);
+    assert.equal(firstStep?.midan, program[0].midan);
+  }
+
+  // المحطات التقويمية تُحفظ في مواضعها: الفرض الأول للسنة الأولى بعد مورد «مقر الامتصاص»
+  // وقبل «التركيب الضوئي»، كما في التدرج السنوي الوزاري.
   const steps1am = buildPedagogicalStepsForLevel('1م', 1);
-  assert.match(steps1am[0].fullContent, /التعارف/);
-  assert.match(steps1am[1].fullContent, /تقويم تشخيصي/);
-  assert.equal(steps1am[2].fullContent, OFFICIAL_1AM_DISTRIBUTION[1].session1);
-  assert.equal(steps1am[3].fullContent, OFFICIAL_1AM_DISTRIBUTION[1].session2);
-  assert.equal(steps1am[4].fullContent, OFFICIAL_1AM_DISTRIBUTION[2].session1);
-  assert.equal(steps1am[6].fullContent, OFFICIAL_1AM_DISTRIBUTION[3].session1);
-  assert.match(steps1am[6].fullContent, /مصدر الأغذية/);
-
-  // Level 2AM — the official 2026-2027 sheet opens with «استقبال التلاميذ…» (not «تعارف»),
-  // and its week-1 merged cell is split: session1 = الافتتاح، session2 = التقويم التشخيصي.
-  const steps2am = buildPedagogicalStepsForLevel('2م', 1);
-  assert.match(steps2am[0].fullContent, /استقبال التلاميذ/);
-  assert.match(steps2am[1].fullContent, /التقويم التشخيصي/);
-  assert.equal(steps2am[2].fullContent, OFFICIAL_2AM_DISTRIBUTION[1].session1); // W2s1
-  assert.match(steps2am[2].fullContent, /أعاين وسطا حيا قريبا/);
-  assert.equal(steps2am[3].fullContent, OFFICIAL_2AM_DISTRIBUTION[1].session2); // W2s2
-  assert.match(steps2am[3].fullContent, /أعاين وسطا حيا قريبا \(2\)/);
-  assert.equal(steps2am[4].fullContent, OFFICIAL_2AM_DISTRIBUTION[2].session1); // W3s1
-  assert.match(steps2am[4].fullContent, /أميز بين أوساط حية مختلفة/);
-
-  // Level 3AM
-  const steps3am = buildPedagogicalStepsForLevel('3م', 1);
-  assert.match(steps3am[0].fullContent, /التعارف/);
-  assert.equal(steps3am[2].fullContent, OFFICIAL_3AM_DISTRIBUTION[1].session1);
-  assert.match(steps3am[2].fullContent, /أصف آثار الزلزال/);
-  assert.equal(steps3am[3].fullContent, OFFICIAL_3AM_DISTRIBUTION[1].session2);
-  assert.match(steps3am[3].fullContent, /خصائص الزلازل/);
-
-  // Level 4AM
-  const steps4am = buildPedagogicalStepsForLevel('4م', 1);
-  assert.match(steps4am[0].fullContent, /التعارف/);
-  assert.equal(steps4am[2].fullContent, OFFICIAL_4AM_DISTRIBUTION[1].session1);
-  assert.match(steps4am[2].fullContent, /التحولات التي تطرأ على إحدى مكونات الخبز/);
-  assert.equal(steps4am[3].fullContent, OFFICIAL_4AM_DISTRIBUTION[1].session2);
-  assert.match(steps4am[3].fullContent, /أنبوب|المعدة/);
+  const absorbing = steps1am.findIndex((step) => /مقر الامتصاص/.test(step.ta3alom));
+  const photosynthesis = steps1am.findIndex((step) => /التركيب الضوئي/.test(step.ta3alom));
+  const firstTest = steps1am.findIndex((step) => /الفرض المحروس الأول/.test(step.activityText));
+  assert.ok(absorbing >= 0 && photosynthesis > absorbing && firstTest > absorbing && firstTest < photosynthesis);
 });
 
 test('multi-level timetable progresses through the respective annual distributions concurrently', () => {
@@ -179,5 +189,7 @@ test('multi-level timetable progresses through the respective annual distributio
   assert.match(row2am.content, /استقبال التلاميذ/);
   assert.match(row3am.content, /التعارف/);
   assert.match(row4am.content, /التعارف/);
+  // كل مستوى يبدأ بتدرجه الخاص لا بتدرج مستوى آخر
+  assert.ok(row2am.sourceLearningUnitId !== row3am.sourceLearningUnitId);
 });
 

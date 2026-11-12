@@ -40,10 +40,7 @@ import { generateLogbookEntries, isLogbookRowOnOrAfter } from '../utils/dailyLog
 import { collectPreservedRows, preservedRowsInPeriod } from '../utils/logbookPreservation';
 import { DailyLogSheetTemplate, ScienceHeaderLeft, ScienceHeaderRight, CornerLeaves } from './DailyLogSheetTemplate';
 import { TealLogSheetTemplate } from './TealLogSheetTemplate';
-import { DAILY_LOGBOOK_PROGRAM_1AM } from '../data/logbook/dailyLogbookProgram1am';
-import { DAILY_LOGBOOK_PROGRAM_2AM } from '../data/logbook/dailyLogbookProgram2am';
-import { DAILY_LOGBOOK_PROGRAM_3AM } from '../data/logbook/dailyLogbookProgram3am';
-import { DAILY_LOGBOOK_PROGRAM_4AM } from '../data/logbook/dailyLogbookProgram4am';
+import { LOGBOOK_PROGRAMS } from '../data/logbook';
 
 interface DailyLogbookProps {
   selectedLevel?: '1am' | '2am' | '3am' | '4am';
@@ -790,20 +787,21 @@ export function buildCurriculumDatabase(
   _curriculumLessons?: LessonMemo[]
 ): Record<'1م' | '2م' | '3م' | '4م', CurriculumResourceItem[]> {
   // تم إلغاء ربط الدفتر اليومي بالمذكرات: يعتمد الدفتر اليومي حصراً على المنهاج والتدرج السنوي الوزاري الرسمي
+  // قاعدة الدفتر الخاصة تُقرأ من نقطة دخولها الوحيدة (src/data/logbook).
   return {
-    '1م': DAILY_LOGBOOK_PROGRAM_1AM.map((p) => ({
+    '1م': LOGBOOK_PROGRAMS['1am'].map((p) => ({
       ...p,
       level: '1م',
     })),
-    '2م': DAILY_LOGBOOK_PROGRAM_2AM.map((p) => ({
+    '2م': LOGBOOK_PROGRAMS['2am'].map((p) => ({
       ...p,
       level: '2م',
     })),
-    '3م': DAILY_LOGBOOK_PROGRAM_3AM.map((p) => ({
+    '3م': LOGBOOK_PROGRAMS['3am'].map((p) => ({
       ...p,
       level: '3م',
     })),
-    '4م': DAILY_LOGBOOK_PROGRAM_4AM.map((p) => ({
+    '4م': LOGBOOK_PROGRAMS['4am'].map((p) => ({
       ...p,
       level: '4م',
     })),
