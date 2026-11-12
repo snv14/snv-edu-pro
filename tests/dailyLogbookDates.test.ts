@@ -45,7 +45,11 @@ test('late starts continue the projected curriculum rather than repeating school
   const expected = full.find(row => row.dateStr === '2026-09-23');
   assert.equal(later[0].sourceLearningUnitId, expected?.sourceLearningUnitId);
   assert.equal(later[0].content, expected?.content);
-  assert.equal(later[0].lessonType, 'curriculum');
+  // النية: الانطلاق المتأخر يُكمل ما وصل إليه الإسقاط الكامل ولا يُعيد حصة
+  // التعارف/الاستقبال. لا يُربط بنوع حصة بعينه لأن التدرج الرسمي قابل للتعديل
+  // (الأسبوع الثاني في س1 معالجة بيداغوجية بقرار الأستاذ).
+  assert.equal(later[0].lessonType, expected?.lessonType);
+  assert.notEqual(later[0].lessonType, 'introductory');
 });
 
 test('activities are assigned in date order, not group-first order', () => {
@@ -78,7 +82,18 @@ test('group crossing display start retains its assigned activity', () => {
 test('exams pause curriculum progression and third session is labelled correctly', async () => {
   const { buildPedagogicalStepsForLevel } = await import('../src/utils/dailyLogbookGenerator');
   const steps = buildPedagogicalStepsForLevel('1م', 3);
-  assert.match(steps[4].fullContent, /الحصة 3/);
+  // النية: النشاط المنهجي يُمدَّد إلى عدد الحصص المطلوب وتُوسم حصته الأخيرة،
+  // بينما حصص التعارف والمعالجة والاختبارات لا تُمدَّد. لا يُربط بفهرس ثابت
+  // لأن ترتيب الأسطر يتغير مع أي تعديل في التدرج الرسمي.
+  const lastSession = steps.find(step => step.totalSessionsForActivity === 3 && step.sessionIndexInActivity === 3);
+  assert.ok(lastSession, 'يوجد نشاط منهجي ممدَّد إلى ثلاث حصص');
+  assert.match(lastSession!.fullContent, /الحصة 3/);
+  assert.equal(lastSession!.isIntroductory, false);
+  assert.equal(lastSession!.isReview, false);
+  assert.ok(
+    steps.filter(step => step.isIntroductory || step.isReview).every(step => step.totalSessionsForActivity === 1),
+    'حصص التعارف والمعالجة لا تُمدَّد'
+  );
   const rows = generateLogbookEntries({ startDate: '2026-10-04', period: 'أسبوع', gridRows: grid,
     holidays: [{ startDate: '2026-10-05', label: 'فرض', type: 'test' }] });
   assert.equal(rows[1].lessonType, 'assessment');
