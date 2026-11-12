@@ -31,7 +31,7 @@ interface PlatformNavigationDrawerProps {
   activeSection: string;
   onNavigate: (section: string) => void;
   onOpenInfoModal: (tab: 'about' | 'contact' | 'guide') => void;
-  onOpenTool: (tool: 'assistant' | 'correction') => void;
+  onOpenTool: (tool: 'assistant' | 'correction' | 'pedagogicalNote') => void;
   config: MemoConfig;
 }
 
@@ -210,7 +210,7 @@ export const PlatformNavigationDrawer: React.FC<PlatformNavigationDrawerProps> =
           {/* Conversation and correction tools */}
           <div className="space-y-1 pt-2 border-t border-gray-100">
             <div className="text-[11px] font-black text-gray-400 uppercase tracking-wider px-2 mb-1.5">
-              المحادثة والتصحيح
+              المحادثة والتصحيح والتوليد
             </div>
 
             <button
@@ -233,6 +233,18 @@ export const PlatformNavigationDrawer: React.FC<PlatformNavigationDrawerProps> =
               <div className="flex items-center gap-2.5">
                 <ClipboardCheck className="w-4 h-4 text-emerald-700" />
                 <span>مذكرة التصحيح</span>
+              </div>
+              <ChevronLeft className="w-4 h-4 text-gray-400" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => { onOpenTool('pedagogicalNote'); onClose(); }}
+              className="w-full flex items-center justify-between p-2.5 rounded-xl text-[13px] font-bold text-gray-700 hover:bg-amber-50 hover:text-amber-900 transition cursor-pointer"
+            >
+              <div className="flex items-center gap-2.5">
+                <Sparkles className="w-4 h-4 text-amber-600" />
+                <span>المذكرة البيداغوجية والسجل الرسمي</span>
               </div>
               <ChevronLeft className="w-4 h-4 text-gray-400" />
             </button>

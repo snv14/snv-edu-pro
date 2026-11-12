@@ -36,6 +36,7 @@ import { getDesignerPhoto } from './utils/designerPhoto';
 
 const AIAssistantChat = lazy(() => import('./components/AIAssistantChat').then(module => ({ default: module.AIAssistantDrawer })));
 const CorrectionMemoDrawer = lazy(() => import('./components/CorrectionMemoDrawer').then(module => ({ default: module.CorrectionMemoDrawer })));
+const PedagogicalNoteModal = lazy(() => import('./components/PedagogicalNoteModal').then(module => ({ default: module.PedagogicalNoteModal })));
 
 const AnnualDistribution = lazy(() => import('./components/AnnualDistribution').then(module => ({ default: module.AnnualDistribution })));
 const DailyLogbook = lazy(() => import('./components/DailyLogbook').then(module => ({ default: module.DailyLogbook })));
@@ -63,7 +64,7 @@ export const App: React.FC = () => {
 
   // Drawers and Modals
   const [isNavDrawerOpen, setIsNavDrawerOpen] = useState<boolean>(false);
-  const [activeTool, setActiveTool] = useState<'assistant' | 'correction' | null>(null);
+  const [activeTool, setActiveTool] = useState<'assistant' | 'correction' | 'pedagogicalNote' | null>(null);
   const [infoModalTab, setInfoModalTab] = useState<'about' | 'contact' | 'guide' | null>(null);
 
   const [designerPhoto, setDesignerPhoto] = useState<string>(() => getDesignerPhoto());
@@ -885,6 +886,13 @@ export const App: React.FC = () => {
           isOpen onClose={() => setActiveTool(null)}
           currentLesson={isYearSection ? currentLesson : null}
           curriculumLessons={curriculumLessons} config={config}
+        />}
+        {/* المذكرة البيداغوجية + السجل الرسمي للوثائق (من درج التنقل). */}
+        {activeTool === 'pedagogicalNote' && <PedagogicalNoteModal
+          isOpen onClose={() => setActiveTool(null)}
+          defaultLevel={config.level}
+          config={config}
+          showToast={showToast}
         />}
       </Suspense>
 

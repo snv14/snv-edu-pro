@@ -39,6 +39,7 @@ import { ExpertLabBlock, consumePendingExpertLabBlock, subscribeExpertLab } from
 import { OFFICIAL_1AM_DISTRIBUTION, OFFICIAL_2AM_DISTRIBUTION, OFFICIAL_3AM_DISTRIBUTION, OFFICIAL_4AM_DISTRIBUTION } from '../data/curriculum/officialAnnualDistributionData';
 import { loadCurriculumDatabase } from '../data/memos/curriculumDb';
 import { buildOfficialSourceContext } from '../services/officialPedagogicalSources';
+import { PLATFORM_REGISTRY_SOURCES, platformFamily, type PlatformLevel } from '../data/platform';
 import sourceMemo1AMFullText from '../data/sourceMemo1amFullText.md?raw';
 import {
   MemoAttachment,
@@ -74,6 +75,9 @@ export const PedagogicalNoteModal: React.FC<Props> = ({
     if (lvl === '3am') return '3AM';
     return '4AM';
   };
+
+  /** لوحة السجل الرسمي للوثائق البيداغوجية — مفتوحة افتراضياً لأنها مرجع الأستاذ. */
+  const [showRegistry, setShowRegistry] = useState<boolean>(true);
 
   const [selectedGrade, setSelectedGrade] = useState<GradeLevel>(() => mapLevelToGrade(defaultLevel));
   const [topic, setTopic] = useState<string>(defaultTopic || 'الهضم في الأنبوب الهضمي ومسارات الامتصاص');
@@ -300,6 +304,16 @@ export const PedagogicalNoteModal: React.FC<Props> = ({
     window.print();
   };
 
+/** تسمية مستوى وثيقة السجل كما يفهمها الأستاذ. */
+const registryLevelLabel = (level: PlatformLevel): string =>
+  level === 'all'
+    ? 'كل مستويات التعليم المتوسط'
+    : { '1am': 'السنة الأولى متوسط', '2am': 'السنة الثانية متوسط', '3am': 'السنة الثالثة متوسط', '4am': 'السنة الرابعة متوسط' }[level];
+
+/** تسمية حالة الوثيقة في السجل. */
+const registryStatusLabel = (status: string): string =>
+  status === 'official' ? 'وثيقة رسمية' : status === 'teacherProvided' ? 'مرفوعة من الأستاذ' : status === 'supplementary' ? 'وثيقة مكمّلة' : status;
+
   return (
     <div
       className="fixed inset-0 z-[150] bg-black/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto"
@@ -353,6 +367,60 @@ export const PedagogicalNoteModal: React.FC<Props> = ({
               <span className="text-indigo-700">{item.category==='curriculum'?'منهاج':item.category==='companion'?'وثيقة مرافقة':item.category==='teacher-guide'?'دليل أستاذ':'مذكرة'}</span>
             </label>)}
           </div> : <div className="mt-2 text-[10px] text-slate-500">لم تُضف مصادر إلى المكتبة بعد. يمكن رفعها من مكتبة المصادر داخل مذكرة التصحيح.</div>}
+        </div>
+
+        {/* السجل الرسمي للوثائق البيداغوجية: مرجع وثائقي وزاري (بلا نص حرفي مفهرس).
+            المصدر الوحيد للحقيقة هو القاعدة الموحدة src/data/platform/index.ts. */}
+        <div className="bg-emerald-50/60 border-b border-emerald-100 p-3 print:hidden">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <div className="text-xs font-black text-emerald-900 flex items-center gap-1.5">
+                <ShieldCheck size={14} />
+                <span>السجل الرسمي للوثائق البيداغوجية ({PLATFORM_REGISTRY_SOURCES.length})</span>
+              </div>
+              <div className="text-[10px] text-slate-500 leading-snug">
+                وثائق وزارة التربية الوطنية بجهاتها وروابطها وأدوارها. ما لم يُدخل نصه الحرفي بعد
+                مرجعٌ وثائقي فقط، فلا يُقتبس برقم الصفحة.
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowRegistry(previous => !previous)}
+              className="text-[10px] font-black text-emerald-700 hover:text-emerald-900 cursor-pointer shrink-0"
+            >
+              {showRegistry ? 'إخفاء' : 'عرض الوثائق'}
+            </button>
+          </div>
+
+          {showRegistry && (
+            <div className="grid sm:grid-cols-2 gap-1.5 mt-2">
+              {PLATFORM_REGISTRY_SOURCES.map(source => (
+                <div key={source.id} className="bg-white border border-emerald-200 rounded-lg p-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-[10.5px] font-black text-slate-800 leading-snug flex-1">{source.title}</span>
+                    <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 shrink-0">
+                      {source.family ? platformFamily(source.family).label : 'خارج العائلات'}
+                    </span>
+                  </div>
+                  <div className="text-[9.5px] text-slate-600 mt-1 font-bold">
+                    {registryLevelLabel(source.level)} · {source.authority}
+                  </div>
+                  <div className="text-[9.5px] text-slate-500 leading-snug mt-0.5">{source.role}</div>
+                  <div className="flex items-center justify-between gap-2 mt-1.5">
+                    <span className="text-[9px] font-bold text-slate-400">{registryStatusLabel(source.status)}</span>
+                    <a
+                      href={source.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[9.5px] font-black text-emerald-700 hover:text-emerald-900 hover:underline flex items-center gap-1"
+                    >
+                      <FileText size={11} /> فتح الوثيقة
+                    </a>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="bg-slate-50 border-b border-slate-200 p-3 print:hidden">
