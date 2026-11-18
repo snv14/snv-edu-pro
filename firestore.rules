@@ -22,7 +22,12 @@ service cloud.firestore {
     }
 
     function isAllowedDoc(id) {
-      return id in ['config', 'annualDist', 'curriculum', 'logbook', 'timetable'];
+      // 'curriculum_<level>' وثائق المذكرات بعد التقسيم لكل مستوى (حد 1 MiB).
+      // 'curriculum' تبقى مقروءة للتوافق الخلفي مع النسخ السابقة.
+      return id in ['config', 'annualDist', 'curriculum', 'curriculum_1am',
+                    'curriculum_2am', 'curriculum_3am', 'curriculum_4am',
+                    'logbook', 'timetable']
+        || id.matches('^curriculum_(1am|2am|3am|4am)$');
     }
 
     function hasOnlyAllowedFields() {

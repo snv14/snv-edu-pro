@@ -363,14 +363,44 @@ export interface GenerateLogbookEntriesParams {
  * - يراعي العطل المدرسية، الفروض، الاختبارات والامتحانات الرسمية.
  * - خلال فترة الفروض والاختبارات، يولد حصص تقويمية رسمية مع تجميد مؤشر الأنشطة التربوية لتستأنف بعد الامتحان مباشرة.
  */
-/** End of the selected calendar period, exclusive. */
+/**
+ * End of the selected calendar period, exclusive.
+ *
+ * السنة الدراسية الجزائرية تبدأ في سبتمبر وتنتهي في جوان — أي ~9.5 أشهر، لا 12.
+ * كان هذا الحدّ يُحسب 365 يوماً، فيولّد المولّد حصصاً حتى سبتمبر التالي. القياس
+ * الفعلي قبل الإصلاح: 46 حصة من 208 لسنة أولى (22.1%) تسقط بعد 30 جوان،
+ * وتدفع دروس المقطع الأخير (الخلية، الإطراح…) إلى خارج السنة الدراسية.
+ * لذلك تُحسب نهاية السنة صراحةً: آخر يوم في جوان من السنة الدراسية التالية
+ * للشهر الذي تبدأ فيه السنة (سبتمبر 2026 ← 30 جوان 2027).
+ */
 export function getLogbookPeriodEnd(startDate: string, period = 'سنة'): string {
   const date = new Date(`${startDate}T12:00:00`);
   if (Number.isNaN(date.getTime())) return '';
-  const days = period === 'أسبوع' || period === 'أسبوع واحد' ? 7
-    : period === 'أسبوعين' ? 14 : period === 'شهر' ? 30
-    : period === 'فصل' || period === 'ثلاثي' ? 90 : 365;
-  date.setDate(date.getDate() + days);
+  if (period === 'أسبوع' || period === 'أسبوع واحد') {
+    date.setDate(date.getDate() + 7);
+  } else if (period === 'أسبوعين') {
+    date.setDate(date.getDate() + 14);
+  } else if (period === 'شهر') {
+    date.setDate(date.getDate() + 30);
+  } else if (period === 'فصل' || period === 'ثلاثي') {
+    date.setDate(date.getDate() + 90);
+  } else {
+    // السنة الدراسية: الموسم الدراسي يبدأ في سبتمبر وينتهي في 30 جوان من
+    // السنة المدنية التالية. أي تاريخ انطلاق ينتمي إلى الموسم الذي يسبقه
+    // سبتمبرُه: جانفي 2027 ← موسم 2026/2027 ← 30 جوان 2027.
+    // (بدون هذا التقريب كانت انطلاقة جانفي تنتهي في جوان من نفس السنة المدنية
+    //  فتُقصّر الموسم بنحو شهرين.)
+    const startMonth = date.getMonth(); // 0 = يناير
+    const schoolYearEndYear = startMonth >= 8
+      ? date.getFullYear() + 1   // سبتمبر–ديسمبر ← جوان السنة التالية
+      : date.getFullYear();      // جانفي–جوان ← جوان نفس السنة
+    const juneEnd = new Date(`${schoolYearEndYear}-06-30T12:00:00`);
+    // احتياط: انطلاقة بعد جوان (غير معتادة) ← نهاية الموسم الموالي
+    if (juneEnd.getTime() <= date.getTime()) {
+      return formatDateToIsoString(new Date(`${schoolYearEndYear + 1}-06-30T12:00:00`));
+    }
+    return formatDateToIsoString(juneEnd);
+  }
   return formatDateToIsoString(date);
 }
 

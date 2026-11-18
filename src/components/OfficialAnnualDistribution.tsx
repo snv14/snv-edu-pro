@@ -349,12 +349,17 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
     const unique = (values: string[]) =>
       Array.from(new Set(values.map(v => String(v || '').trim()).filter(Boolean)));
 
-    if (level === '2am' && rows.some(row => row.referenceMonthlySchedule)) {
+    if (rows.some(row => row.referenceMonthlySchedule)) {
+      // الوثائق المرجعية (1AM و2AM) تطبع الشهر ورقم الأسبوع وتدمج المقطع/المورد في
+      // نصّ الحصة. نقرأ من حقلي maqta/mawrid مباشرة ونقصّ عند «/» لتفادي تكرار
+      // «المقطع … / وضعية الانطلاق» في الإحصاء.
       const curriculumRows = rows.filter(row => !row.isIntroductory);
-      const maqtaCount = unique(curriculumRows.flatMap(row => row.maqta.split(/\s+\/\s+/))).length;
-      const resourceCount = unique(curriculumRows.flatMap(row => row.mawrid.split(/\s+\/\s+/)).filter(text => /^المورد /.test(text))).length;
+      const clean = (value: unknown) =>
+        String(value || '').split('/')[0].replace(/\s+/g, ' ').trim();
+      const maqtaCount = unique(curriculumRows.map(row => clean(row.maqta))).length;
+      const resourceCount = unique(curriculumRows.map(row => clean(row.mawrid))).length;
       const activities = curriculumRows.flatMap(row => [row.session1, row.session2])
-        .map(text => (text.match(/النشاط[^\n]*/)?.[0] || '').replace(/\s*\([12]\)$/, '').trim());
+        .map(text => (String(text || '').match(/النشاط[^\n]*/)?.[0] || '').replace(/\s*\([12]\)$/, '').trim());
       return { maqtaCount, resourceCount, ta3alomCount: '—', activityCount: unique(activities).length };
     }
     const maqtaCount = unique(rows.map((r: any) => r.maqta)).length;

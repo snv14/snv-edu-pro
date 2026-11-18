@@ -45,7 +45,9 @@ test('late starts continue the projected curriculum rather than repeating school
   const expected = full.find(row => row.dateStr === '2026-09-23');
   assert.equal(later[0].sourceLearningUnitId, expected?.sourceLearningUnitId);
   assert.equal(later[0].content, expected?.content);
-  assert.equal(later[0].lessonType, 'curriculum');
+  // الوثيقة الرسمية لسنة أولى متوسط تجعل الأسبوع الأول «استقبال + معالجة بيداغوجية»،
+  // لذا نوع الحصة يتبع التوزيع ولا يُثبَّت على 'curriculum' هنا.
+  assert.equal(later[0].lessonType, expected?.lessonType);
 });
 
 test('activities are assigned in date order, not group-first order', () => {
@@ -78,7 +80,11 @@ test('group crossing display start retains its assigned activity', () => {
 test('exams pause curriculum progression and third session is labelled correctly', async () => {
   const { buildPedagogicalStepsForLevel } = await import('../src/utils/dailyLogbookGenerator');
   const steps = buildPedagogicalStepsForLevel('1م', 3);
-  assert.match(steps[4].fullContent, /الحصة 3/);
+  // الحصة الثالثة من نشاط ممتد على 3 حصص يجب أن تُوسم «الحصة 3» — نبحث عنها
+  // بدل تثبيت فهرسها، لأن الأسطر التمهيدية (استقبال/معالجة) تغيّر عدد الحصص قبلها.
+  const third = steps.find(s => s.totalSessionsForActivity === 3 && s.sessionIndexInActivity === 3);
+  assert.ok(third, 'لا نشاط ممتد على 3 حصص في التوزيع');
+  assert.match(third!.fullContent, /الحصة 3/);
   const rows = generateLogbookEntries({ startDate: '2026-10-04', period: 'أسبوع', gridRows: grid,
     holidays: [{ startDate: '2026-10-05', label: 'فرض', type: 'test' }] });
   assert.equal(rows[1].lessonType, 'assessment');
@@ -119,10 +125,11 @@ test('daily logbook steps strictly respect the official annual distribution chro
     OFFICIAL_4AM_DISTRIBUTION,
   } = await import('../src/data/curriculum/officialAnnualDistributionData');
 
-  // Level 1AM
+  // Level 1AM — الوثيقة الرسمية 2026-2027 تفتح بـ«استقبال التلاميذ، توجيهات، أسبوع
+  // الصحة المدرسية» ثم «معالجة بيداغوجية»، ثم المقطع الأول (التغذية عند الإنسان).
   const steps1am = buildPedagogicalStepsForLevel('1م', 1);
-  assert.match(steps1am[0].fullContent, /التعارف/);
-  assert.match(steps1am[1].fullContent, /تقويم تشخيصي/);
+  assert.match(steps1am[0].fullContent, /استقبال التلاميذ/);
+  assert.match(steps1am[1].fullContent, /معالجة بيداغوجية/);
   assert.equal(steps1am[2].fullContent, OFFICIAL_1AM_DISTRIBUTION[1].session1);
   assert.equal(steps1am[3].fullContent, OFFICIAL_1AM_DISTRIBUTION[1].session2);
   assert.equal(steps1am[4].fullContent, OFFICIAL_1AM_DISTRIBUTION[2].session1);
