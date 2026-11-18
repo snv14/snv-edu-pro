@@ -3,6 +3,12 @@ import { Calendar, Clock, Users, BookOpen, FileEdit } from 'lucide-react';
 import { LogEntry } from './DailyLogbook';
 import { MemoConfig } from '../types';
 import { TeacherOfficialStamp } from './TeacherOfficialStamp';
+import { useHandwritingStyle } from '../hooks/useHandwritingStyle';
+import {
+  formatSemanticHtml,
+  getEffectiveExportFontFamily,
+  isHandwritingActiveFor,
+} from '../services/handwritingStyle';
 
 export const formatTimingWithArrow = (timeStr: string) => {
   if (!timeStr) return '—';
@@ -65,16 +71,17 @@ export interface DailyLogSheetProps {
   useOfficialImageBackground?: boolean;
   onUpdateRow?: (rowId: string, updates: Partial<LogEntry>) => void;
   idPrefix?: string;
+  emptyFillerRows?: number;
 }
 
 // Left Science Graphic (Books + DNA Helix + Erlenmeyer Flask + Plant Sprout)
-export const ScienceHeaderLeft: React.FC = () => (
+export const ScienceHeaderLeft: React.FC<{ compact?: boolean }> = ({ compact = false }) => (
   <svg
-    width="110"
-    height="95"
+    width={compact ? 68 : 88}
+    height={compact ? 58 : 76}
     viewBox="0 0 130 115"
-    style={{ width: '100%', height: '100%', maxWidth: '110px', maxHeight: '95px' }}
-    className="select-none shrink-0 w-16 h-14 sm:w-20 sm:h-18 md:w-[110px] md:h-[95px]"
+    style={{ width: '100%', height: '100%', maxWidth: compact ? '68px' : '88px', maxHeight: compact ? '58px' : '76px' }}
+    className={`select-none shrink-0 ${compact ? 'w-12 h-10 sm:w-[68px] sm:h-[58px]' : 'w-14 h-12 sm:w-[76px] sm:h-[66px] md:w-[88px] md:h-[76px]'}`}
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
   >
@@ -140,13 +147,13 @@ export const ScienceHeaderLeft: React.FC = () => (
 );
 
 // Right Science Graphic (Microscope + Atom Model + Leaves)
-export const ScienceHeaderRight: React.FC = () => (
+export const ScienceHeaderRight: React.FC<{ compact?: boolean }> = ({ compact = false }) => (
   <svg
-    width="110"
-    height="95"
+    width={compact ? 68 : 88}
+    height={compact ? 58 : 76}
     viewBox="0 0 130 115"
-    style={{ width: '100%', height: '100%', maxWidth: '110px', maxHeight: '95px' }}
-    className="select-none shrink-0 w-16 h-14 sm:w-20 sm:h-18 md:w-[110px] md:h-[95px]"
+    style={{ width: '100%', height: '100%', maxWidth: compact ? '68px' : '88px', maxHeight: compact ? '58px' : '76px' }}
+    className={`select-none shrink-0 ${compact ? 'w-12 h-10 sm:w-[68px] sm:h-[58px]' : 'w-14 h-12 sm:w-[76px] sm:h-[66px] md:w-[88px] md:h-[76px]'}`}
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
   >
@@ -198,12 +205,12 @@ export const ScienceHeaderRight: React.FC = () => (
 );
 
 // Botanical leaves ornament for bottom corners
-export const CornerLeaves: React.FC<{ flip?: boolean }> = ({ flip = false }) => (
+export const CornerLeaves: React.FC<{ flip?: boolean; compact?: boolean }> = ({ flip = false, compact = false }) => (
   <svg
-    width="48"
-    height="48"
+    width={compact ? 28 : 36}
+    height={compact ? 28 : 36}
     viewBox="0 0 65 65"
-    style={{ width: '48px', height: '48px', minWidth: '48px', minHeight: '48px' }}
+    style={compact ? { width: '28px', height: '28px', minWidth: '28px', minHeight: '28px' } : { width: '36px', height: '36px', minWidth: '36px', minHeight: '36px' }}
     className={`select-none shrink-0 ${flip ? '-scale-x-100' : ''}`}
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
@@ -232,115 +239,118 @@ export const DailyLogSheetTemplate: React.FC<DailyLogSheetProps> = ({
   formatLogbookDateLabel,
   onUpdateRow,
   idPrefix = 'page-content',
+  emptyFillerRows,
 }) => {
-  const ROWS_PER_PAGE_CAP = 10;
-  const emptyRowsCount = Math.max(0, ROWS_PER_PAGE_CAP - pageRows.length);
+  const { settings: hwStyle } = useHandwritingStyle();
+  const hwActive = isHandwritingActiveFor('logbook', hwStyle);
+  const pageFontFamily = getEffectiveExportFontFamily('pdf', hwStyle, 'logbook');
+
+  const emptyRowsCount =
+    typeof emptyFillerRows === 'number'
+      ? Math.max(0, emptyFillerRows)
+      : Math.max(0, 6 - pageRows.length);
 
   return (
     <div
       id={`${idPrefix}-${pageIndex}`}
       data-preview-export-page="true"
       data-logbook-content-page="true"
-      className="print-page logbook-content-page relative shadow-[0_16px_50px_rgba(2,132,199,0.14)] rounded-[14px] border-2 md:border-[2.5px] border-[#0284c7] overflow-hidden mx-auto mb-8 bg-[#ffffff] text-zinc-900"
+      className={`print-page logbook-content-page ${hwActive ? 'hw-notebook-scope' : ''} relative shadow-[0_14px_40px_rgba(2,132,199,0.12)] rounded-[12px] border-2 border-[#0284c7] overflow-hidden mx-auto mb-6 bg-[#ffffff] text-zinc-900`}
       style={{
         width: `${pageDimensions.w}mm`,
         height: `${pageDimensions.h}mm`,
         minHeight: `${pageDimensions.h}mm`,
         maxWidth: '100%',
-        fontFamily: "'Tajawal', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+        fontFamily: pageFontFamily,
         direction: 'rtl',
       }}
     >
-      <div className="h-full flex flex-col justify-between p-3.5 md:p-4">
+      <div className="h-full flex flex-col justify-between p-2.5 sm:p-3">
         {/* TOP OFFICIAL HEADER */}
-        <div>
-          <div className="relative flex items-center justify-between px-2 pt-1 pb-1">
+        <div className="min-h-0 flex flex-col">
+          <div className="relative flex items-center justify-between px-1.5 pt-0.5 pb-0.5">
             {/* Top Left Science Graphic */}
-            <ScienceHeaderLeft />
+            <ScienceHeaderLeft compact />
 
             {/* Central Official Title & Ministry */}
             <div className="flex-1 text-center px-1">
-              <div className="text-[12px] font-bold text-zinc-900 tracking-wide">
+              <div className="text-[11px] font-bold text-zinc-900 leading-tight">
                 الجمهورية الجزائرية الديمقراطية الشعبية
               </div>
-              <div className="text-[11px] font-extrabold text-[#0369a1] mt-0.5">
+              <div className="text-[10px] font-extrabold text-[#0369a1] mt-0.5 leading-tight">
                 وزارة التربية الوطنية
-              </div>
-              
-              <div className="flex items-center justify-center my-0.5">
-                <span className="w-1.5 h-1.5 rotate-45 bg-[#0284c7]"></span>
               </div>
 
               {/* Main Badge Pill matching user template */}
-              <div className="relative mx-auto mt-1 max-w-[340px] bg-gradient-to-r from-[#e0f2fe] via-[#bae6fd] to-[#e0f2fe] border-2 border-[#0284c7] rounded-3xl py-1.5 px-6 shadow-xs">
-                <h2 className="text-[#0369a1] font-black text-[20px] md:text-[22px] tracking-wide leading-none">
+              <div className="relative mx-auto mt-1 max-w-[310px] bg-gradient-to-r from-[#e0f2fe] via-[#bae6fd] to-[#e0f2fe] border-[1.5px] border-[#0284c7] rounded-2xl py-1 px-4 shadow-2xs">
+                <h2 className="text-[#0369a1] font-black text-[16px] md:text-[17px] tracking-wide leading-tight">
                   الدفتر اليومي للأستاذ
                 </h2>
-                <div className="mt-1 inline-block bg-white border border-[#0284c7] px-4 py-0.5 rounded-full text-[10px] md:text-[11px] font-black text-[#0369a1] shadow-2xs">
+                <div className="mt-0.5 inline-block bg-white border border-[#0284c7] px-3 py-0 rounded-full text-[9.5px] md:text-[10px] font-black text-[#0369a1]">
                   التعليم المتوسط - علوم الطبيعة والحياة
                 </div>
               </div>
             </div>
 
             {/* Top Right Science Graphic */}
-            <ScienceHeaderRight />
+            <ScienceHeaderRight compact />
           </div>
 
           {/* Sub Header / Teacher & School Details Bar */}
-          <div className="mt-1 mb-1.5 px-3 py-1 bg-[#f0f9ff] border border-[#bae6fd] rounded-lg flex flex-wrap items-center justify-between text-[10px] font-bold text-zinc-800">
-            <div className="flex items-center gap-3">
+          <div className="mt-1 mb-1 px-2.5 py-0.5 bg-[#f0f9ff] border border-[#bae6fd] rounded-md flex flex-wrap items-center justify-between gap-x-2 text-[9.5px] font-bold text-zinc-800">
+            <div className="flex flex-wrap items-center gap-x-2.5">
               <span>الأستاذ(ة): <b className="text-[#0369a1]">{config.teacherName || '—'}</b></span>
               <span>المتوسطة: <b className="text-[#0369a1]">{config.schoolName || '—'}</b></span>
               <span>مديرية التربية: <b className="text-[#0369a1]">{config.directorate || '—'}</b></span>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2.5">
               <span>السنة الدراسية: <b className="text-[#0369a1]">{config.schoolYear || '2026-2027'}</b></span>
               <span>المستويات: <b className="text-[#0369a1]">{assignedLevels.join('، ') || '1م'}</b></span>
             </div>
           </div>
 
           {/* 5-COLUMN MAIN TABLE (MATCHING UPLOADED TEMPLATE & USER SPECIFICATIONS) */}
-          <div className="mt-1 border-2 border-[#0284c7] rounded-t-xl overflow-hidden bg-white">
-            <table className="w-full border-collapse text-[11px] leading-snug table-fixed">
-              <thead>
-                <tr className="bg-[#e1f0fa] border-b-2 border-[#0284c7] text-[#0369a1]">
+          <div className="mt-0.5 border-[1.5px] border-[#0284c7] rounded-t-lg overflow-hidden bg-white">
+            <table className="w-full border-collapse text-[10px] leading-[1.42] table-fixed">
+              <thead className="table-header-group">
+                <tr className="bg-[#e1f0fa] border-b-[1.5px] border-[#0284c7] text-[#0369a1]">
                   {/* Column 1 (RTL Rightmost): التاريخ واليوم */}
-                  <th className="border-l-2 border-[#0284c7] py-2 px-1 text-center font-black w-[16%]">
-                    <div className="flex flex-col items-center justify-center gap-0.5">
-                      <Calendar className="w-4 h-4 text-[#0284c7]" />
-                      <span className="text-[12px]">التاريخ واليوم</span>
+                  <th className="border-l-[1.5px] border-[#0284c7] py-1 px-1 text-center font-black w-[16%]">
+                    <div className="flex items-center justify-center gap-1">
+                      <Calendar className="w-3.5 h-3.5 text-[#0284c7] shrink-0" />
+                      <span className="text-[10.5px]">التاريخ واليوم</span>
                     </div>
                   </th>
 
                   {/* Column 2: التوقيت */}
-                  <th className="border-l-2 border-[#0284c7] py-2 px-1 text-center font-black w-[15%]">
-                    <div className="flex flex-col items-center justify-center gap-0.5">
-                      <Clock className="w-4 h-4 text-[#0284c7]" />
-                      <span className="text-[12px]">التوقيت</span>
+                  <th className="border-l-[1.5px] border-[#0284c7] py-1 px-1 text-center font-black w-[15%]">
+                    <div className="flex items-center justify-center gap-1">
+                      <Clock className="w-3.5 h-3.5 text-[#0284c7] shrink-0" />
+                      <span className="text-[10.5px]">التوقيت</span>
                     </div>
                   </th>
 
                   {/* Column 3: القسم */}
-                  <th className="border-l-2 border-[#0284c7] py-2 px-1 text-center font-black w-[13%]">
-                    <div className="flex flex-col items-center justify-center gap-0.5">
-                      <Users className="w-4 h-4 text-[#0284c7]" />
-                      <span className="text-[12px]">القسم</span>
+                  <th className="border-l-[1.5px] border-[#0284c7] py-1 px-1 text-center font-black w-[13%]">
+                    <div className="flex items-center justify-center gap-1">
+                      <Users className="w-3.5 h-3.5 text-[#0284c7] shrink-0" />
+                      <span className="text-[10.5px]">القسم</span>
                     </div>
                   </th>
 
                   {/* Column 4: المحتوى الدرس */}
-                  <th className="border-l-2 border-[#0284c7] py-2 px-2 text-center font-black w-[41%]">
-                    <div className="flex flex-col items-center justify-center gap-0.5">
-                      <BookOpen className="w-4 h-4 text-[#0284c7]" />
-                      <span className="text-[12px]">المحتوى الدرس</span>
+                  <th className="border-l-[1.5px] border-[#0284c7] py-1 px-1.5 text-center font-black w-[41%]">
+                    <div className="flex items-center justify-center gap-1">
+                      <BookOpen className="w-3.5 h-3.5 text-[#0284c7] shrink-0" />
+                      <span className="text-[10.5px]">المحتوى الدرس</span>
                     </div>
                   </th>
 
                   {/* Column 5 (RTL Leftmost): الملاحظات */}
-                  <th className="py-2 px-1 text-center font-black w-[15%]">
-                    <div className="flex flex-col items-center justify-center gap-0.5">
-                      <FileEdit className="w-4 h-4 text-[#0284c7]" />
-                      <span className="text-[12px]">الملاحظات</span>
+                  <th className="py-1 px-1 text-center font-black w-[15%]">
+                    <div className="flex items-center justify-center gap-1">
+                      <FileEdit className="w-3.5 h-3.5 text-[#0284c7] shrink-0" />
+                      <span className="text-[10.5px]">الملاحظات</span>
                     </div>
                   </th>
                 </tr>
@@ -349,9 +359,17 @@ export const DailyLogSheetTemplate: React.FC<DailyLogSheetProps> = ({
                 {pageRows.map((r, rowIdx) => {
                   const globalRowIndex = allRows.findIndex((item) => item.id === r.id);
                   const previousRow = findPreviousComparableCurriculumRow(allRows, globalRowIndex, r);
-                  const displayContent = buildHierarchicalContent(r, previousRow)
-                    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-                    .replace(/&lt;u&gt;/g, '<u>').replace(/&lt;\/u&gt;/g, '</u>');
+                  const rawDisplayContent = buildHierarchicalContent(r, previousRow);
+                  const displayContent = formatSemanticHtml(
+                    rawDisplayContent,
+                    hwActive ? hwStyle : { ...hwStyle, enabled: false },
+                    { allowUTags: true }
+                  );
+                  const noteHtml = formatSemanticHtml(
+                    r.note || '',
+                    hwActive ? hwStyle : { ...hwStyle, enabled: false },
+                    { defaultRole: 'noteOrange', allowUTags: false }
+                  );
                   const isNewWeek =
                     rowIdx > 0 &&
                     getSchoolWeekKey(r.dateStr) !== getSchoolWeekKey(pageRows[rowIdx - 1].dateStr);
@@ -365,11 +383,11 @@ export const DailyLogSheetTemplate: React.FC<DailyLogSheetProps> = ({
                           </td>
                         </tr>
                       )}
-                      <tr className="bg-white hover:bg-sky-50/40 transition">
+                      <tr className="bg-white hover:bg-sky-50/40 transition break-inside-avoid">
                         {/* Col 1: التاريخ واليوم */}
-                        <td className="border-l-2 border-[#0284c7] border-b border-dashed border-[#7dd3fc] px-1.5 py-1.5 text-center align-middle">
+                        <td className="border-l-[1.5px] border-[#0284c7] border-b border-dashed border-[#7dd3fc] px-1 py-1 text-center align-middle">
                           {r.dateStr.includes('/') ? (
-                            <div className="flex flex-col gap-1 text-[10px] leading-tight font-bold">
+                            <div className="flex flex-col gap-0.5 text-[9.5px] leading-tight font-bold">
                               {(() => {
                                 const dateParts = r.dateStr.split('/');
                                 const dayParts = (r.dayName || '').split('/');
@@ -379,7 +397,7 @@ export const DailyLogSheetTemplate: React.FC<DailyLogSheetProps> = ({
                                   return (
                                     <div key={idx} className="bg-sky-50 border border-sky-200 rounded px-1 py-0.5">
                                       <span className="font-black text-[#0369a1]">{day} </span>
-                                      <span className="text-zinc-700 font-bold font-mono text-[9px]">{formatted}</span>
+                                      <span className="text-zinc-700 font-bold font-mono text-[8.5px]">{formatted}</span>
                                     </div>
                                   );
                                 });
@@ -387,10 +405,10 @@ export const DailyLogSheetTemplate: React.FC<DailyLogSheetProps> = ({
                             </div>
                           ) : (
                             <div className="flex flex-col items-center justify-center">
-                              <div className="font-black text-[12px] text-[#0369a1] leading-tight">
+                              <div className="font-black text-[11px] text-[#0369a1] leading-tight">
                                 {r.dayName || 'الأحد'}
                               </div>
-                              <div className="font-mono text-[10px] font-bold text-zinc-700 mt-0.5" dir="rtl">
+                              <div className="font-mono text-[9.5px] font-bold text-zinc-700 mt-0.5" dir="rtl">
                                 {formatLogbookDateLabel(r.dateStr)}
                               </div>
                             </div>
@@ -398,37 +416,40 @@ export const DailyLogSheetTemplate: React.FC<DailyLogSheetProps> = ({
                         </td>
 
                         {/* Col 2: التوقيت مع سهم */}
-                        <td className="border-l-2 border-[#0284c7] border-b border-dashed border-[#7dd3fc] px-1 py-2 text-center align-middle font-mono text-[10px] font-bold text-zinc-800" dir="ltr">
+                        <td className="border-l-[1.5px] border-[#0284c7] border-b border-dashed border-[#7dd3fc] px-1 py-1 text-center align-middle font-mono text-[9.5px] font-bold text-zinc-800" dir="ltr">
                           {formatTimingWithArrow(r.time)}
                         </td>
 
                         {/* Col 3: القسم */}
-                        <td className="border-l-2 border-[#0284c7] border-b border-dashed border-[#7dd3fc] px-1 py-2 text-center align-middle">
-                          <span className="inline-block bg-[#0284c7] text-white px-2 py-0.5 rounded text-[11px] font-black shadow-2xs">
+                        <td className="border-l-[1.5px] border-[#0284c7] border-b border-dashed border-[#7dd3fc] px-1 py-1 text-center align-middle">
+                          <span className="inline-block bg-[#0284c7] text-white px-2 py-0.5 rounded text-[10px] font-black shadow-2xs">
                             {r.section}
                           </span>
                           {r.level && !r.section.includes(r.level) && (
-                            <div className="text-[9px] font-bold text-[#0369a1] mt-0.5">
+                            <div className="text-[8.5px] font-bold text-[#0369a1] mt-0.5">
                               {r.level}
                             </div>
                           )}
                         </td>
 
                         {/* Col 4: المحتوى الدرس */}
-                        <td className="border-l-2 border-[#0284c7] border-b border-dashed border-[#7dd3fc] px-2.5 py-2 text-right align-top leading-relaxed">
+                        <td className="border-l-[1.5px] border-[#0284c7] border-b border-dashed border-[#7dd3fc] px-2 py-1 text-right align-top leading-[1.45]">
                           {r.note && r.note.includes('مخبري') && (
-                            <div className="mb-1">
-                              <span className="inline-block bg-emerald-100 text-emerald-800 border border-emerald-300 px-1.5 py-0.5 rounded text-[9.5px] font-bold">
+                            <div className="mb-0.5">
+                              <span className="inline-block bg-emerald-100 text-emerald-800 border border-emerald-300 px-1.5 py-0 rounded text-[8.5px] font-bold">
                                 عمل مخبري (أفواج)
                               </span>
                             </div>
                           )}
                           <div
-                            className="text-[10.5px] text-zinc-900 leading-normal outline-none focus:bg-sky-50/80 focus:p-1 focus:rounded transition cursor-text"
-                            contentEditable="plaintext-only"
+                            className={`text-[10px] ${hwActive ? 'hw-scaled-body hw-ruled-paper' : ''} text-zinc-900 leading-[1.45] outline-none focus:bg-sky-50/80 focus:p-0.5 focus:rounded transition cursor-text whitespace-pre-line`}
+                            style={hwActive ? { color: hwStyle.palette.bodyBlack } : undefined}
+                            contentEditable={(r as any).__isSplitChunk ? false : 'plaintext-only'}
                             suppressContentEditableWarning
+                            title={(r as any).__isSplitChunk ? 'حصة ممتدة عبر صفحتين — عدّلها من الجدول المصدر' : undefined}
                             onFocus={(e) => { e.currentTarget.dataset.originalText = e.currentTarget.innerText.trim(); }}
                             onBlur={(e) => {
+                              if ((r as any).__isSplitChunk) return;
                               const val = e.currentTarget.innerText.trim();
                               if (onUpdateRow && val !== e.currentTarget.dataset.originalText) {
                                 onUpdateRow(r.id, { content: val, manualContent: val });
@@ -440,31 +461,31 @@ export const DailyLogSheetTemplate: React.FC<DailyLogSheetProps> = ({
 
                         {/* Col 5: الملاحظات */}
                         <td
-                          className="border-b border-dashed border-[#7dd3fc] px-1.5 py-2 text-right align-top text-[10px] text-zinc-800 outline-none focus:bg-sky-50/80 focus:p-1 focus:rounded transition cursor-text"
-                          contentEditable="plaintext-only"
+                          className={`border-b border-dashed border-[#7dd3fc] px-1.5 py-1 text-right align-top text-[9.5px] leading-[1.4] ${hwActive ? 'hw-scaled-body hw-ruled-paper' : ''} text-zinc-800 outline-none focus:bg-sky-50/80 focus:p-0.5 focus:rounded transition cursor-text whitespace-pre-line`}
+                          contentEditable={(r as any).__isSplitChunk ? false : 'plaintext-only'}
                           suppressContentEditableWarning
                           onFocus={(e) => { e.currentTarget.dataset.originalText = e.currentTarget.innerText.trim(); }}
                           onBlur={(e) => {
+                            if ((r as any).__isSplitChunk) return;
                             const val = e.currentTarget.innerText.trim();
                             if (onUpdateRow && val !== e.currentTarget.dataset.originalText) {
                               onUpdateRow(r.id, { note: val });
                             }
                           }}
-                        >
-                          {r.note || ''}
-                        </td>
+                          dangerouslySetInnerHTML={{ __html: noteHtml }}
+                        />
                       </tr>
                     </React.Fragment>
                   );
                 })}
 
-                {/* Empty dashed rows filling up remainder of page like notebook paper */}
+                {/* Empty dashed rows filling up remaining available A4 vertical space */}
                 {Array.from({ length: emptyRowsCount }).map((_, emptyIdx) => (
                   <tr key={`empty-line-${emptyIdx}`} className="bg-white">
-                    <td className="border-l-2 border-[#0284c7] border-b border-dashed border-[#7dd3fc] h-[34px]" />
-                    <td className="border-l-2 border-[#0284c7] border-b border-dashed border-[#7dd3fc]" />
-                    <td className="border-l-2 border-[#0284c7] border-b border-dashed border-[#7dd3fc]" />
-                    <td className="border-l-2 border-[#0284c7] border-b border-dashed border-[#7dd3fc]" />
+                    <td className="border-l-[1.5px] border-[#0284c7] border-b border-dashed border-[#7dd3fc] h-[27px]" />
+                    <td className="border-l-[1.5px] border-[#0284c7] border-b border-dashed border-[#7dd3fc]" />
+                    <td className="border-l-[1.5px] border-[#0284c7] border-b border-dashed border-[#7dd3fc]" />
+                    <td className="border-l-[1.5px] border-[#0284c7] border-b border-dashed border-[#7dd3fc]" />
                     <td className="border-b border-dashed border-[#7dd3fc]" />
                   </tr>
                 ))}
@@ -474,43 +495,43 @@ export const DailyLogSheetTemplate: React.FC<DailyLogSheetProps> = ({
         </div>
 
         {/* BOTTOM SECTION WITH ORNAMENT AND SIGNATURES */}
-        <div className="mt-auto pt-2">
+        <div className="mt-auto pt-1 shrink-0 break-inside-avoid">
           {/* Ornamental Center Divider */}
-          <div className="flex items-center justify-between px-2">
-            <CornerLeaves flip={false} />
-            <div className="flex-1 flex items-center justify-center gap-2 px-4">
-              <span className="h-[2px] flex-1 bg-gradient-to-r from-transparent to-[#0284c7]" />
-              <span className="w-2.5 h-2.5 rotate-45 bg-[#0284c7]" />
-              <span className="h-[2px] flex-1 bg-gradient-to-l from-transparent to-[#0284c7]" />
+          <div className="flex items-center justify-between px-1">
+            <CornerLeaves flip={false} compact />
+            <div className="flex-1 flex items-center justify-center gap-2 px-3">
+              <span className="h-[1.5px] flex-1 bg-gradient-to-r from-transparent to-[#0284c7]" />
+              <span className="w-2 h-2 rotate-45 bg-[#0284c7]" />
+              <span className="h-[1.5px] flex-1 bg-gradient-to-l from-transparent to-[#0284c7]" />
             </div>
-            <CornerLeaves flip={true} />
+            <CornerLeaves flip={true} compact />
           </div>
 
           {/* Official Signatures Row */}
-          <div className="mt-1 px-4 py-2 border-t border-b border-[#bae6fd] bg-[#f8fafc] grid grid-cols-4 gap-2 text-[10.5px]">
+          <div className="mt-0.5 px-3 py-1 border-t border-b border-[#bae6fd] bg-[#f8fafc] grid grid-cols-4 gap-2 text-[9.5px] items-center">
             <div className="text-center">
               <div className="font-extrabold text-zinc-900">توقيع الأستاذ(ة)</div>
-              <div className="mt-4 border-t border-dashed border-zinc-400 h-6" />
+              <div className="mt-3 border-t border-dashed border-zinc-400 h-4" />
             </div>
             <div className="text-center relative">
               <div className="font-extrabold text-zinc-900">ختم الأستاذ(ة)</div>
-              <div className="mt-1 flex justify-center">
-                <TeacherOfficialStamp config={config} size="sm" />
+              <div className="mt-0.5 flex justify-center">
+                <TeacherOfficialStamp config={config} size="sm" sizeMm={15} />
               </div>
             </div>
             <div className="text-center">
               <div className="font-extrabold text-zinc-900">تأشيرة السيد المدير</div>
-              <div className="mt-4 border-t border-dashed border-zinc-400 h-6" />
+              <div className="mt-3 border-t border-dashed border-zinc-400 h-4" />
             </div>
             <div className="text-center">
               <div className="font-extrabold text-zinc-900">تأشيرة السيد المفتش</div>
-              <div className="mt-4 border-t border-dashed border-zinc-400 h-6" />
+              <div className="mt-3 border-t border-dashed border-zinc-400 h-4" />
             </div>
           </div>
 
           {/* Page Counter Badge */}
-          <div className="flex items-center justify-center pt-2">
-            <span className="bg-[#0369a1] text-white px-4 py-0.5 rounded-full font-black text-[10px] shadow-2xs">
+          <div className="flex items-center justify-center pt-1">
+            <span className="bg-[#0369a1] text-white px-3.5 py-0.5 rounded-full font-black text-[9.5px] shadow-2xs">
               صفحة {pageIndex + 1} من {totalPages} — 🇩🇿
             </span>
           </div>

@@ -1,7 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 import { X, Printer, Download } from 'lucide-react';
 import { LessonMemo, MemoConfig } from '../types';
-import { MemoSheet } from './MemoSheet';
+import { useHandwritingStyle } from '../hooks/useHandwritingStyle';
+import { HANDWRITING_FONTS, isHandwritingActiveFor } from '../services/handwritingStyle';
 
 interface PreviewModalProps {
   isOpen: boolean;
@@ -19,13 +20,17 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
   onClose,
   lesson,
   config,
-  activeActivities,
   onPrint,
   onExportWord,
   onDirectPrint,
 }) => {
   
   const previewRef = useRef<HTMLDivElement>(null);
+  const { settings: hwStyle } = useHandwritingStyle();
+  const hwActive = isHandwritingActiveFor('memos', hwStyle);
+  const previewFont = hwActive
+    ? (HANDWRITING_FONTS[hwStyle.fontId] || HANDWRITING_FONTS.playpen).cssFamily
+    : HANDWRITING_FONTS.cairo.cssFamily;
 
   useEffect(() => {
     if (isOpen && previewRef.current) {
@@ -130,7 +135,11 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
         <div className="p-4 md:p-8 overflow-y-auto bg-gray-100 flex-1">
           <div className="shadow-lg mx-auto max-w-[900px]">
             
-            <div ref={previewRef} className="bg-white text-gray-900 shadow-xl rounded-sm mx-auto p-7 md:p-9 max-w-[960px] border border-gray-300 font-sans leading-relaxed text-[13.5px]">
+            <div
+              ref={previewRef}
+              className={`${hwActive ? 'hw-notebook-scope' : ''} bg-white text-gray-900 shadow-xl rounded-sm mx-auto p-7 md:p-9 max-w-[960px] border border-gray-300 leading-relaxed text-[13.5px]`}
+              style={{ fontFamily: previewFont }}
+            >
               {/* Cloned content will be injected here */}
             </div>
 

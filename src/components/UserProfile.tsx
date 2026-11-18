@@ -36,11 +36,14 @@ export const UserProfile: React.FC = () => {
 
   return (
     <button
+      type="button"
       onClick={signIn}
-      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 text-white text-[12px] font-black hover:bg-blue-700 shadow-xs transition cursor-pointer"
+      title="تسجيل الدخول بالمزامنة السحابية"
+      className="inline-flex items-center gap-1.5 px-3 h-10 rounded-xl bg-sky-700 text-white text-xs font-bold hover:bg-sky-800 shadow-xs transition cursor-pointer whitespace-nowrap shrink-0"
     >
-      <LogIn className="w-4 h-4" />
-      <span>تسجيل الدخول بالمزامنة السحابية</span>
+      <LogIn className="w-4 h-4" aria-hidden="true" />
+      <span className="hidden sm:inline">تسجيل الدخول</span>
+      <span className="sm:hidden">دخول</span>
     </button>
   );
 };

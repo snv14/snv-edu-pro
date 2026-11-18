@@ -87,19 +87,25 @@ export const TeacherOfficialStamp: React.FC<TeacherOfficialStampProps> = ({
   const topArcId = `top-arc-${size}-${stampInstanceId}`;
   const bottomArcId = `bottom-arc-${size}-${stampInstanceId}`;
 
+  const wrapperStyle = naturalStyle ?? { width: dimensions.width, height: dimensions.height };
+
   return (
     <div
       className={`inline-block select-none transform -rotate-3 transition-transform hover:rotate-0 ${className}`}
-      style={{ width: dimensions.width, height: dimensions.height }}
+      style={wrapperStyle}
       title={`الختم الرقمي للأستاذ: ${teacherName}`}
     >
       <svg
-        width={dimensions.width}
-        height={dimensions.height}
+        width={naturalStyle ? '100%' : dimensions.width}
+        height={naturalStyle ? '100%' : dimensions.height}
         viewBox={`0 0 ${dimensions.width} ${dimensions.height}`}
-        className="overflow-visible"
+        className="overflow-visible block"
         xmlns="http://www.w3.org/2000/svg"
-        style={{ width: `${dimensions.width}px`, height: `${dimensions.height}px`, filter: 'drop-shadow(0px 1px 2px rgba(0,0,0,0.12))' }}
+        style={
+          naturalStyle
+            ? { width: '100%', height: '100%', filter: 'drop-shadow(0px 1px 2px rgba(0,0,0,0.12))' }
+            : { width: `${dimensions.width}px`, height: `${dimensions.height}px`, filter: 'drop-shadow(0px 1px 2px rgba(0,0,0,0.12))' }
+        }
       >
         <defs>
           {/* Top text path */}

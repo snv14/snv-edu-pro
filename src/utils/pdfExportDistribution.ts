@@ -1,5 +1,11 @@
 import { jsPDF } from "jspdf";
 import { safeHtml2Canvas, sanitizeOklchForHtml2Canvas } from "./html2canvasSanitizer";
+import {
+  applyHandwritingCssVars,
+  getEffectiveExportFontFamily,
+  isHandwritingActiveFor,
+  loadHandwritingSettings,
+} from "../services/handwritingStyle";
 
 export type DistributionOrientation = "portrait" | "landscape";
 
@@ -22,6 +28,10 @@ export const generateDistributionPdf = async (
 ): Promise<void> => {
   const validElements = pageElements.filter(el => el && el.childElementCount > 0);
   if (!validElements.length) throw new Error("لا توجد صفحات صالحة للتصدير");
+  const hwStyle = loadHandwritingSettings();
+  const hwActive = isHandwritingActiveFor("general", hwStyle);
+  const exportFont = getEffectiveExportFontFamily("pdf", hwStyle, "general");
+  applyHandwritingCssVars(hwStyle);
   if (document.fonts?.ready) await document.fonts.ready;
 
   const landscape = orientation === "landscape";
@@ -50,7 +60,8 @@ export const generateDistributionPdf = async (
     page.style.background = "#ffffff";
     page.style.backdropFilter = "none";
     page.style.setProperty("-webkit-backdrop-filter", "none");
-    page.style.setProperty("font-family", "Cairo, Tajawal, 'Noto Sans Arabic', 'Segoe UI', Tahoma, Arial, sans-serif");
+    page.style.setProperty("font-family", exportFont);
+    if (hwActive) page.classList.add("hw-notebook-scope");
     page.style.setProperty("-webkit-print-color-adjust", "exact");
     page.style.setProperty("print-color-adjust", "exact");
 
@@ -70,7 +81,7 @@ export const generateDistributionPdf = async (
     host.style.pointerEvents = "none";
     host.style.opacity = "1";
     host.style.direction = "rtl";
-    host.style.fontFamily = "Cairo, Tajawal, 'Noto Sans Arabic', 'Segoe UI', Tahoma, Arial, sans-serif";
+    host.style.fontFamily = exportFont;
     host.appendChild(page);
     document.body.appendChild(host);
 

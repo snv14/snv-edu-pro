@@ -1,5 +1,12 @@
 import { jsPDF } from "jspdf";
 import { safeHtml2Canvas, sanitizeOklchForHtml2Canvas } from "./html2canvasSanitizer";
+import {
+  applyHandwritingCssVars,
+  getEffectiveExportFontFamily,
+  isHandwritingActiveFor,
+  loadHandwritingSettings,
+  type HandwritingStyleSettings,
+} from "../services/handwritingStyle";
 
 export type LogbookOrientation = "portrait" | "landscape";
 
@@ -16,14 +23,31 @@ const waitForImages = async (root: HTMLElement): Promise<void> => {
 };
 
 
-const preparePageForExport = (source: HTMLElement, orientation: LogbookOrientation): { page: HTMLElement; cleanup: () => void } => {
+const preparePageForExport = (
+  source: HTMLElement,
+  orientation: LogbookOrientation,
+  hwStyle: HandwritingStyleSettings
+): { page: HTMLElement; cleanup: () => void } => {
+  const hwActive = isHandwritingActiveFor("logbook", hwStyle);
+  const exportFont = getEffectiveExportFontFamily("pdf", hwStyle, "logbook");
+
   const page = source.cloneNode(true) as HTMLElement;
   page.classList.add("export-clean-page");
+  if (hwActive) {
+    page.classList.add("hw-notebook-scope");
+  }
   page.style.boxShadow = "none";
   page.style.margin = "0";
   page.style.transform = "none";
   page.style.backgroundColor = "#ffffff";
-  page.style.fontFamily = "'Tajawal', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+  page.style.fontFamily = exportFont;
+  page.style.setProperty("--hw-font", exportFont);
+  page.style.setProperty("--hw-blue", hwStyle.palette.titleBlue);
+  page.style.setProperty("--hw-red", hwStyle.palette.subRed);
+  page.style.setProperty("--hw-green", hwStyle.palette.defGreen);
+  page.style.setProperty("--hw-black", hwStyle.palette.bodyBlack);
+  page.style.setProperty("--hw-purple", hwStyle.palette.termPurple);
+  page.style.setProperty("--hw-orange", hwStyle.palette.noteOrange);
   page.style.direction = "rtl";
   page.style.color = "#18181b";
 
@@ -64,7 +88,7 @@ const preparePageForExport = (source: HTMLElement, orientation: LogbookOrientati
   host.style.pointerEvents = "none";
   host.style.opacity = "1";
   host.style.direction = "rtl";
-  host.style.fontFamily = "'Tajawal', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+  host.style.fontFamily = exportFont;
   host.style.color = "#18181b";
   host.style.display = "flex";
   host.style.flexDirection = "column";
@@ -86,6 +110,8 @@ export const generatePreviewMatchPdf = async (
   onProgress?: (current: number, total: number) => void
 ): Promise<void> => {
   if (!pageElements.length) throw new Error("لا توجد صفحات للمعاينة");
+  const hwStyle = loadHandwritingSettings();
+  applyHandwritingCssVars(hwStyle);
   if (document.fonts?.ready) await document.fonts.ready;
   await Promise.all(pageElements.map((page) => waitForImages(page)));
 
@@ -111,7 +137,7 @@ export const generatePreviewMatchPdf = async (
         onProgress(index + 1, pageElements.length);
       }
       const element = pageElements[index];
-      const prepared = preparePageForExport(element, orientation);
+      const prepared = preparePageForExport(element, orientation, hwStyle);
       try {
         await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 

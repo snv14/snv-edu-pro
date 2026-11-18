@@ -1,30 +1,25 @@
 import React, { useState } from 'react';
 import {
-  User,
-  School,
-  Building2,
-  Calendar,
-  Award,
+  Settings,
+  GraduationCap,
   Stamp,
   Save,
   RotateCcw,
   CheckCircle2,
   Upload,
   Trash2,
-  FileCheck2,
-  Sparkles,
   ShieldCheck,
-  Clock,
-  Layers,
-  GraduationCap,
-  Camera,
   Database,
   AlertTriangle,
+  PenTool,
 } from 'lucide-react';
 import { MemoConfig } from '../types';
 import { TeacherOfficialStamp } from './TeacherOfficialStamp';
 import { getDesignerPhoto, saveDesignerPhoto, resetDesignerPhoto } from '../utils/designerPhoto';
 import { getFirebaseConfigStatus } from '../firebase';
+import { useHandwritingStyle } from '../hooks/useHandwritingStyle';
+import { HANDWRITING_FONTS, PEN_ROLE_META, PenRole } from '../services/handwritingStyle';
+import { HandwritingStylePanel } from './HandwritingStylePanel';
 
 interface AccountSettingsProps {
   config: MemoConfig;
@@ -40,8 +35,10 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
   const [formData, setFormData] = useState<MemoConfig>({ ...config });
   const [stampColor, setStampColor] = useState<'blue' | 'purple' | 'red' | 'teal'>('blue');
   const [isSaved, setIsSaved] = useState(false);
+  const [isHwPanelOpen, setIsHwPanelOpen] = useState(false);
   const [designerPhoto, setDesignerPhoto] = useState<string>(() => getDesignerPhoto());
   const fbStatus = React.useMemo(() => getFirebaseConfigStatus(), []);
+  const { settings: hwStyle, resetToOriginal, restoreDefaultHandwriting } = useHandwritingStyle();
 
   React.useEffect(() => {
     const handleUpdated = (e: any) => {
@@ -149,35 +146,33 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto py-6 px-4" dir="rtl">
+    <div className="w-full max-w-4xl mx-auto py-4 px-3 sm:px-4" dir="rtl">
       {/* Top Banner */}
-      <div className="bg-white rounded-3xl border border-gray-200 p-6 mb-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div className="w-13 h-13 rounded-2xl bg-gradient-to-br from-teal-700 to-emerald-800 text-white flex items-center justify-center shadow-md">
-            <User className="w-6 h-6" />
+      <div className="bg-white rounded-2xl border border-slate-200 p-4 mb-4 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-teal-700 to-emerald-800 text-white flex items-center justify-center shadow-xs shrink-0">
+            <Settings className="w-5 h-5" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-lg font-black text-gray-900">
-                إعدادات حساب الأستاذ والهوية البيداغوجية
-              </h2>
-            </div>
-            <p className="text-[12.5px] text-gray-500 mt-0.5">
-              تُنقل هذه المعلومات والختم الرقمي تلقائياً إلى جميع المذكرات، تدرج التعلمات، والدفتر اليومي
+            <h2 className="text-base sm:text-lg font-extrabold text-slate-900">
+              إعدادات الحساب والهوية البيداغوجية
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              تُنقل هذه المعلومات والختم تلقائياً إلى المذكرات والتدرج والدفتر اليومي
             </p>
           </div>
         </div>
 
-        {/* Privacy Note Badge */}
-        <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-900 px-3.5 py-2 rounded-2xl text-[11.5px] font-bold">
+        {/* Privacy Note */}
+        <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-900 px-3 py-1.5 rounded-xl text-[11.5px] font-bold">
           <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-          <span>حفظ محلي آمن في الجلسة — تُمسح البيانات تلقائياً بعد الخروج</span>
+          <span>حفظ محلي آمن للجلسة مع دعم المزامنة السحابية</span>
         </div>
       </div>
 
-      <form onSubmit={handleSave} className="space-y-6">
-        {/* 1. Main Teacher & School Info (Simplified) */}
-        <div className="bg-white rounded-3xl border border-gray-200 p-6 shadow-xs space-y-5">
+      <form onSubmit={handleSave} className="space-y-4">
+        {/* 1. Main Teacher & School Info */}
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-xs space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-gray-100">
             <div className="flex items-center gap-2">
               <GraduationCap className="w-5 h-5 text-teal-700" />
@@ -350,63 +345,57 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
         </div>
 
         {/* 2. Auto-Generated Official Stamp Section */}
-        <div className="bg-white rounded-3xl border border-gray-200 p-6 shadow-xs space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-xs space-y-4">
+          <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
             <div className="flex items-center gap-2">
-              <Stamp className="w-5 h-5 text-teal-700" />
+              <Stamp className="w-5 h-5 text-teal-700 shrink-0" />
               <div>
-                <h3 className="font-extrabold text-[15px] text-gray-900">
-                  توليد ختم وتوقيع الأستاذ آلياً
+                <h3 className="font-extrabold text-[15px] text-slate-900">
+                  الختم الرسمي وتوقيع الأستاذ
                 </h3>
-                <p className="text-[11.5px] text-gray-500">
-                  ختم رقمي رسمي يوضع تلقائياً في أسفل المذكرات، تدرج التعلمات، والدفتر اليومي
+                <p className="text-[11.5px] text-slate-500">
+                  يوضع تلقائياً في أسفل المذكرات، التدرج السنوي، والدفتر اليومي
                 </p>
               </div>
             </div>
-            <span className="bg-teal-100 text-teal-800 text-[11px] font-black px-2.5 py-0.5 rounded-full">
-              توليد آلي
-            </span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
             {/* Auto Stamp Preview */}
-            <div className="bg-slate-50 border border-dashed border-slate-300 rounded-2xl p-4 flex flex-col items-center justify-center text-center">
-              <div className="p-3 bg-white rounded-2xl shadow-xs border border-gray-100 mb-2">
+            <div className="bg-slate-50 border border-dashed border-slate-300 rounded-2xl p-3.5 flex flex-col items-center justify-center text-center">
+              <div className="p-2.5 bg-white rounded-xl shadow-xs border border-slate-100 mb-2">
                 <TeacherOfficialStamp
                   config={formData}
                   size="md"
                   color={stampColor}
                 />
               </div>
-              <div className="text-[11.5px] font-bold text-gray-700">
-                معاينة الختم المولد آلياً باسم: <span className="text-teal-800">{formData.teacherName || ''}</span>
+              <div className="text-[11.5px] font-bold text-slate-700">
+                معاينة الختم باسم: <span className="text-teal-800">{formData.teacherName || '—'}</span>
               </div>
-              <span className="text-[10.5px] text-gray-400 mt-0.5">
-                يتغير نص الختم فورياً عند تعديل اسم الأستاذ أو المؤسسة
-              </span>
             </div>
 
             {/* Stamp Options & Custom Upload */}
-            <div className="space-y-4">
+            <div className="space-y-3">
               <div>
-                <label className="block text-[12px] font-bold text-gray-700 mb-2">
+                <label className="block text-xs font-bold text-slate-700 mb-2">
                   لون حبر الختم المولد:
                 </label>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   {[
                     { id: 'blue', label: 'أزرق رسمي', bg: 'bg-blue-600' },
                     { id: 'teal', label: 'أخضر مائي', bg: 'bg-teal-700' },
-                    { id: 'purple', label: 'بنفسجي مدرسي', bg: 'bg-purple-700' },
+                    { id: 'purple', label: 'بنفسجي', bg: 'bg-purple-700' },
                     { id: 'red', label: 'عنابي', bg: 'bg-rose-700' },
                   ].map((c) => (
                     <button
                       key={c.id}
                       type="button"
                       onClick={() => setStampColor(c.id as any)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[11.5px] font-bold transition cursor-pointer ${
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[11.5px] font-bold transition cursor-pointer whitespace-nowrap ${
                         stampColor === c.id
-                          ? 'border-gray-900 bg-gray-900 text-white'
-                          : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                          ? 'border-slate-900 bg-slate-900 text-white'
+                          : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
                       }`}
                     >
                       <span className={`w-2.5 h-2.5 rounded-full ${c.bg}`} />
@@ -448,45 +437,27 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
           </div>
         </div>
 
-        {/* 3. Designer & Teacher Portrait Photo Section */}
-        <div className="bg-white rounded-3xl border border-gray-200 p-6 shadow-xs space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-            <div className="flex items-center gap-2">
-              <Camera className="w-5 h-5 text-emerald-700" />
-              <h3 className="font-black text-gray-900 text-[15px]">
-                صورة المصمم والملف التعريفي (الأستاذ بغداد الطيب)
-              </h3>
-            </div>
-            <span className="text-[11.5px] font-bold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
-              ملامحك الحقيقية 100%
-            </span>
-          </div>
-
-          <div className="flex flex-col sm:flex-row items-center gap-6 p-5 rounded-3xl bg-slate-50/80 border border-slate-200/80">
-            <div className="relative w-32 h-32 sm:w-36 sm:h-36 rounded-3xl border-4 border-emerald-600 shadow-xl ring-4 ring-emerald-200/70 bg-white overflow-hidden shrink-0 group">
-              <img
-                src={designerPhoto}
-                alt="صورة المصمم الأصلية"
-                className="w-full h-full object-cover"
-                referrerPolicy="no-referrer"
-              />
-            </div>
-
-            <div className="flex-1 space-y-2 text-center sm:text-right">
-              <h4 className="font-black text-gray-900 text-[15px]">
-                تثبيت صورتك الأصلية بملامحك الدقيقة
-              </h4>
-              <p className="text-[12.5px] text-gray-600 leading-relaxed font-medium">
-                قم برفع صورتك الحقيقية بدون أي توليد أو تعديل آلي لتظهر ملامح وجهك وعينيك الأصلية 100% في الواجهة الرئيسية، الشريط العلوي، القائمة الجانبية، وبطاقة التعريف.
-              </p>
-
-              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-1">
+        {/* 3. Compact Designer Portrait & Cloud Status */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs flex items-center gap-4">
+            <img
+              src={designerPhoto}
+              alt="صورة المصمم الأصلية"
+              className="w-16 h-16 rounded-2xl border-2 border-emerald-600 object-cover shrink-0"
+              referrerPolicy="no-referrer"
+            />
+            <div className="flex-1 min-w-0 space-y-2">
+              <div>
+                <h3 className="font-extrabold text-slate-900 text-sm">صورة مصمم المنصة</h3>
+                <p className="text-[11.5px] text-slate-500">الأستاذ بغداد الطيب</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
                 <label
                   htmlFor="settings-designer-photo-upload"
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-[12.5px] font-black cursor-pointer shadow-xs transition"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-[11.5px] font-bold cursor-pointer transition"
                 >
-                  <Upload className="w-4 h-4" />
-                  <span>رفع صورتك الأصلية الآن</span>
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>تحديث الصورة</span>
                   <input
                     type="file"
                     id="settings-designer-photo-upload"
@@ -495,59 +466,119 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
                     onChange={handleDesignerPhotoUpload}
                   />
                 </label>
-
                 <button
                   type="button"
                   onClick={handleResetDesignerPhoto}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-300 text-gray-700 text-[12px] font-bold hover:bg-white transition cursor-pointer"
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-700 text-[11.5px] font-bold hover:bg-slate-50 transition cursor-pointer"
                 >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  <span>استعادة الافتراضي</span>
+                  <RotateCcw className="w-3 h-3" />
+                  <span>استعادة</span>
                 </button>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Firebase & Cloud Status Card */}
-        <div className="bg-white rounded-3xl border border-gray-200 p-6 shadow-xs">
-          <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-4">
-            <div className="flex items-center gap-2">
-              <Database className="w-5 h-5 text-emerald-700" />
-              <h3 className="font-black text-gray-900 text-[15px]">
-                حالة الاتصال السحابي وقاعدة البيانات (Firebase)
-              </h3>
+          <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Database className="w-4 h-4 text-emerald-700 shrink-0" />
+                <h3 className="font-extrabold text-slate-900 text-sm">
+                  المزامنة السحابية (Firebase)
+                </h3>
+              </div>
+              {fbStatus.isValid ? (
+                <span className="text-[11px] font-bold text-emerald-700 flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  متصل
+                </span>
+              ) : (
+                <span className="text-[11px] font-bold text-amber-700 flex items-center gap-1">
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  تخزين محلي
+                </span>
+              )}
             </div>
-            {fbStatus.isValid ? (
-              <span className="text-[11.5px] font-bold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200 flex items-center gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                متصل وجاهز للمزامنة السحابية
-              </span>
-            ) : (
-              <span className="text-[11.5px] font-bold text-amber-700 bg-amber-50 px-3 py-1 rounded-full border border-amber-200 flex items-center gap-1.5">
-                <AlertTriangle className="w-3.5 h-3.5" />
-                تخزين محلي نشط (المزامنة السحابية اختيارية)
-              </span>
-            )}
-          </div>
 
-          <p className="text-[12.5px] text-gray-600 leading-relaxed font-medium">
-            تعمل المنصة تلقائياً بالتخزين المحلي الآمن داخل المتصفح (Local Storage) لجميع البيانات (الدفتر اليومي، التدرج، والمذكرات).
+          <p className="text-xs text-slate-600 leading-relaxed">
+            تعمل المنصة بالتخزين المحلي الآمن في المتصفح لجميع البيانات.
             {fbStatus.isValid ? (
               <span className="text-emerald-700 font-bold block mt-1">
-                تم تهيئة متغيرات Firebase بنجاح. بياناتك تتم مزامنتها تلقائياً عبر السحابة.
+                تم تهيئة Firebase بنجاح للمزامنة التلقائية عبر السحابة.
               </span>
             ) : (
-              <span className="text-zinc-600 block mt-1">
-                لتفعيل المزامنة السحابية عبر أجهزة متعددة، أضف مفاتيح Firebase في ملف البيئة (<code className="bg-zinc-100 px-1 py-0.5 rounded text-[11px] font-mono">.env.local</code>):{' '}
-                <span className="text-amber-700 font-mono text-[11px] font-bold">{fbStatus.missingVars.join('، ')}</span>
+              <span className="text-slate-500 block mt-1">
+                المتغيرات الناقصة للمزامنة السحابية: <span className="text-amber-700 font-mono text-[11px] font-bold">{fbStatus.missingVars.join('، ')}</span>
               </span>
             )}
           </p>
+          </div>
+        </div>
+
+        {/* 4. Handwriting & 6-Pen Notebook Style Card */}
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2">
+              <PenTool className="w-5 h-5 text-blue-700 shrink-0" />
+              <h3 className="font-extrabold text-[15px] text-slate-900">
+                أسلوب الكتابة اليدوية والأقلام الملونة في الكراس
+              </h3>
+              <span className={`px-2 py-0.5 rounded-full text-[10.5px] font-bold ${hwStyle.enabled ? 'bg-blue-50 text-blue-800 border border-blue-200' : 'bg-slate-100 text-slate-600'}`}>
+                {hwStyle.enabled ? `مفعّل (${HANDWRITING_FONTS[hwStyle.fontId]?.label || hwStyle.fontId})` : 'التنسيق الأصلي'}
+              </span>
+            </div>
+            <p className="text-xs text-slate-500">
+              تخصيص خط اليد الطبيعي وألوان الأقلام الستة (الأزرق، الأحمر، الأخضر، الأسود، البنفسجي، البرتقالي) عبر المذكرات، الدفتر اليومي، التصدير PDF وWord.
+            </p>
+            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+              {(['titleBlue', 'subRed', 'defGreen', 'bodyBlack', 'termPurple', 'noteOrange'] as PenRole[]).map((role) => (
+                <span
+                  key={role}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border border-slate-200 bg-slate-50 text-[10.5px] font-bold text-slate-700"
+                >
+                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: hwStyle.palette[role] }} />
+                  {PEN_ROLE_META[role].shortLabel}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setIsHwPanelOpen(true)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-700 hover:bg-blue-800 text-white text-xs font-black transition cursor-pointer shadow-xs"
+            >
+              <PenTool className="w-3.5 h-3.5" />
+              <span>تخصيص الخط والأقلام</span>
+            </button>
+            {hwStyle.enabled ? (
+              <button
+                type="button"
+                onClick={() => {
+                  resetToOriginal();
+                  showToast('تمت استعادة التنسيق الأصلي للمنصة');
+                }}
+                className="inline-flex items-center gap-1 px-3 py-2 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-bold transition cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>التنسيق الأصلي</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  restoreDefaultHandwriting();
+                  showToast('تم تفعيل أسلوب الكتابة اليدوية بالأقلام الستة');
+                }}
+                className="inline-flex items-center gap-1 px-3 py-2 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 text-xs font-bold transition cursor-pointer"
+              >
+                <span>تفعيل خط اليد</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Action Bar */}
-        <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-3xl border border-gray-200 shadow-xs">
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-slate-200 shadow-xs">
           <button
             type="button"
             onClick={handleResetSession}
@@ -574,6 +605,12 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
           </div>
         </div>
       </form>
+
+      <HandwritingStylePanel
+        isOpen={isHwPanelOpen}
+        onClose={() => setIsHwPanelOpen(false)}
+        showToast={showToast}
+      />
     </div>
   );
 };

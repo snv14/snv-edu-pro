@@ -1,6 +1,13 @@
 import React from 'react';
 import { LessonMemo, MemoConfig } from '../types';
 import { TeacherOfficialStamp } from './TeacherOfficialStamp';
+import { useHandwritingStyle } from '../hooks/useHandwritingStyle';
+import {
+  HANDWRITING_FONTS,
+  HandwritingStyleSettings,
+  isHandwritingActiveFor,
+} from '../services/handwritingStyle';
+import { HandwrittenText } from './HandwrittenText';
 
 interface MemoSheetProps {
   lesson: LessonMemo | null;
@@ -58,32 +65,78 @@ const THEMES: Record<string, {
   },
 };
 
-
-const RenderTable = ({ tables, themeHex }: { tables: any[], themeHex: string }) => {
+const RenderTable = ({
+  tables,
+  themeHex,
+  hwStyle,
+  hwActive,
+}: {
+  tables: any[];
+  themeHex: string;
+  hwStyle: HandwritingStyleSettings;
+  hwActive: boolean;
+}) => {
   if (!tables || tables.length === 0) return null;
   return (
     <div className="mt-2 space-y-3">
       {tables.map((tbl, i) => (
-        <table key={i} className="w-full border-collapse border border-gray-300 text-[12px] text-center mb-2" style={{ borderColor: themeHex + '40' }}>
-          {tbl.headers && tbl.headers.length > 0 && (
-            <thead>
-              <tr style={{ backgroundColor: themeHex + '15' }}>
-                {tbl.headers.map((h: string, j: number) => (
-                  <th key={j} className="border p-1.5 font-bold" style={{ borderColor: themeHex + '40', color: '#1f2937' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
+        <div key={i} className="mb-2">
+          {tbl.table_title && (
+            <div
+              className="text-[11.5px] font-extrabold px-2.5 py-1 rounded-t border border-b-0"
+              style={{
+                borderColor: themeHex + '40',
+                backgroundColor: themeHex + '12',
+                color: hwActive ? hwStyle.palette.titleBlue : '#111827',
+              }}
+            >
+              {tbl.table_title}
+            </div>
           )}
-          <tbody>
-            {tbl.rows.map((row: string[], r: number) => (
-              <tr key={r} className="hover:bg-gray-50 bg-white">
-                {row.map((cell: string, c: number) => (
-                  <td key={c} className="border p-1.5 text-gray-800" style={{ borderColor: themeHex + '40' }}>{cell}</td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+          <table
+            className="w-full border-collapse border border-gray-300 text-[12px] text-center"
+            style={{ borderColor: themeHex + '40' }}
+          >
+            {tbl.headers && tbl.headers.length > 0 && (
+              <thead>
+                <tr style={{ backgroundColor: themeHex + '15' }}>
+                  {tbl.headers.map((h: string, j: number) => (
+                    <th
+                      key={j}
+                      className="border p-1.5 font-bold"
+                      style={{
+                        borderColor: themeHex + '40',
+                        color: hwActive ? hwStyle.palette.titleBlue : '#1f2937',
+                      }}
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+            )}
+            <tbody>
+              {tbl.rows.map((row: string[], r: number) => (
+                <tr key={r} className="hover:bg-gray-50 bg-white">
+                  {row.map((cell: string, c: number) => (
+                    <td
+                      key={c}
+                      className="border p-1.5 text-gray-800 whitespace-pre-line"
+                      style={{ borderColor: themeHex + '40' }}
+                    >
+                      <HandwrittenText
+                        text={cell}
+                        settings={hwStyle}
+                        active={hwActive}
+                        defaultRole="bodyBlack"
+                      />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       ))}
     </div>
   );
@@ -94,9 +147,15 @@ export const MemoSheet: React.FC<MemoSheetProps> = ({
   config,
   activeActivities,
   onToggleActivity,
-  onFormatChange,
   editable = true,
 }) => {
+  const { settings: hwStyle } = useHandwritingStyle();
+  const hwActive = isHandwritingActiveFor('memos', hwStyle);
+  const p = hwStyle.palette;
+  const activeFontFamily = hwActive
+    ? (HANDWRITING_FONTS[hwStyle.fontId] || HANDWRITING_FONTS.playpen).cssFamily
+    : HANDWRITING_FONTS.cairo.cssFamily;
+
   if (!lesson) {
     return (
       <div className="flex items-center justify-center min-h-[500px] text-gray-400 font-bold">
@@ -108,8 +167,10 @@ export const MemoSheet: React.FC<MemoSheetProps> = ({
   const isMergedFormat = config.memoFormat === 'merged_teacher';
   const theme = THEMES[config.level || '2am'] || THEMES['2am'];
 
-  const situationTextClass = 'text-[13.5px] font-medium text-right leading-relaxed';
-  const situationBoxClass = `p-2.5 rounded-lg border transition-all ${theme.boxBg} text-gray-900`;
+  const situationTextClass = 'text-[13.5px] font-medium text-right leading-relaxed hw-scaled-body';
+  const situationBoxClass = `p-2.5 rounded-lg border transition-all ${theme.boxBg} text-gray-900 ${
+    hwActive && hwStyle.ruledLines ? 'hw-ruled-paper' : ''
+  }`;
 
   const levelLabel =
     config.level === '4am'
@@ -120,16 +181,24 @@ export const MemoSheet: React.FC<MemoSheetProps> = ({
       ? 'السنة الثانية متوسط'
       : 'السنة الأولى متوسط';
 
+  // ألوان الأقلام الدلالية عند تفعيل أسلوب الكتابة اليدوية
+  const cTitle = hwActive ? p.titleBlue : theme.hex;
+  const cSub = hwActive ? p.subRed : '#111827';
+  const cDef = hwActive ? p.defGreen : theme.hex;
+  const cTerm = hwActive ? p.termPurple : '#111827';
+  const cNote = hwActive ? p.noteOrange : '#374151';
+
   return (
     <div
       id="memo-paper"
-      className="print-document bg-[#fffdf8]/96 backdrop-blur-[2px] text-gray-900 shadow-[0_14px_45px_rgba(20,110,100,0.10)] rounded-sm mx-auto p-3 sm:p-6 md:p-9 w-full max-w-[960px] border border-[#d8eee9] font-sans leading-relaxed text-[13.5px] print:shadow-none print:border-none print:p-0 print:m-0 print:max-w-none print:w-full box-border"
-      style={{ minHeight: '1120px' }}
+      className={`print-document ${hwActive ? 'hw-notebook-scope' : ''} bg-[#fffdf8]/96 backdrop-blur-[2px] text-gray-900 shadow-[0_14px_45px_rgba(20,110,100,0.10)] rounded-sm mx-auto p-3 sm:p-6 md:p-9 w-full max-w-[960px] border border-[#d8eee9] leading-relaxed text-[13.5px] print:shadow-none print:border-none print:p-0 print:m-0 print:max-w-none print:w-full box-border`}
+      style={{
+        minHeight: '1120px',
+        fontFamily: activeFontFamily,
+      }}
       dir="rtl"
     >
       <style>{` .editable-cell { padding: 2px; border-radius: 4px; min-height: 1.5em; white-space: pre-wrap; word-break: break-word; outline: none; } .editable-cell:hover { background-color: rgba(0,0,0,0.03); } .editable-cell:focus { outline: 1px dashed ${theme.hex}; background-color: rgba(255,255,255,0.9); } `}</style>
-      
-
 
       {/* 1. الترويسة العليا للمذكرة */}
       <div
@@ -138,7 +207,15 @@ export const MemoSheet: React.FC<MemoSheetProps> = ({
       >
         <div className="text-center font-extrabold text-[12px] text-gray-500 pb-1 mb-1.5 border-b border-gray-200">
           الجمهورية الجزائرية الديمقراطية الشعبية — وزارة التربية الوطنية
-          <span className="block text-[13px] mt-0.5" style={{ color: theme.hex }}>
+          <span
+            className="block text-[14px] mt-0.5 font-extrabold"
+            style={{
+              color: cTitle,
+              textDecoration: hwActive ? 'underline' : undefined,
+              textDecorationColor: hwActive ? cSub : undefined,
+              textUnderlineOffset: '4px',
+            }}
+          >
             {isMergedFormat
               ? 'مذكرة بيداغوجية بنشاط الأستاذ المدمج (بدون خانة نشاط المتعلم)'
               : 'مذكرة بيداغوجية لمادة علوم الطبيعة والحياة (النموذج المفصل)'}
@@ -147,12 +224,12 @@ export const MemoSheet: React.FC<MemoSheetProps> = ({
 
         <div className={`grid grid-cols-3 items-center text-center font-bold text-[13px] text-gray-800 pb-2 border-b ${theme.borderSoft}`}>
           <div className="text-right flex items-center gap-1.5">
-            <span className="font-extrabold text-[14px]" style={{ color: theme.hex }}>رقم المذكرة:</span>
+            <span className="font-extrabold text-[14px]" style={{ color: cTitle }}>رقم المذكرة:</span>
             <span className={`font-extrabold text-[15px] px-2.5 py-0.5 rounded ${theme.badgeBg}`}>
               {config.memoNumber || '01'}
             </span>
           </div>
-          <div className="font-extrabold text-[15px]" style={{ color: theme.hex }}>
+          <div className="font-extrabold text-[15px]" style={{ color: cTitle }}>
             المستوى: {levelLabel}
           </div>
           <div className="text-left font-bold">
@@ -175,9 +252,18 @@ export const MemoSheet: React.FC<MemoSheetProps> = ({
 
       {/* 2. الكفاءة الختامية */}
       {lesson.kafaaKhitamiya && (
-        <div className="mb-3.5 border border-[#cfe7e2] rounded-lg p-2.5 bg-[#f1faf7]/80 text-[12.5px]">
-          <span className="font-extrabold ml-1.5" style={{ color: theme.hex }}>الكفاءة الختامية:</span>
-          <span className="editable-cell text-gray-800 leading-snug font-medium" contentEditable="plaintext-only" suppressContentEditableWarning>{lesson.kafaaKhitamiya}</span>
+        <div className={`mb-3.5 border border-[#cfe7e2] rounded-lg p-2.5 bg-[#f1faf7]/80 text-[12.5px] ${hwActive && hwStyle.ruledLines ? 'hw-ruled-paper' : ''}`}>
+          <span className="font-extrabold ml-1.5" style={{ color: cDef, textDecoration: hwActive ? 'underline' : undefined }}>
+            الكفاءة الختامية:
+          </span>
+          <HandwrittenText
+            text={lesson.kafaaKhitamiya}
+            settings={hwStyle}
+            active={hwActive}
+            defaultRole="defGreen"
+            className="editable-cell leading-snug font-medium hw-scaled-body"
+            editable
+          />
         </div>
       )}
 
@@ -186,34 +272,76 @@ export const MemoSheet: React.FC<MemoSheetProps> = ({
         <table className="w-full text-right text-[12.5px] border-collapse">
           <tbody>
             <tr className="border-b border-gray-300">
-              <td className={`w-28 p-2 font-extrabold border-l border-gray-300 ${theme.cellHeaderBg}`}>
+              <td className={`w-28 p-2 font-extrabold border-l border-gray-300 ${theme.cellHeaderBg}`} style={{ color: cTitle }}>
                 الميدان
               </td>
-              <td className="editable-cell p-2 font-bold text-gray-900" contentEditable="plaintext-only" suppressContentEditableWarning>{lesson.midan}</td>
+              <td
+                className="editable-cell p-2 font-bold"
+                style={{ color: cTitle }}
+                contentEditable="plaintext-only"
+                suppressContentEditableWarning
+              >
+                {lesson.midan}
+              </td>
             </tr>
             <tr className="border-b border-gray-300">
-              <td className="w-28 p-2 font-extrabold border-l border-gray-300 bg-gray-50" style={{ color: theme.hex }}>
+              <td className="w-28 p-2 font-extrabold border-l border-gray-300 bg-gray-50" style={{ color: cTitle }}>
                 المقطع التعلمي
               </td>
-              <td className="editable-cell p-2 font-bold text-gray-800" contentEditable="plaintext-only" suppressContentEditableWarning>{lesson.maqta}</td>
+              <td
+                className="editable-cell p-2 font-bold"
+                style={{ color: cTitle }}
+                contentEditable="plaintext-only"
+                suppressContentEditableWarning
+              >
+                {lesson.maqta}
+              </td>
             </tr>
             <tr className="border-b border-gray-300">
-              <td className={`w-28 p-2 font-extrabold border-l border-gray-300 ${theme.cellHeaderBg}`}>
+              <td className={`w-28 p-2 font-extrabold border-l border-gray-300 ${theme.cellHeaderBg}`} style={{ color: cTitle }}>
                 المورد التعلمي
               </td>
-              <td className="editable-cell p-2 font-bold text-gray-900" contentEditable="plaintext-only" suppressContentEditableWarning>{lesson.mawrid}</td>
+              <td
+                className="editable-cell p-2 font-bold"
+                style={{ color: cTitle }}
+                contentEditable="plaintext-only"
+                suppressContentEditableWarning
+              >
+                {lesson.mawrid}
+              </td>
             </tr>
             <tr className="border-b border-gray-300">
-              <td className="w-28 p-2 font-extrabold border-l border-gray-300 bg-gray-50" style={{ color: theme.hex }}>
+              <td className="w-28 p-2 font-extrabold border-l border-gray-300 bg-gray-50" style={{ color: cSub }}>
                 تعلم المورد
               </td>
-              <td className="editable-cell p-2 font-extrabold text-[13.5px]" style={{ color: theme.hex }} contentEditable="plaintext-only" suppressContentEditableWarning>{lesson.ta3alom}</td>
+              <td
+                className="editable-cell p-2 font-extrabold text-[14px]"
+                style={{
+                  color: cTitle,
+                  textDecoration: hwActive ? 'underline' : undefined,
+                  textDecorationColor: hwActive ? cSub : undefined,
+                  textUnderlineOffset: '4px',
+                }}
+                contentEditable="plaintext-only"
+                suppressContentEditableWarning
+              >
+                {lesson.ta3alom}
+              </td>
             </tr>
             <tr>
-              <td className={`w-28 p-2 font-extrabold border-l border-gray-300 ${theme.cellHeaderBg}`}>
+              <td className={`w-28 p-2 font-extrabold border-l border-gray-300 ${theme.cellHeaderBg}`} style={{ color: cDef }}>
                 مركبة الكفاءة
               </td>
-              <td className="editable-cell p-2 text-gray-800 font-medium leading-snug" contentEditable="plaintext-only" suppressContentEditableWarning>{lesson.markaba}</td>
+              <td className="p-2 font-medium leading-snug">
+                <HandwrittenText
+                  text={lesson.markaba}
+                  settings={hwStyle}
+                  active={hwActive}
+                  defaultRole="bodyBlack"
+                  className="editable-cell hw-scaled-body block"
+                  editable
+                />
+              </td>
             </tr>
           </tbody>
         </table>
@@ -222,24 +350,37 @@ export const MemoSheet: React.FC<MemoSheetProps> = ({
       {/* 4. معايير التقويم والموارد المعرفية والوسائل */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4 text-[12.5px]">
         {/* معايير التقويم */}
-        <div className="border border-gray-300 rounded-lg p-3 bg-white">
-          <div className="font-extrabold mb-1.5 pb-1 border-b border-gray-200" style={{ color: theme.hex }}>
+        <div className={`border border-gray-300 rounded-lg p-3 bg-white ${hwActive && hwStyle.ruledLines ? 'hw-ruled-paper' : ''}`}>
+          <div className="font-extrabold mb-1.5 pb-1 border-b border-gray-200" style={{ color: cSub }}>
             معايير التقويم
           </div>
-          <div className="text-gray-700 whitespace-pre-line leading-relaxed font-medium">
-            {lesson.ma3ayirTaqwim || '• يحدد المفاهيم الأساسية\n• يحلل الظواهر العلمية بدقة\n• يقترح حلولا علمية مؤسسة'}
-          </div>
+          <HandwrittenText
+            as="div"
+            text={lesson.ma3ayirTaqwim || '• يحدد المفاهيم الأساسية\n• يحلل الظواهر العلمية بدقة\n• يقترح حلولا علمية مؤسسة'}
+            settings={hwStyle}
+            active={hwActive}
+            defaultRole="bodyBlack"
+            className="whitespace-pre-line leading-relaxed font-medium hw-scaled-body"
+          />
         </div>
 
         {/* الموارد المعرفية والمصطلحات */}
-        <div className="border border-gray-300 rounded-lg p-3 bg-white">
-          <div className="font-extrabold mb-1.5 pb-1 border-b border-gray-200" style={{ color: theme.hex }}>
+        <div className={`border border-gray-300 rounded-lg p-3 bg-white ${hwActive && hwStyle.ruledLines ? 'hw-ruled-paper' : ''}`}>
+          <div className="font-extrabold mb-1.5 pb-1 border-b border-gray-200" style={{ color: cDef }}>
             الموارد المعرفية والمصطلحات
           </div>
-          <p className="editable-cell text-gray-700 leading-relaxed font-medium mb-1.5" contentEditable="plaintext-only" suppressContentEditableWarning>{lesson.marifa}</p>
-          <div className="text-[11.5px] text-gray-600">
-            <span className="font-bold text-gray-900">المصطلحات: </span>
-            {lesson.mostalahat}
+          <HandwrittenText
+            as="p"
+            text={lesson.marifa}
+            settings={hwStyle}
+            active={hwActive}
+            defaultRole="bodyBlack"
+            className="editable-cell leading-relaxed font-medium mb-1.5 hw-scaled-body"
+            editable
+          />
+          <div className="text-[12px]" style={{ color: cTerm }}>
+            <span className="font-bold underline" style={{ color: cTerm }}>المصطلحات: </span>
+            <span className="font-bold">{lesson.mostalahat}</span>
           </div>
         </div>
       </div>
@@ -247,15 +388,15 @@ export const MemoSheet: React.FC<MemoSheetProps> = ({
       {/* شريط الوسائل والمراجع والزمن الكلي */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-2 p-2.5 mb-4 bg-[#f1faf7] border border-[#cfe7e2] rounded-lg text-[12px]">
         <div>
-          <span className="font-extrabold" style={{ color: theme.hex }}>الوسائل: </span>
+          <span className="font-extrabold" style={{ color: cNote }}>الوسائل: </span>
           <span className="editable-cell text-gray-800" contentEditable="plaintext-only" suppressContentEditableWarning>{lesson.wasail}</span>
         </div>
         <div>
-          <span className="font-extrabold" style={{ color: theme.hex }}>المراجع: </span>
+          <span className="font-extrabold" style={{ color: cNote }}>المراجع: </span>
           <span className="text-gray-800">{lesson.marajie || 'المنهاج، الوثيقة المرافقة، دليل الأستاذ'}</span>
         </div>
         <div className="text-left font-bold">
-          <span className="font-extrabold" style={{ color: theme.hex }}>الزمن الكلي: </span>
+          <span className="font-extrabold" style={{ color: cSub }}>الزمن الكلي: </span>
           <span className="text-gray-900">{lesson.zamanKoli || '6 ساعات'}</span>
         </div>
       </div>
@@ -275,7 +416,7 @@ export const MemoSheet: React.FC<MemoSheetProps> = ({
         </div>
 
         {isMergedFormat ? (
-          /* نموذج 2: المذكرة المدمجة - بدون خانة نشاط المتعلم (دمج نشاط الأستاذ والمتعلم تحت نشاط الأستاذ) */
+          /* نموذج 2: المذكرة المدمجة */
           <table className="w-full border-collapse border border-gray-300 text-[12.5px] text-right">
             <thead>
               <tr className="bg-gray-100 border-b border-gray-300 text-gray-900 font-extrabold text-center">
@@ -290,26 +431,55 @@ export const MemoSheet: React.FC<MemoSheetProps> = ({
               <tr className="bg-white">
                 <td
                   className="p-2.5 font-extrabold border-l border-gray-300 align-top text-center"
-                  style={{ color: theme.hex, backgroundColor: `${theme.hex}10` }}
+                  style={{ color: cTitle, backgroundColor: `${theme.hex}10` }}
                 >
                   وضعية الانطلاق
                 </td>
                 <td className="p-2.5 border-l border-gray-300 align-top text-gray-800 leading-relaxed">
                   <div className="mb-2">
-                    <span className="font-extrabold block mb-1 text-[13px]" style={{ color: theme.hex }}>تقديم الوضعية وطرح المشكل العلمي:</span>
-                    <div className={`editable-cell ${situationBoxClass} ${situationTextClass}`} contentEditable="plaintext-only" suppressContentEditableWarning>{lesson.wadiya}</div>
-                    <div className={`editable-cell font-bold mt-1.5 p-2 rounded border border-teal-200/50 bg-teal-50/40 ${situationTextClass}`} style={{ color: theme.hex }} contentEditable="plaintext-only" suppressContentEditableWarning>{lesson.moshkila}</div>
+                    <span className="font-extrabold block mb-1 text-[13px] underline" style={{ color: cSub }}>
+                      تقديم الوضعية وطرح المشكل العلمي:
+                    </span>
+                    <HandwrittenText
+                      as="div"
+                      text={lesson.wadiya}
+                      settings={hwStyle}
+                      active={hwActive}
+                      defaultRole="bodyBlack"
+                      className={`editable-cell ${situationBoxClass} ${situationTextClass}`}
+                      editable
+                    />
+                    <HandwrittenText
+                      as="div"
+                      text={lesson.moshkila}
+                      settings={hwStyle}
+                      active={hwActive}
+                      defaultRole="subRed"
+                      className={`editable-cell font-bold mt-1.5 p-2 rounded border border-teal-200/50 bg-teal-50/40 ${situationTextClass}`}
+                      style={{ color: cSub }}
+                      editable
+                    />
                   </div>
                   <div>
-                    <span className="font-bold text-gray-900 block mb-1 text-[12.5px]">المهمة وصياغة الفرضيات:</span>
-                    <div className={`editable-cell whitespace-pre-line ${situationBoxClass} ${situationTextClass}`} contentEditable="plaintext-only" suppressContentEditableWarning>{lesson.faradiyat}</div>
-                    <RenderTable tables={lesson.wadiyaTables || []} themeHex={theme.hex} />
+                    <span className="font-bold block mb-1 text-[12.5px] underline" style={{ color: cNote }}>
+                      المهمة وصياغة الفرضيات:
+                    </span>
+                    <HandwrittenText
+                      as="div"
+                      text={lesson.faradiyat}
+                      settings={hwStyle}
+                      active={hwActive}
+                      defaultRole="bodyBlack"
+                      className={`editable-cell whitespace-pre-line ${situationBoxClass} ${situationTextClass}`}
+                      editable
+                    />
+                    <RenderTable tables={lesson.wadiyaTables || []} themeHex={theme.hex} hwStyle={hwStyle} hwActive={hwActive} />
                   </div>
                 </td>
                 <td className="p-2.5 border-l border-gray-300 align-top text-center font-bold text-gray-700">
                   10 د
                 </td>
-                <td className="p-2.5 align-top text-center text-gray-500 text-[11px]">
+                <td className="p-2.5 align-top text-center text-[11px] font-bold" style={{ color: cNote }}>
                   جماعي
                 </td>
               </tr>
@@ -337,28 +507,56 @@ export const MemoSheet: React.FC<MemoSheetProps> = ({
                           />
                         </div>
                       )}
-                      <span className="text-[12px] font-extrabold block mb-1" style={{ color: theme.hex }}>
-    مرحلة البحث والتقصي
-  </span>
-                      <span className="text-[11px] text-gray-600 block mt-0.5">
+                      <span className="text-[12px] font-extrabold block mb-1" style={{ color: cTitle }}>
+                        مرحلة البحث والتقصي
+                      </span>
+                      <span className="text-[11px] font-bold block mt-0.5" style={{ color: cSub }}>
                         نشاط {idx + 1}
                       </span>
                     </td>
                     <td className="p-2.5 border-l border-gray-300 align-top text-gray-800 leading-relaxed">
-                      <div className="editable-cell font-extrabold mb-1.5 text-[13.5px] pb-1 border-b border-gray-200" style={{ color: theme.hex }} contentEditable="plaintext-only" suppressContentEditableWarning>{activity.title}</div>
+                      <div
+                        className="editable-cell font-extrabold mb-1.5 text-[13.5px] pb-1 border-b border-gray-200"
+                        style={{ color: cTitle }}
+                        contentEditable="plaintext-only"
+                        suppressContentEditableWarning
+                      >
+                        {activity.title}
+                      </div>
                       <div className="mb-2">
-                        <span className="font-bold text-gray-900 text-[12.5px] block mb-0.5">المهمة والتعليمات المسندة:</span>
-                        <p className="editable-cell text-gray-700 font-medium bg-gray-50/70 p-2 rounded border border-gray-200 leading-relaxed" contentEditable="plaintext-only" suppressContentEditableWarning>{activity.asila}</p>
+                        <span className="font-bold text-[12.5px] block mb-0.5 underline" style={{ color: cSub }}>
+                          المهمة والتعليمات المسندة:
+                        </span>
+                        <HandwrittenText
+                          as="p"
+                          text={activity.asila}
+                          settings={hwStyle}
+                          active={hwActive}
+                          defaultRole="bodyBlack"
+                          className={`editable-cell font-medium bg-gray-50/70 p-2 rounded border border-gray-200 leading-relaxed hw-scaled-body ${hwActive && hwStyle.ruledLines ? 'hw-ruled-paper' : ''}`}
+                          editable
+                        />
                       </div>
                       <div>
-                        <span className="font-bold text-[12.5px] block mb-0.5" style={{ color: theme.hex }}>المنتوج والاستجابة المنتظرة:</span>
-                        <p className={`editable-cell ` + `text-gray-800 font-medium p-2 rounded border leading-relaxed ${theme.boxBg}`} contentEditable="plaintext-only" suppressContentEditableWarning>{activity.ajwiba}</p>
+                        <span className="font-bold text-[12.5px] block mb-0.5 underline" style={{ color: cDef }}>
+                          المنتوج والاستجابة المنتظرة:
+                        </span>
+                        <HandwrittenText
+                          as="p"
+                          text={activity.ajwiba}
+                          settings={hwStyle}
+                          active={hwActive}
+                          defaultRole="bodyBlack"
+                          className={`editable-cell font-medium p-2 rounded border leading-relaxed hw-scaled-body ${theme.boxBg} ${hwActive && hwStyle.ruledLines ? 'hw-ruled-paper' : ''}`}
+                          editable
+                        />
+                        <RenderTable tables={activity.tables || []} themeHex={theme.hex} hwStyle={hwStyle} hwActive={hwActive} />
                       </div>
                     </td>
                     <td className="p-2.5 border-l border-gray-300 align-top text-center font-bold text-gray-700">
                       {activity.zaman || '25 د'}
                     </td>
-                    <td className="p-2.5 align-top text-center text-gray-500 text-[11px]">
+                    <td className="p-2.5 align-top text-center text-[11px] font-bold" style={{ color: cNote }}>
                       {activity.mola7adha || 'أفواج'}
                     </td>
                   </tr>
@@ -369,25 +567,33 @@ export const MemoSheet: React.FC<MemoSheetProps> = ({
               <tr className="bg-white">
                 <td
                   className="p-2.5 font-extrabold border-l border-gray-300 align-top text-center"
-                  style={{ color: theme.hex, backgroundColor: `${theme.hex}10` }}
+                  style={{ color: cDef, backgroundColor: `${theme.hex}10` }}
                 >
                   إرساء الموارد
                 </td>
                 <td className="p-2.5 border-l border-gray-300 align-top text-gray-800 leading-relaxed">
-                  <div className="mb-2 text-[12px] text-gray-600 font-bold bg-gray-50 p-2 rounded border border-gray-200">
-                    <span className="text-gray-900 font-extrabold">توجيه الأستاذ: </span>
+                  <div className="mb-2 text-[12px] font-bold bg-gray-50 p-2 rounded border border-gray-200" style={{ color: cNote }}>
+                    <span className="font-extrabold underline" style={{ color: cSub }}>توجيه الأستاذ: </span>
                     {lesson.ustadhNashat?.irsae || 'يوجه المناقشة لتلخيص المكتسبات، وتنسيق الإجابات وهيكلة المفاهيم لبناء الحصيلة المعرفية المشتركة للمورد.'}
                   </div>
-                  <div className="font-extrabold mb-1.5 flex items-center gap-1.5 text-[13px]" style={{ color: theme.hex }}>
+                  <div className="font-extrabold mb-1.5 flex items-center gap-1.5 text-[13px] underline" style={{ color: cDef }}>
                     <span>الحصيلة المعرفية والمفاهيمية المهيكلة (إرساء الموارد):</span>
                   </div>
-                  <div className={`editable-cell ` + `text-gray-900 font-medium leading-relaxed p-3 rounded-lg border shadow-2xs whitespace-pre-line ${theme.boxBg}`} contentEditable="plaintext-only" suppressContentEditableWarning>{lesson.irsae}</div>
-                  <RenderTable tables={lesson.irsaeTables || []} themeHex={theme.hex} />
+                  <HandwrittenText
+                    as="div"
+                    text={lesson.irsae}
+                    settings={hwStyle}
+                    active={hwActive}
+                    defaultRole="defGreen"
+                    className={`editable-cell font-medium leading-relaxed p-3 rounded-lg border shadow-2xs whitespace-pre-line hw-scaled-body ${theme.boxBg} ${hwActive && hwStyle.ruledLines ? 'hw-ruled-paper' : ''}`}
+                    editable
+                  />
+                  <RenderTable tables={lesson.irsaeTables || []} themeHex={theme.hex} hwStyle={hwStyle} hwActive={hwActive} />
                 </td>
                 <td className="p-2.5 border-l border-gray-300 align-top text-center font-bold text-gray-700">
                   15 د
                 </td>
-                <td className="p-2.5 align-top text-center text-gray-500 text-[11px]">
+                <td className="p-2.5 align-top text-center text-[11px] font-bold" style={{ color: cNote }}>
                   فردي / كراس
                 </td>
               </tr>
@@ -396,22 +602,30 @@ export const MemoSheet: React.FC<MemoSheetProps> = ({
               <tr className="bg-white">
                 <td
                   className="p-2.5 font-extrabold border-l border-gray-300 align-top text-center bg-gray-50"
-                  style={{ color: theme.hex }}
+                  style={{ color: cNote }}
                 >
                   تقويم الموارد
                 </td>
                 <td className="p-2.5 border-l border-gray-300 align-top text-gray-800 leading-relaxed">
-                  <div className="mb-1 text-[12px] text-gray-600 font-medium">
+                  <div className="mb-1 text-[12px] font-medium" style={{ color: cNote }}>
                     {lesson.ustadhNashat?.taqwim || 'يطرح تمرين تقويمي لقياس مدى تحقق معايير الكفاءة والتحكم في المورد.'}
                   </div>
-                  <div className="font-bold text-gray-900 mb-1 text-[12.5px]">المهمة التقويمية والتحكم:</div>
-                  <div className="editable-cell text-gray-800 leading-relaxed bg-gray-50 p-2 rounded border border-gray-200" contentEditable="plaintext-only" suppressContentEditableWarning>{lesson.taqwim}</div>
-                  <RenderTable tables={lesson.taqwimTables || []} themeHex={theme.hex} />
+                  <div className="font-bold mb-1 text-[12.5px] underline" style={{ color: cSub }}>المهمة التقويمية والتحكم:</div>
+                  <HandwrittenText
+                    as="div"
+                    text={lesson.taqwim}
+                    settings={hwStyle}
+                    active={hwActive}
+                    defaultRole="bodyBlack"
+                    className={`editable-cell leading-relaxed bg-gray-50 p-2 rounded border border-gray-200 hw-scaled-body ${hwActive && hwStyle.ruledLines ? 'hw-ruled-paper' : ''}`}
+                    editable
+                  />
+                  <RenderTable tables={lesson.taqwimTables || []} themeHex={theme.hex} hwStyle={hwStyle} hwActive={hwActive} />
                 </td>
                 <td className="p-2.5 border-l border-gray-300 align-top text-center font-bold text-gray-700">
                   10 د
                 </td>
-                <td className="p-2.5 align-top text-center text-gray-500 text-[11px]">
+                <td className="p-2.5 align-top text-center text-[11px] font-bold" style={{ color: cNote }}>
                   تقويم تكويني
                 </td>
               </tr>
@@ -434,36 +648,66 @@ export const MemoSheet: React.FC<MemoSheetProps> = ({
               <tr className="bg-white">
                 <td
                   className="p-2.5 font-extrabold border-l border-gray-300 align-top text-center"
-                  style={{ color: theme.hex, backgroundColor: `${theme.hex}10` }}
+                  style={{ color: cTitle, backgroundColor: `${theme.hex}10` }}
                 >
                   وضعية الانطلاق
                 </td>
                 <td className="p-2.5 border-l border-gray-300 align-top text-gray-800 leading-relaxed font-medium">
-                  {lesson.ustadhNashat?.inilitaq || (
+                  {lesson.ustadhNashat?.inilitaq ? (
+                    <HandwrittenText text={lesson.ustadhNashat.inilitaq} settings={hwStyle} active={hwActive} defaultRole="bodyBlack" className="hw-scaled-body" />
+                  ) : (
                     <div>
-                      <div className="font-bold text-gray-900 mb-1 text-[13px]">تقديم الوضعية وطرح المشكل العلمي:</div>
-                      <div className={`editable-cell ${situationBoxClass} ${situationTextClass}`} contentEditable="plaintext-only" suppressContentEditableWarning>{lesson.wadiya}</div>
-                      <div className={`editable-cell font-bold mt-1.5 p-2 rounded border border-teal-200/50 bg-teal-50/40 ${situationTextClass}`} style={{ color: theme.hex }} contentEditable="plaintext-only" suppressContentEditableWarning>{lesson.moshkila}</div>
+                      <div className="font-bold mb-1 text-[13px] underline" style={{ color: cSub }}>تقديم الوضعية وطرح المشكل العلمي:</div>
+                      <HandwrittenText
+                        as="div"
+                        text={lesson.wadiya}
+                        settings={hwStyle}
+                        active={hwActive}
+                        defaultRole="bodyBlack"
+                        className={`editable-cell ${situationBoxClass} ${situationTextClass}`}
+                        editable
+                      />
+                      <HandwrittenText
+                        as="div"
+                        text={lesson.moshkila}
+                        settings={hwStyle}
+                        active={hwActive}
+                        defaultRole="subRed"
+                        className={`editable-cell font-bold mt-1.5 p-2 rounded border border-teal-200/50 bg-teal-50/40 ${situationTextClass}`}
+                        style={{ color: cSub }}
+                        editable
+                      />
                     </div>
                   )}
                 </td>
                 <td className="p-2.5 border-l border-gray-300 align-top text-gray-800 leading-relaxed font-medium">
-                  {lesson.mutaalimNashat?.inilitaq || (
+                  {lesson.mutaalimNashat?.inilitaq ? (
+                    <HandwrittenText text={lesson.mutaalimNashat.inilitaq} settings={hwStyle} active={hwActive} defaultRole="bodyBlack" className="hw-scaled-body" />
+                  ) : (
                     <div>
-                      <div className="font-bold text-gray-900 mb-1 text-[12.5px]">الملاحظة وصياغة الفرضيات:</div>
-                      <div className={`editable-cell whitespace-pre-line ${situationBoxClass} ${situationTextClass}`} contentEditable="plaintext-only" suppressContentEditableWarning>{lesson.faradiyat}</div>
+                      <div className="font-bold mb-1 text-[12.5px] underline" style={{ color: cNote }}>الملاحظة وصياغة الفرضيات:</div>
+                      <HandwrittenText
+                        as="div"
+                        text={lesson.faradiyat}
+                        settings={hwStyle}
+                        active={hwActive}
+                        defaultRole="bodyBlack"
+                        className={`editable-cell whitespace-pre-line ${situationBoxClass} ${situationTextClass}`}
+                        editable
+                      />
+                      <RenderTable tables={lesson.wadiyaTables || []} themeHex={theme.hex} hwStyle={hwStyle} hwActive={hwActive} />
                     </div>
                   )}
                 </td>
                 <td className="p-2.5 border-l border-gray-300 align-top text-center font-bold text-gray-700">
                   10 د
                 </td>
-                <td className="p-2.5 align-top text-center text-gray-500 text-[11px]">
+                <td className="p-2.5 align-top text-center text-[11px] font-bold" style={{ color: cNote }}>
                   جماعي
                 </td>
               </tr>
 
-              {/* مرحلة 2: البحث والتقصي (الأنشطة المحددة) */}
+              {/* مرحلة 2: البحث والتقصي */}
               {lesson.anshita.map((activity, idx) => {
                 const isSelected = activeActivities[idx] !== false;
                 if (!isSelected && !editable) return null;
@@ -486,26 +730,50 @@ export const MemoSheet: React.FC<MemoSheetProps> = ({
                           />
                         </div>
                       )}
-                      <span className="text-[12px] font-extrabold block mb-1" style={{ color: theme.hex }}>
-    مرحلة البحث والتقصي
-  </span>
-                      <span className="text-[11px] text-gray-600 block mt-0.5">
+                      <span className="text-[12px] font-extrabold block mb-1" style={{ color: cTitle }}>
+                        مرحلة البحث والتقصي
+                      </span>
+                      <span className="text-[11px] font-bold block mt-0.5" style={{ color: cSub }}>
                         نشاط {idx + 1}
                       </span>
                     </td>
                     <td className="p-2.5 border-l border-gray-300 align-top text-gray-800 leading-relaxed">
-                      <div className="editable-cell font-extrabold mb-1 text-[13px]" style={{ color: theme.hex }} contentEditable="plaintext-only" suppressContentEditableWarning>{activity.title}</div>
-                      <div className="font-bold text-gray-800 text-[12px] mb-0.5">المهمة والتعليمات:</div>
-                      <p className="editable-cell text-gray-700 font-medium" contentEditable="plaintext-only" suppressContentEditableWarning>{activity.asila}</p>
+                      <div
+                        className="editable-cell font-extrabold mb-1 text-[13px]"
+                        style={{ color: cTitle }}
+                        contentEditable="plaintext-only"
+                        suppressContentEditableWarning
+                      >
+                        {activity.title}
+                      </div>
+                      <div className="font-bold text-[12px] mb-0.5 underline" style={{ color: cSub }}>المهمة والتعليمات:</div>
+                      <HandwrittenText
+                        as="p"
+                        text={activity.asila}
+                        settings={hwStyle}
+                        active={hwActive}
+                        defaultRole="bodyBlack"
+                        className="editable-cell font-medium hw-scaled-body"
+                        editable
+                      />
                     </td>
                     <td className="p-2.5 border-l border-gray-300 align-top text-gray-800 leading-relaxed font-medium">
-                      <div className="font-bold text-gray-800 text-[12px] mb-0.5">الاستجابة والمنتوج المنتظر:</div>
-                      <p className="editable-cell text-gray-700 leading-relaxed" contentEditable="plaintext-only" suppressContentEditableWarning>{activity.ajwiba}</p>
+                      <div className="font-bold text-[12px] mb-0.5 underline" style={{ color: cDef }}>الاستجابة والمنتوج المنتظر:</div>
+                      <HandwrittenText
+                        as="p"
+                        text={activity.ajwiba}
+                        settings={hwStyle}
+                        active={hwActive}
+                        defaultRole="bodyBlack"
+                        className="editable-cell leading-relaxed hw-scaled-body"
+                        editable
+                      />
+                      <RenderTable tables={activity.tables || []} themeHex={theme.hex} hwStyle={hwStyle} hwActive={hwActive} />
                     </td>
                     <td className="p-2.5 border-l border-gray-300 align-top text-center font-bold text-gray-700">
                       {activity.zaman || '25 د'}
                     </td>
-                    <td className="p-2.5 align-top text-center text-gray-500 text-[11px]">
+                    <td className="p-2.5 align-top text-center text-[11px] font-bold" style={{ color: cNote }}>
                       {activity.mola7adha || 'أفواج'}
                     </td>
                   </tr>
@@ -516,31 +784,45 @@ export const MemoSheet: React.FC<MemoSheetProps> = ({
               <tr className="bg-white">
                 <td
                   className="p-2.5 font-extrabold border-l border-gray-300 align-top text-center"
-                  style={{ color: theme.hex, backgroundColor: `${theme.hex}10` }}
+                  style={{ color: cDef, backgroundColor: `${theme.hex}10` }}
                 >
                   إرساء الموارد
                 </td>
                 <td className="p-2.5 border-l border-gray-300 align-top text-gray-800 leading-relaxed font-medium">
-                  <div className="font-bold text-gray-900 mb-1">توجيه وهيكلة التعلمات:</div>
-                  <p className="text-gray-700 leading-relaxed">
-                    {lesson.ustadhNashat?.irsae || 'يوجه المناقشة لتلخيص المكتسبات، وتنسيق الإجابات وهيكلة المفاهيم لبناء الحصيلة المعرفية المشتركة للمورد.'}
-                  </p>
+                  <div className="font-bold mb-1 underline" style={{ color: cSub }}>توجيه وهيكلة التعلمات:</div>
+                  <HandwrittenText
+                    as="p"
+                    text={lesson.ustadhNashat?.irsae || 'يوجه المناقشة لتلخيص المكتسبات، وتنسيق الإجابات وهيكلة المفاهيم لبناء الحصيلة المعرفية المشتركة للمورد.'}
+                    settings={hwStyle}
+                    active={hwActive}
+                    defaultRole="bodyBlack"
+                    className="leading-relaxed hw-scaled-body"
+                  />
                 </td>
                 <td className="p-2.5 border-l border-gray-300 align-top text-gray-800 leading-relaxed">
-                  <div className="text-[12px] text-gray-600 font-bold mb-1.5 pb-1 border-b border-gray-200">
-                    <span className="text-gray-900 font-extrabold">دور المتعلم: </span>
+                  <div className="text-[12px] font-bold mb-1.5 pb-1 border-b border-gray-200" style={{ color: cNote }}>
+                    <span className="font-extrabold underline" style={{ color: cSub }}>دور المتعلم: </span>
                     {lesson.mutaalimNashat?.irsae || 'يشارك بنشاط في استخلاص النتائج وصياغة المفاهيم، ويدون حصيلة إرساء المورد في كراسه.'}
                   </div>
-                  <div className="font-extrabold mb-1 text-[12.5px] flex items-center gap-1" style={{ color: theme.hex }}>
+                  <div className="font-extrabold mb-1 text-[12.5px] flex items-center gap-1 underline" style={{ color: cDef }}>
                     <span>📌</span>
-                    <span>الحصيلة المعرفية والمفاهيم المستخلصة (إرساء المورد):</span>
+                    <span>الحصيلة المعرفية والمفاهيم المستخلصة (إرساء الموارد):</span>
                   </div>
-                  <div className={`editable-cell ` + `text-gray-900 font-medium leading-relaxed p-2.5 rounded-lg border shadow-2xs whitespace-pre-line text-[12.5px] ${theme.boxBg}`} contentEditable="plaintext-only" suppressContentEditableWarning>{lesson.irsae}</div>
+                  <HandwrittenText
+                    as="div"
+                    text={lesson.irsae}
+                    settings={hwStyle}
+                    active={hwActive}
+                    defaultRole="defGreen"
+                    className={`editable-cell font-medium leading-relaxed p-2.5 rounded-lg border shadow-2xs whitespace-pre-line text-[12.5px] hw-scaled-body ${theme.boxBg} ${hwActive && hwStyle.ruledLines ? 'hw-ruled-paper' : ''}`}
+                    editable
+                  />
+                  <RenderTable tables={lesson.irsaeTables || []} themeHex={theme.hex} hwStyle={hwStyle} hwActive={hwActive} />
                 </td>
                 <td className="p-2.5 border-l border-gray-300 align-top text-center font-bold text-gray-700">
                   15 د
                 </td>
-                <td className="p-2.5 align-top text-center text-gray-500 text-[11px]">
+                <td className="p-2.5 align-top text-center text-[11px] font-bold" style={{ color: cNote }}>
                   فردي / كراس
                 </td>
               </tr>
@@ -549,21 +831,37 @@ export const MemoSheet: React.FC<MemoSheetProps> = ({
               <tr className="bg-white">
                 <td
                   className="p-2.5 font-extrabold border-l border-gray-300 bg-gray-50 align-top text-center"
-                  style={{ color: theme.hex }}
+                  style={{ color: cNote }}
                 >
                   تقويم الموارد
                 </td>
                 <td className="p-2.5 border-l border-gray-300 align-top text-gray-800 leading-relaxed font-medium">
-                  {lesson.ustadhNashat?.taqwim || 'يطرح تمرين تقويمي لقياس مدى تحقق معايير الكفاءة والتحكم في المورد.'}
+                  <HandwrittenText
+                    as="span"
+                    text={lesson.ustadhNashat?.taqwim || 'يطرح تمرين تقويمي لقياس مدى تحقق معايير الكفاءة والتحكم في المورد.'}
+                    settings={hwStyle}
+                    active={hwActive}
+                    defaultRole="bodyBlack"
+                    className="hw-scaled-body"
+                  />
                 </td>
                 <td className="p-2.5 border-l border-gray-300 align-top text-gray-800 leading-relaxed font-medium">
-                  <div className="font-bold text-gray-900 mb-0.5">تطبيق وتحكم:</div>
-                  <div className="editable-cell text-gray-800 leading-relaxed" contentEditable="plaintext-only" suppressContentEditableWarning>{lesson.taqwim}</div>
+                  <div className="font-bold mb-0.5 underline" style={{ color: cNote }}>تطبيق وتحكم:</div>
+                  <HandwrittenText
+                    as="div"
+                    text={lesson.taqwim}
+                    settings={hwStyle}
+                    active={hwActive}
+                    defaultRole="bodyBlack"
+                    className="editable-cell leading-relaxed hw-scaled-body"
+                    editable
+                  />
+                  <RenderTable tables={lesson.taqwimTables || []} themeHex={theme.hex} hwStyle={hwStyle} hwActive={hwActive} />
                 </td>
                 <td className="p-2.5 border-l border-gray-300 align-top text-center font-bold text-gray-700">
                   10 د
                 </td>
-                <td className="p-2.5 align-top text-center text-gray-500 text-[11px]">
+                <td className="p-2.5 align-top text-center text-[11px] font-bold" style={{ color: cNote }}>
                   تقويم تكويني
                 </td>
               </tr>
@@ -581,8 +879,8 @@ export const MemoSheet: React.FC<MemoSheetProps> = ({
         >
           <div className="flex items-center justify-between gap-2 mb-3 pb-2 border-b border-gray-200">
             <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: theme.hex }}></span>
-              <span className="font-extrabold text-[13px] text-gray-900">
+              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cTitle }}></span>
+              <span className="font-extrabold text-[13px]" style={{ color: cTitle }}>
                 السندات العلمية والرسومات التخطيطية للمورد
               </span>
             </div>
@@ -608,19 +906,35 @@ export const MemoSheet: React.FC<MemoSheetProps> = ({
                 style={{ position: 'relative', top: 'auto', bottom: 'auto', transform: 'none', float: 'none' }}
               >
                 {diagram.title && (
-                  <div className="font-extrabold text-[12.5px] text-center mb-2" style={{ color: theme.hex }}>
+                  <div className="font-extrabold text-[12.5px] text-center mb-2" style={{ color: cTitle }}>
                     {diagram.title}
                   </div>
                 )}
-                <div
-                  className="memo-diagram-canvas w-full flex items-center justify-center p-2 bg-white rounded-lg border border-gray-200 overflow-x-auto shadow-2xs"
-                  style={{ position: 'relative', top: 'auto', bottom: 'auto', transform: 'none', float: 'none', minHeight: '0' }}
-                  dangerouslySetInnerHTML={{ __html: diagram.svg || '' }}
-                />
+                {diagram.imageUrl && (
+                  <div className="w-full flex flex-col items-center justify-center p-2 bg-white rounded-lg border border-gray-200 mb-2 shadow-2xs">
+                    <img
+                      src={diagram.imageUrl}
+                      alt={diagram.title || 'صورة السند العلمي'}
+                      className="max-w-full max-h-[340px] object-contain mx-auto rounded"
+                    />
+                  </div>
+                )}
+                {diagram.svg && (
+                  <div
+                    className="memo-diagram-canvas w-full flex items-center justify-center p-2 bg-white rounded-lg border border-gray-200 overflow-x-auto shadow-2xs"
+                    style={{ position: 'relative', top: 'auto', bottom: 'auto', transform: 'none', float: 'none', minHeight: '0' }}
+                    dangerouslySetInnerHTML={{ __html: diagram.svg || '' }}
+                  />
+                )}
                 {diagram.description && (
-                  <p className="mt-2 text-[12px] text-gray-600 leading-relaxed font-medium text-center">
-                    {diagram.description}
-                  </p>
+                  <HandwrittenText
+                    as="p"
+                    text={diagram.description}
+                    settings={hwStyle}
+                    active={hwActive}
+                    defaultRole="noteOrange"
+                    className="mt-2 text-[12px] leading-relaxed font-medium text-center"
+                  />
                 )}
               </div>
             ))}
@@ -666,4 +980,3 @@ export const MemoSheet: React.FC<MemoSheetProps> = ({
     </div>
   );
 };
-

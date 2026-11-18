@@ -1,8 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { MAQTA_1_DATA } from '../data/interactiveMaqta1Data';
 import { BookOpen, Target, Image as ImageIcon, Save, CheckCircle2, FlaskConical, Beaker, FileText, ClipboardList } from 'lucide-react';
+import { useHandwritingStyle } from '../hooks/useHandwritingStyle';
+import { getEffectiveExportFontFamily, isHandwritingActiveFor } from '../services/handwritingStyle';
+import { HandwrittenText } from './HandwrittenText';
 
 export const InteractiveMaqta1: React.FC = () => {
+  const { settings: hwStyle } = useHandwritingStyle();
+  const hwActive = isHandwritingActiveFor('general', hwStyle);
+  const pageFont = getEffectiveExportFontFamily('pdf', hwStyle, 'general');
+
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
 
@@ -129,7 +136,11 @@ export const InteractiveMaqta1: React.FC = () => {
   );
 
   return (
-    <div className="min-h-screen bg-[#f8f9fa] text-gray-900 py-8 px-4 font-[Tajawal] relative" dir="rtl">
+    <div
+      className={`min-h-screen bg-[#f8f9fa] text-gray-900 py-8 px-4 relative ${hwActive ? 'hw-notebook-scope' : ''}`}
+      style={{ fontFamily: pageFont }}
+      dir="rtl"
+    >
       {/* Floating Save Indicator */}
       <div className={`fixed top-6 left-6 px-4 py-2 rounded-full font-bold flex items-center gap-2 transition-all duration-300 z-50 ${
         saveStatus === 'saved' ? 'bg-green-100 text-green-700 shadow-md opacity-100 translate-y-0' :
@@ -194,21 +205,31 @@ export const InteractiveMaqta1: React.FC = () => {
                   </div>
 
                   {resource.lessons.map((lesson: any, lIdx: number) => (
-                    <div key={lIdx} className="bg-white rounded-3xl p-6 md:p-10 shadow-sm border border-gray-100">
-                      <h3 className="text-2xl font-bold text-green-700 mb-8">{lesson.title}</h3>
+                    <div key={lIdx} className={`bg-white rounded-3xl p-6 md:p-10 shadow-sm border border-gray-100 ${hwActive ? 'hw-ruled-paper' : ''}`}>
+                      <h3
+                        className={`text-2xl font-bold text-green-700 mb-8 ${hwActive ? 'hw-title-accent' : ''}`}
+                        style={hwActive ? { color: hwStyle.palette.titleBlue, textDecorationColor: hwStyle.palette.subRed } : undefined}
+                      >
+                        {lesson.title}
+                      </h3>
                       
                       {/* Situation */}
                       <div className="bg-blue-50/50 rounded-2xl p-6 border-r-4 border-blue-400 mb-8">
-                        <p className="text-lg leading-relaxed text-gray-700 mb-6 font-medium whitespace-pre-wrap">{lesson.situation.text}</p>
+                        <p className="text-lg leading-relaxed text-gray-700 mb-6 font-medium whitespace-pre-wrap">
+                          <HandwrittenText text={lesson.situation.text} settings={hwStyle} active={hwActive} />
+                        </p>
                         <div className="bg-white rounded-xl p-5 shadow-sm border border-blue-100">
-                          <p className="font-black text-blue-900 text-lg flex items-center gap-2">
+                          <p
+                            className="font-black text-blue-900 text-lg flex items-center gap-2"
+                            style={hwActive ? { color: hwStyle.palette.subRed } : undefined}
+                          >
                             <span className="bg-blue-100 p-1.5 rounded-lg text-blue-700"><Target size={20} /></span>
-                            المشكلة: {lesson.situation.problem}
+                            <HandwrittenText text={`المشكلة: ${lesson.situation.problem}`} settings={hwStyle} active={hwActive} defaultRole="subRed" />
                           </p>
                         </div>
                         {lesson.situation.hasHypotheses && (
                           <div className="mt-6">
-                            <p className="font-bold text-gray-800 mb-3">الفرضيات:</p>
+                            <p className="font-bold text-gray-800 mb-3" style={hwActive ? { color: hwStyle.palette.subRed } : undefined}>الفرضيات:</p>
                             {renderTextarea(`hypotheses_${rIdx}_${lIdx}`, "اكتب فرضياتك هنا...")}
                           </div>
                         )}
@@ -216,17 +237,24 @@ export const InteractiveMaqta1: React.FC = () => {
 
                       {/* Activities */}
                       <div className="space-y-8 mb-10">
-                        <h4 className="text-xl font-black text-gray-800 flex items-center gap-2 border-b-2 border-gray-100 pb-3">
+                        <h4
+                          className="text-xl font-black text-gray-800 flex items-center gap-2 border-b-2 border-gray-100 pb-3"
+                          style={hwActive ? { color: hwStyle.palette.titleBlue } : undefined}
+                        >
                           <FlaskConical className="text-amber-500" />
                           مرحلة البحث والتقصي
                         </h4>
                         
                         {lesson.activities.map((activity: any, aIdx: number) => (
                           <div key={aIdx} className="bg-gray-50 rounded-2xl p-6 border border-gray-200">
-                            <h5 className="font-bold text-lg text-gray-800 mb-4">{activity.title}</h5>
+                            <h5 className="font-bold text-lg text-gray-800 mb-4" style={hwActive ? { color: hwStyle.palette.titleBlue } : undefined}>
+                              {activity.title}
+                            </h5>
                             
                             {activity.context && (
-                              <p className="text-gray-700 mb-4 leading-relaxed bg-white p-4 rounded-xl border border-gray-100">{activity.context}</p>
+                              <p className="text-gray-700 mb-4 leading-relaxed bg-white p-4 rounded-xl border border-gray-100">
+                                <HandwrittenText text={activity.context} settings={hwStyle} active={hwActive} />
+                              </p>
                             )}
 
                             {activity.images && activity.images.length > 0 && (
@@ -241,13 +269,17 @@ export const InteractiveMaqta1: React.FC = () => {
                             )}
 
                             {activity.instructions && (
-                              <p className="font-bold text-amber-700 mb-6 bg-amber-50 p-3 rounded-lg">{activity.instructions}</p>
+                              <p className="font-bold text-amber-700 mb-6 bg-amber-50 p-3 rounded-lg" style={hwActive ? { color: hwStyle.palette.subRed } : undefined}>
+                                <HandwrittenText text={activity.instructions} settings={hwStyle} active={hwActive} defaultRole="subRed" />
+                              </p>
                             )}
 
                             <div className="space-y-8">
                               {activity.questions.map((q: any) => (
                                 <div key={q.id}>
-                                  <p className="font-bold text-gray-800 mb-4 text-lg">{q.text}</p>
+                                  <p className="font-bold text-gray-800 mb-4 text-lg">
+                                    <HandwrittenText text={q.text} settings={hwStyle} active={hwActive} />
+                                  </p>
                                   {q.type === 'textarea' && renderTextarea(q.id, "إجابة النشاط...")}
                                   {q.type === 'table' && renderTable(q)}
                                 </div>
@@ -260,20 +292,28 @@ export const InteractiveMaqta1: React.FC = () => {
                       {/* Conclusion */}
                       <div className="bg-green-50 rounded-2xl p-6 md:p-8 border border-green-200 mb-8 relative overflow-hidden">
                         <div className="absolute top-0 left-0 w-2 h-full bg-green-500"></div>
-                        <h4 className="text-xl font-black text-green-800 mb-4 flex items-center gap-2">
+                        <h4
+                          className="text-xl font-black text-green-800 mb-4 flex items-center gap-2"
+                          style={hwActive ? { color: hwStyle.palette.defGreen } : undefined}
+                        >
                           <CheckCircle2 /> إرساء المورد
                         </h4>
                         <p className="text-lg leading-relaxed text-gray-800 font-medium whitespace-pre-wrap">
-                          {lesson.conclusion}
+                          <HandwrittenText text={lesson.conclusion} settings={hwStyle} active={hwActive} defaultRole="defGreen" />
                         </p>
                       </div>
 
                       {/* Evaluation */}
                       <div className="bg-purple-50 rounded-2xl p-6 md:p-8 border border-purple-200">
-                        <h4 className="text-xl font-black text-purple-800 mb-6 flex items-center gap-2">
+                        <h4
+                          className="text-xl font-black text-purple-800 mb-6 flex items-center gap-2"
+                          style={hwActive ? { color: hwStyle.palette.noteOrange } : undefined}
+                        >
                           <Beaker /> تقويم المورد
                         </h4>
-                        <p className="text-gray-800 font-medium mb-6 bg-white p-4 rounded-xl border border-purple-100">{lesson.evaluation.text}</p>
+                        <p className="text-gray-800 font-medium mb-6 bg-white p-4 rounded-xl border border-purple-100">
+                          <HandwrittenText text={lesson.evaluation.text} settings={hwStyle} active={hwActive} defaultRole="noteOrange" />
+                        </p>
                         
                         {lesson.evaluation.images && (
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -288,7 +328,9 @@ export const InteractiveMaqta1: React.FC = () => {
                         <div className="space-y-6">
                           {lesson.evaluation.questions.map((q: any) => (
                             <div key={q.id}>
-                              <p className="font-bold text-gray-800 mb-3">{q.text}</p>
+                              <p className="font-bold text-gray-800 mb-3">
+                                <HandwrittenText text={q.text} settings={hwStyle} active={hwActive} />
+                              </p>
                               {q.type === 'textarea' && renderTextarea(q.id, "إجابة التقويم...")}
                             </div>
                           ))}

@@ -51,13 +51,16 @@ export interface LessonMemo {
   taqwimTables?: DB_Table[];
   taqwim?: string;
   memoNumber?: string;
-  diagrams?: { title?: string; svg?: string; description?: string }[];
+  sourcePage?: number;
+  sourcePageEnd?: number;
+  diagrams?: { title?: string; svg?: string; imageUrl?: string; sourcePage?: number; description?: string }[];
   diagramTitle?: string;
   diagramSvg?: string;
   diagramDescription?: string;
   diagram?: string | {
     title?: string;
     svg?: string;
+    imageUrl?: string;
     description?: string;
   };
   worksheetData?: {

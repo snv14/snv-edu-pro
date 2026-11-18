@@ -30,6 +30,8 @@ import {
 } from '../utils/annualDistributionDateUtils';
 
 import { Printer, FileDown, Eye, X, RotateCcw, Sparkles, CalendarDays, Clock, Settings2, CalendarCheck, Check } from 'lucide-react';
+import { useHandwritingStyle } from '../hooks/useHandwritingStyle';
+import { getEffectiveExportFontFamily, isHandwritingActiveFor, HANDWRITING_FONTS } from '../services/handwritingStyle';
 
 interface Props {
   level: "1am" | "2am" | "3am" | "4am";
@@ -41,6 +43,10 @@ interface Props {
 }
 
 export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, setConfig, showToast, curriculumLessons, curriculumBackground }) => {
+  const { settings: hwStyle } = useHandwritingStyle();
+  const hwActive = isHandwritingActiveFor('general', hwStyle);
+  const activeDistributionFont = getEffectiveExportFontFamily('pdf', hwStyle, 'general');
+
   const [showPreview, setShowPreview] = useState(false);
   const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait');
@@ -408,10 +414,12 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
   };
 
   const waitForAnnualPrintFonts = async () => {
+    const wordFont = (HANDWRITING_FONTS[hwStyle.fontId] || HANDWRITING_FONTS.cairo).wordFontName;
     if (document.fonts?.load) {
       await Promise.all([
+        document.fonts.load(`400 16px "${wordFont}"`, 'العلوم الطبيعية والحياة'),
+        document.fonts.load(`700 16px "${wordFont}"`, 'التدرج السنوي لبناء التعلمات'),
         document.fonts.load('400 16px "Cairo"', 'العلوم الطبيعية والحياة'),
-        document.fonts.load('700 16px "Cairo"', 'التدرج السنوي لبناء التعلمات'),
       ]);
     }
     if (document.fonts?.ready) await document.fonts.ready;
@@ -477,7 +485,12 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
   };
 
   const DocumentPages = () => (
-    <div id="official-distribution-content" dir="rtl" className={`relative bg-transparent flex flex-col items-center p-4 print:p-0 print:bg-white w-full ${orientation === 'landscape' ? 'print-orientation-landscape' : ''}`}>
+    <div
+      id="official-distribution-content"
+      dir="rtl"
+      className={`relative bg-transparent flex flex-col items-center p-4 print:p-0 print:bg-white w-full ${hwActive ? 'hw-notebook-scope' : ''} ${orientation === 'landscape' ? 'print-orientation-landscape' : ''}`}
+      style={{ fontFamily: activeDistributionFont }}
+    >
       {curriculumBackground && (
         <div
           className="absolute inset-0 pointer-events-none z-0 rounded-2xl overflow-hidden print:hidden"

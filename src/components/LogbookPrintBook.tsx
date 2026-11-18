@@ -14,6 +14,9 @@ import {
   OFFICIAL_3AM_DISTRIBUTION,
   OFFICIAL_4AM_DISTRIBUTION,
 } from '../data/curriculum/officialAnnualDistributionData';
+import { useHandwritingStyle } from '../hooks/useHandwritingStyle';
+import { getEffectiveExportFontFamily, isHandwritingActiveFor } from '../services/handwritingStyle';
+import { HandwrittenText } from './HandwrittenText';
 
 /**
  * كتاب الدفتر اليومي للطباعة — A4 عمودي:
@@ -118,6 +121,10 @@ const Th: React.FC<{ children?: React.ReactNode; wide?: boolean }> = ({ children
 );
 
 export const LogbookPrintBook: React.FC<LogbookPrintBookProps> = ({ config, gridRows, entries, onClose }) => {
+  const { settings: hwStyle } = useHandwritingStyle();
+  const hwActive = isHandwritingActiveFor('logbook', hwStyle);
+  const bookletFont = getEffectiveExportFontFamily('pdf', hwStyle, 'logbook');
+
   const sourceRows: BookletSourceRow[] = entries.map((e) => ({ id: e.id, dateStr: e.dateStr, text: entryText(e) }));
   const weeks: WeekPlan[] = planLogbookWeeks(sourceRows);
   const levels = [...new Set(entries.map((e) => e.level).filter((l) => LEVEL_LABELS[l]))];
@@ -153,7 +160,7 @@ export const LogbookPrintBook: React.FC<LogbookPrintBookProps> = ({ config, grid
         </div>
       </div>
 
-      <div className="logbook-booklet">
+      <div className={`logbook-booklet ${hwActive ? 'hw-notebook-scope' : ''}`} style={{ fontFamily: bookletFont }}>
         {/* ─────────── 1) الغلاف ─────────── */}
         <Page footer={foot('الغلاف')}>
           <header className="lb-head">
@@ -314,7 +321,9 @@ export const LogbookPrintBook: React.FC<LogbookPrintBookProps> = ({ config, grid
                         <td className="lb-date">{e.dateStr}</td>
                         <td className="lb-time">{e.time}</td>
                         <td className="lb-sec">{e.section}<div className="lb-sec-level">{LEVEL_LABELS[e.level] ?? e.level}</div></td>
-                        <td className="lb-content">{r.text.split('\n').map((line, i) => <div key={i}>{line}</div>)}</td>
+                        <td className={`lb-content ${hwActive ? 'hw-scaled-body hw-ruled-paper' : ''}`}>
+                          <HandwrittenText text={r.text} settings={hwStyle} active={hwActive} className="whitespace-pre-line" />
+                        </td>
                         <td className="lb-sign"></td>
                       </tr>
                     );
@@ -363,56 +372,59 @@ export const LogbookPrintBook: React.FC<LogbookPrintBookProps> = ({ config, grid
         .booklet-toolbar { position: fixed; top: 0; left: 0; right: 0; z-index: 96; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; background: #18181b; color: #fafafa; box-shadow: 0 6px 24px rgba(0,0,0,.4); }
         .lb-btn { background: #fff; color: #18181b; border: 0; border-radius: 999px; padding: 7px 14px; font-size: 12px; font-weight: 800; cursor: pointer; }
         .lb-btn-primary { background: #006233; color: #fff; }
-        .logbook-booklet { direction: rtl; font-family: 'Tajawal', 'Segoe UI', system-ui, sans-serif; color: #111; }
-        .book-page { width: 210mm; min-height: 296mm; margin: 0 auto 16px; background: #fff; padding: 9mm 8mm 12mm; box-sizing: border-box; position: relative; display: flex; flex-direction: column; box-shadow: 0 16px 44px rgba(0,0,0,.5); }
-        .book-foot { margin-top: auto; padding-top: 4mm; border-top: 1px solid #999; font-size: 9px; color: #444; text-align: center; }
-        .lb-head { text-align: center; font-size: 11px; font-weight: 700; line-height: 1.75; border-bottom: 2px solid #006233; padding-bottom: 3mm; }
+        .logbook-booklet { direction: rtl; font-family: var(--hw-font, 'Tajawal', 'Segoe UI', system-ui, sans-serif); color: #111; }
+        .book-page { width: 210mm; min-height: 296mm; margin: 0 auto 14px; background: #fff; padding: 7.5mm 7.5mm 9.5mm; box-sizing: border-box; position: relative; display: flex; flex-direction: column; box-shadow: 0 16px 44px rgba(0,0,0,.5); }
+        .book-foot { margin-top: auto; padding-top: 3mm; border-top: 1px solid #999; font-size: 9px; color: #444; text-align: center; break-inside: avoid; page-break-inside: avoid; }
+        .lb-head { text-align: center; font-size: 11px; font-weight: 700; line-height: 1.65; border-bottom: 2px solid #006233; padding-bottom: 2.5mm; }
         .lb-school { font-size: 12.5px; font-weight: 900; color: #006233; }
-        .lb-cover-frame { margin: 12mm auto; border: 3px double #006233; border-radius: 4px; padding: 12mm 8mm; text-align: center; background: #f8fdf9; }
+        .lb-cover-frame { margin: 10mm auto; border: 3px double #006233; border-radius: 4px; padding: 10mm 8mm; text-align: center; background: #f8fdf9; }
         .lb-cover-kicker { font-size: 15px; font-weight: 900; letter-spacing: .5px; }
         .lb-cover-title { font-size: 26px; font-weight: 900; color: #006233; margin: 5mm 0 3mm; }
         .lb-cover-levels { font-size: 13px; font-weight: 800; }
         .lb-cover-classes { font-size: 11px; margin-top: 3mm; color: #333; }
         .lb-cover-year { font-size: 14px; font-weight: 900; margin-top: 6mm; }
         .lb-cover-dates { font-size: 10.5px; color: #555; margin-top: 2mm; }
-        .lb-cover-bottom { display: flex; align-items: flex-end; justify-content: space-between; gap: 8mm; }
+        .lb-cover-bottom { display: flex; align-items: flex-end; justify-content: space-between; gap: 8mm; break-inside: avoid; page-break-inside: avoid; }
         .lb-sign-block { text-align: center; }
         .lb-sign-label { font-size: 11px; font-weight: 800; margin-top: 2mm; }
         .lb-sign-line { font-size: 9px; color: #666; border-top: 1px dashed #888; margin-top: 3mm; padding-top: 1mm; }
         .lb-cover-note { font-size: 9.5px; color: #555; max-width: 78mm; line-height: 1.7; }
-        .lb-h2 { font-size: 14px; font-weight: 900; color: #006233; border-right: 4px solid #006233; padding-right: 3mm; margin: 4mm 0 3mm; }
-        .lb-h3 { font-size: 12px; font-weight: 900; margin: 3mm 0 2mm; color: #14532d; }
-        .lb-table { width: 100%; border-collapse: collapse; font-size: 10px; }
-        .lb-table td, .lb-th { border: 1px solid #444; padding: 1.6mm 2mm; text-align: right; vertical-align: top; }
-        .lb-th { background: #e7f4ea; font-weight: 900; text-align: center; font-size: 9.5px; }
+        .lb-h2 { font-size: 13.5px; font-weight: 900; color: #006233; border-right: 4px solid #006233; padding-right: 3mm; margin: 3mm 0 2.5mm; break-after: avoid; page-break-after: avoid; }
+        .lb-h3 { font-size: 11.5px; font-weight: 900; margin: 2.5mm 0 1.5mm; color: #14532d; break-after: avoid; page-break-after: avoid; }
+        .lb-table { width: 100%; border-collapse: collapse; font-size: 9.5px; }
+        .lb-table thead { display: table-header-group; }
+        .lb-table tr { break-inside: avoid; page-break-inside: avoid; }
+        .lb-table td, .lb-th { border: 1px solid #444; padding: 1.2mm 1.6mm; text-align: right; vertical-align: top; }
+        .lb-th { background: #e7f4ea; font-weight: 900; text-align: center; font-size: 9px; }
         .lb-k { background: #f4f4f5; font-weight: 800; width: 42mm; }
         .lb-wide { width: 60%; }
-        .lb-mt { margin-top: 3mm; }
+        .lb-mt { margin-top: 2.5mm; }
         .lb-time { direction: ltr; text-align: center; font-weight: 700; white-space: nowrap; }
         .lb-cell { font-weight: 700; text-align: center; font-size: 9.5px; }
         .lb-empty { background: #fafafa; }
-        .lb-grid-table td { height: 9mm; }
-        .lb-stat-block { margin-bottom: 2mm; }
-        .lb-holidays { font-size: 9.5px; margin-top: 2mm; color: #166534; line-height: 1.8; }
-        .lb-week-head { display: flex; justify-content: space-between; align-items: baseline; gap: 4mm; border-bottom: 2px solid #006233; padding-bottom: 2mm; margin-bottom: 3mm; }
-        .lb-week-title { font-size: 13px; font-weight: 900; color: #006233; }
+        .lb-grid-table td { height: 8mm; }
+        .lb-stat-block { margin-bottom: 2mm; break-inside: avoid; page-break-inside: avoid; }
+        .lb-holidays { font-size: 9.5px; margin-top: 2mm; color: #166534; line-height: 1.7; }
+        .lb-week-head { display: flex; justify-content: space-between; align-items: baseline; gap: 4mm; border-bottom: 2px solid #006233; padding-bottom: 1.5mm; margin-bottom: 2.5mm; break-after: avoid; page-break-after: avoid; }
+        .lb-week-title { font-size: 12.5px; font-weight: 900; color: #006233; }
         .lb-week-meta { font-size: 9px; color: #555; }
-        .lb-week-table td { min-height: 12mm; }
+        .lb-week-table td { min-height: 10mm; }
         .lb-day { font-weight: 800; text-align: center; white-space: nowrap; }
         .lb-date { direction: ltr; text-align: center; white-space: nowrap; font-size: 9px; }
-        .lb-sec { font-weight: 700; text-align: center; font-size: 9.5px; }
+        .lb-sec { font-weight: 700; text-align: center; font-size: 9px; }
         .lb-sec-level { font-weight: 500; color: #666; font-size: 8px; }
-        .lb-content { line-height: 1.65; font-size: 9.8px; }
+        .lb-content { line-height: 1.5; font-size: 9.3px; }
         .lb-sign { width: 16mm; }
-        .lb-p { font-size: 10.5px; line-height: 1.9; }
-        .lb-visa-grid { display: flex; gap: 6mm; margin-top: 8mm; }
-        .lb-visa { flex: 1; border: 1px solid #666; border-radius: 3px; padding: 4mm; text-align: center; min-height: 62mm; display: flex; flex-direction: column; align-items: center; gap: 2mm; }
+        .lb-p { font-size: 10.5px; line-height: 1.85; }
+        .lb-visa-grid { display: flex; gap: 6mm; margin-top: 8mm; break-inside: avoid; page-break-inside: avoid; }
+        .lb-visa { flex: 1; border: 1px solid #666; border-radius: 3px; padding: 4mm; text-align: center; min-height: 58mm; display: flex; flex-direction: column; align-items: center; gap: 2mm; }
         .lb-visa-role { font-size: 11px; font-weight: 900; }
         .lb-visa-name { font-size: 10px; color: #333; }
         .lb-visa-stamp { margin: 4mm 0; }
         .lb-visa-space { flex: 1; }
         .lb-end-note { margin-top: 8mm; font-size: 9.5px; color: #555; text-align: center; border-top: 1px dashed #999; padding-top: 3mm; }
         @media print {
+          @page { size: A4 portrait; margin: 0; }
           body * { visibility: hidden !important; }
           .logbook-booklet-root, .logbook-booklet-root * { visibility: visible !important; }
           .logbook-booklet-root { position: static !important; overflow: visible !important; background: #fff !important; padding: 0 !important; }

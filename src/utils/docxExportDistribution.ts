@@ -18,6 +18,13 @@ import {
 } from "docx";
 import { MemoConfig } from "../types";
 import { GeneratedSession as CurriculumSession } from "./annualDistributionGenerator";
+import {
+  buildDocxTextRuns,
+  getEffectiveExportFontFamily,
+  isHandwritingActiveFor,
+  loadHandwritingSettings,
+  type HandwritingStyleSettings,
+} from "../services/handwritingStyle";
 
 const base64ToUint8Array = (base64: string) => {
   const binaryString = typeof atob === 'function'
@@ -107,10 +114,37 @@ const buildTeacherStampSvg = (config: MemoConfig, size = 420) => {
 };
 
 
-const createParagraph = (text: string, bold = false, color = "000000", size = 20, alignment: any = AlignmentType.CENTER) => {
+const createParagraph = (
+  text: string,
+  bold = false,
+  color = "000000",
+  size = 20,
+  alignment: any = AlignmentType.CENTER,
+  semantic = false,
+  hwContext?: { hwStyle: HandwritingStyleSettings; hwActive: boolean; wordFont: string }
+) => {
+  const hwStyle = hwContext?.hwStyle ?? loadHandwritingSettings();
+  const hwActive = hwContext?.hwActive ?? isHandwritingActiveFor("general", hwStyle);
+  const wordFont = hwContext?.wordFont ?? getEffectiveExportFontFamily("docx", hwStyle, "general");
+  const fontAttrs = { ascii: wordFont, hAnsi: wordFont, cs: wordFont, hint: "cs" };
+
+  if (semantic && hwActive) {
+    return new Paragraph({
+      alignment,
+      bidirectional: true,
+      children: buildDocxTextRuns(text || "", hwStyle, {
+        size,
+        bold,
+        defaultRole: "bodyBlack",
+        fallbackColorHex: color,
+        fontName: wordFont,
+      }),
+    });
+  }
+
   return new Paragraph({
-    
     alignment: alignment,
+    bidirectional: true,
     children: (text || "").split('\n').map((line, i, arr) => [
       new TextRun({
         text: line,
@@ -118,14 +152,25 @@ const createParagraph = (text: string, bold = false, color = "000000", size = 20
         color: color,
         rightToLeft: true,
         size: size,
-        font: "Cairo"
+        font: fontAttrs
       }),
       ...(i < arr.length - 1 ? [new TextRun({ break: 1 })] : [])
     ]).flat()
   });
 };
 
-const createCell = (text: string, bold = false, bgColor?: string, columnSpan?: number, rowSpan?: number, size = 20, alignment: any = AlignmentType.CENTER, vertical = false) => {
+const createCell = (
+  text: string,
+  bold = false,
+  bgColor?: string,
+  columnSpan?: number,
+  rowSpan?: number,
+  size = 20,
+  alignment: any = AlignmentType.CENTER,
+  vertical = false,
+  semantic = false,
+  hwContext?: { hwStyle: HandwritingStyleSettings; hwActive: boolean; wordFont: string }
+) => {
   return new TableCell({
     columnSpan,
     rowSpan,
@@ -133,7 +178,7 @@ const createCell = (text: string, bold = false, bgColor?: string, columnSpan?: n
     margins: { top: 100, bottom: 100, left: 100, right: 100 },
     verticalAlign: VerticalAlign.CENTER,
     textDirection: vertical ? ("tbRl" as any) : undefined,
-    children: [createParagraph(text, bold, "000000", size, alignment)]
+    children: [createParagraph(text, bold, "000000", size, alignment, semantic, hwContext)]
   });
 };
 
@@ -182,6 +227,12 @@ export const generateDistributionDocx = async (
   orientation: 'portrait' | 'landscape'
 ): Promise<Blob> => {
 
+  const hwStyle = loadHandwritingSettings();
+  const hwActive = isHandwritingActiveFor("general", hwStyle);
+  const wordFont = getEffectiveExportFontFamily("docx", hwStyle, "general");
+  const wordFontAttrs = { ascii: wordFont, hAnsi: wordFont, cs: wordFont, hint: "cs" };
+  const hwContext = { hwStyle, hwActive, wordFont };
+
   const levelLabel =
     level === '4am' ? 'السنة الرابعة متوسط'
       : level === '3am' ? 'السنة الثالثة متوسط'
@@ -196,7 +247,7 @@ export const generateDistributionDocx = async (
     styles: {
       default: {
         document: {
-          run: { rightToLeft: true, font: "Cairo" },
+          run: { rightToLeft: true, font: wordFontAttrs },
           paragraph: {  alignment: AlignmentType.RIGHT }
         }
       }
@@ -275,10 +326,10 @@ export const generateDistributionDocx = async (
               createCell(weekDisplay, false, rowBg),
               ...(!samePreviousMerged(page, rowIndex, "midan") ? [createCell(item.midan || '', true, "ECFDF5", undefined, mergedSpan(page, rowIndex, "midan"), 20, AlignmentType.CENTER, true)] : []),
               ...(!samePreviousMerged(page, rowIndex, "maqta") ? [createCell(item.maqta || '', true, "FFFBEB", undefined, mergedSpan(page, rowIndex, "maqta"), 20, AlignmentType.CENTER, true)] : []),
-              ...(!samePreviousMerged(page, rowIndex, "mawrid") ? [createCell(item.mawrid || '', true, rowBg, undefined, mergedSpan(page, rowIndex, "mawrid"), 20, AlignmentType.CENTER, true)] : []),
-              createCell(item.session1 || '', false, rowBg, 1, 1, 20, AlignmentType.RIGHT),
-              createCell(item.session2 || '', false, rowBg, 1, 1, 20, AlignmentType.RIGHT),
-              createCell((item as any).percent || '', true, rowBg)
+              ...(!samePreviousMerged(page, rowIndex, "mawrid") ? [createCell(item.mawrid || '', true, rowBg, undefined, mergedSpan(page, rowIndex, "mawrid"), 20, AlignmentType.CENTER, true, false, hwContext)] : []),
+              createCell(item.session1 || '', false, rowBg, 1, 1, 20, AlignmentType.RIGHT, false, true, hwContext),
+              createCell(item.session2 || '', false, rowBg, 1, 1, 20, AlignmentType.RIGHT, false, true, hwContext),
+              createCell((item as any).percent || '', true, rowBg, 1, 1, 20, AlignmentType.CENTER, false, false, hwContext)
             ]
           }));
         }
@@ -298,8 +349,8 @@ export const generateDistributionDocx = async (
             children: [new Paragraph({
               alignment: AlignmentType.CENTER,
               children: [
-                new TextRun({ text: 'الصفحة ', font: "Cairo", rightToLeft: true }),
-                new TextRun({ children: [PageNumber.CURRENT], font: "Cairo" })
+                new TextRun({ text: 'الصفحة ', font: wordFontAttrs, rightToLeft: true }),
+                new TextRun({ children: [PageNumber.CURRENT], font: wordFontAttrs })
               ]
             })]
           })

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Plus, Save, Trash2, Download, Search, Edit3, X, Database, Sparkles } from 'lucide-react';
+import { Plus, Save, Trash2, Download, Search, Edit3, X, Database } from 'lucide-react';
 import { LessonMemo, Activity } from '../types';
 
 const normalizeKey = (v: string) => v.trim().replace(/\s+/g, ' ').toLowerCase();
@@ -122,35 +122,31 @@ export const CurriculumDatabaseManager: React.FC<Props> = ({ lessons, setLessons
   );
 
   return (
-    <main className="flex-1 p-4 md:p-7 bg-slate-50 overflow-y-auto" dir="rtl">
+    <main className="flex-1 p-3.5 sm:p-5 bg-slate-50 overflow-y-auto overflow-x-clip" dir="rtl">
       <div className="max-w-7xl mx-auto">
-        <div className="bg-white rounded-2xl border p-5 mb-5">
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 mb-4">
           <div className="flex flex-wrap justify-between items-center gap-3">
-            <div className="flex items-center gap-2"><Database className="w-5 h-5 text-emerald-700" /><h1 className="text-xl font-black">إدارة قاعدة البيانات التعليمية</h1></div>
-            <div className="flex items-center gap-2">
-              <button onClick={handleNewDatabase} className="px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-xs transition cursor-pointer flex items-center gap-1.5">
+            <div className="flex items-center gap-2"><Database className="w-5 h-5 text-emerald-700" /><h1 className="text-lg sm:text-xl font-extrabold text-slate-900">إدارة قاعدة البيانات والموارد التعليمية</h1></div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button onClick={handleNewDatabase} className="px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-xs transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap">
                 <Plus className="w-4 h-4" />
                 <span>قاعدة بيانات جديدة</span>
               </button>
-              <button onClick={exportDb} className="px-3 py-2 rounded-xl border border-gray-300 hover:bg-gray-50 text-xs font-bold transition cursor-pointer flex items-center gap-1.5">
+              <button onClick={exportDb} className="px-3 py-2 rounded-xl border border-slate-300 hover:bg-slate-50 text-xs font-bold transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap">
                 <Download className="w-4 h-4" />
-                <span>تصدير</span>
+                <span>تصدير JSON</span>
               </button>
             </div>
           </div>
-          <div className="mt-3 grid sm:grid-cols-4 gap-2 text-[10px] font-bold">
-            <div className="rounded-xl bg-slate-50 border p-2">السجلات: <b>{lessons.length}</b></div>
+          <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-bold tabular-nums">
+            <div className="rounded-xl bg-slate-50 border border-slate-200/70 p-2">السجلات: <b>{lessons.length}</b></div>
             <div className="rounded-xl bg-emerald-50 border border-emerald-100 p-2">مضاف/معدل: <b>{diagnostics.custom}</b></div>
             <div className="rounded-xl bg-amber-50 border border-amber-100 p-2">تكرارات محتملة: <b>{diagnostics.duplicates}</b></div>
             <div className="rounded-xl bg-rose-50 border border-rose-100 p-2">بدون نشاط: <b>{diagnostics.emptyActivities}</b></div>
           </div>
-          <div className="mt-3 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-[11px] flex items-center gap-2">
-            <Sparkles className="w-4 h-4 shrink-0 text-emerald-700" />
-            <span>يمكنك إنشاء قاعدة بيانات جديدة أو إضافة وحفظ السجلات وتصديرها بصيغة JSON بكل سهولة.</span>
-          </div>
         </div>
 
-        <div className="grid lg:grid-cols-[340px_1fr] gap-5">
+        <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-4">
           <section className="bg-white rounded-2xl border overflow-hidden">
             <div className="p-3 border-b bg-gray-50">
               <div className="grid grid-cols-4 gap-1 mb-3">

@@ -14,6 +14,14 @@ import {
   PageOrientation
 , Footer, PageNumber , ImageRun } from "docx";
 import { LessonMemo, MemoConfig, Activity } from "../types";
+import {
+  buildDocxTextRuns,
+  getEffectiveExportFontFamily,
+  isHandwritingActiveFor,
+  loadHandwritingSettings,
+  type HandwritingStyleSettings,
+  type PenRole,
+} from "../services/handwritingStyle";
 
 
 const base64ToUint8Array = (base64: string): Uint8Array => {
@@ -121,8 +129,44 @@ const THEMES: Record<string, { hex: string, bg: string, text: string, bgSoft: st
   '4am': { hex: 'c2185b', bg: 'fce4ec', text: 'c2185b', bgSoft: 'fff5f8' },
 };
 
-const createParagraph = (text?: any, bold = false, color = "000000", size = 22, alignment: any = AlignmentType.RIGHT) => {
+interface DocxParaOpts {
+  semantic?: boolean;
+  defaultRole?: PenRole;
+  hwStyle?: HandwritingStyleSettings;
+  hwActive?: boolean;
+  wordFont?: string;
+}
+
+const stripHash = (hex: string) => hex.replace(/^#/, '').toUpperCase();
+
+const createParagraph = (
+  text?: any,
+  bold = false,
+  color = "000000",
+  size = 22,
+  alignment: any = AlignmentType.RIGHT,
+  opts: DocxParaOpts = {}
+) => {
   const safeText = text === undefined || text === null ? '' : String(text);
+  const hwStyle = opts.hwStyle ?? loadHandwritingSettings();
+  const hwActive = opts.hwActive ?? isHandwritingActiveFor('memos', hwStyle);
+  const wordFont = opts.wordFont ?? getEffectiveExportFontFamily('docx', hwStyle, 'memos');
+  const fontAttrs = { ascii: wordFont, hAnsi: wordFont, cs: wordFont, hint: 'cs' };
+
+  if (opts.semantic && hwActive) {
+    return new Paragraph({
+      alignment,
+      bidirectional: true,
+      children: buildDocxTextRuns(safeText, hwStyle, {
+        size,
+        bold,
+        defaultRole: opts.defaultRole || 'bodyBlack',
+        fallbackColorHex: color,
+        fontName: wordFont,
+      }),
+    });
+  }
+
   return new Paragraph({
     alignment: alignment,
     bidirectional: true,
@@ -133,25 +177,35 @@ const createParagraph = (text?: any, bold = false, color = "000000", size = 22, 
         color: color,
         rightToLeft: true,
         size: size,
-        font: "Arial"
+        font: fontAttrs
       }),
       ...(i < arr.length - 1 ? [new TextRun({ break: 1 })] : [])
     ]).flat()
   });
 };
 
-const createCell = (text?: any, bold = false, color = "000000", bgColor?: string, columnSpan?: number, rowSpan?: number, size = 22, alignment: any = AlignmentType.RIGHT) => {
+const createCell = (
+  text?: any,
+  bold = false,
+  color = "000000",
+  bgColor?: string,
+  columnSpan?: number,
+  rowSpan?: number,
+  size = 22,
+  alignment: any = AlignmentType.RIGHT,
+  opts: DocxParaOpts = {}
+) => {
   return new TableCell({
     columnSpan,
     rowSpan,
     shading: bgColor ? { fill: bgColor, type: ShadingType.CLEAR, color: "auto" } : undefined,
     margins: { top: 150, bottom: 150, left: 150, right: 150 },
     verticalAlign: VerticalAlign.CENTER,
-    children: [createParagraph(text, bold, color, size, alignment)]
+    children: [createParagraph(text, bold, color, size, alignment, opts)]
   });
 };
 
-const renderTables = (tables?: { headers: string[], rows: string[][] }[]) => {
+const renderTables = (tables?: { headers: string[], rows: string[][] }[], opts: DocxParaOpts = {}) => {
   if (!tables || tables.length === 0) return [];
   return tables.map(tbl => new Table({
     visuallyRightToLeft: true,
@@ -170,13 +224,13 @@ const renderTables = (tables?: { headers: string[], rows: string[][] }[]) => {
         cantSplit: true,
         children: tbl.headers.map(h => new TableCell({
           shading: { fill: "f3f4f6", type: ShadingType.CLEAR, color: "auto" },
-          children: [createParagraph(h, true, "000000", 20, AlignmentType.CENTER)]
+          children: [createParagraph(h, true, opts.hwActive && opts.hwStyle ? stripHash(opts.hwStyle.palette.titleBlue) : "000000", 20, AlignmentType.CENTER, opts)]
         }))
       }),
       ...tbl.rows.map(row => new TableRow({
         cantSplit: true,
         children: row.map(cell => new TableCell({
-          children: [createParagraph(cell, false, "333333", 20, AlignmentType.CENTER)]
+          children: [createParagraph(cell, false, "333333", 20, AlignmentType.CENTER, { ...opts, semantic: true })]
         }))
       }))
     ]
@@ -185,6 +239,16 @@ const renderTables = (tables?: { headers: string[], rows: string[][] }[]) => {
 
 export const generateDocx = async (lesson: LessonMemo, config: MemoConfig, activeActivities: boolean[], isMergedFormat: boolean): Promise<Blob> => {
   const theme = THEMES[config.level] || THEMES['4am'];
+  const hwStyle = loadHandwritingSettings();
+  const hwActive = isHandwritingActiveFor('memos', hwStyle);
+  const wordFont = getEffectiveExportFontFamily('docx', hwStyle, 'memos');
+  const wordFontAttrs = { ascii: wordFont, hAnsi: wordFont, cs: wordFont, hint: 'cs' };
+  const hwOpts: DocxParaOpts = { hwStyle, hwActive, wordFont };
+  const blueHex = hwActive ? stripHash(hwStyle.palette.titleBlue) : theme.hex;
+  const redHex = hwActive ? stripHash(hwStyle.palette.subRed) : theme.hex;
+  const greenHex = hwActive ? stripHash(hwStyle.palette.defGreen) : "333333";
+  const purpleHex = hwActive ? stripHash(hwStyle.palette.termPurple) : "666666";
+  const orangeHex = hwActive ? stripHash(hwStyle.palette.noteOrange) : "666666";
   
   const levelLabel =
     config.level === '4am'
@@ -208,7 +272,7 @@ export const generateDocx = async (lesson: LessonMemo, config: MemoConfig, activ
   const diagramParagraphs = lesson.diagrams && lesson.diagrams.length > 0
     ? (await Promise.all(
         lesson.diagrams.map(async (diagram) => [
-          ...(diagram.title ? [createParagraph(diagram.title, true, theme.hex, 22, AlignmentType.CENTER)] : []),
+          ...(diagram.title ? [createParagraph(diagram.title, true, blueHex, 22, AlignmentType.CENTER, hwOpts)] : []),
           new Paragraph({
             alignment: AlignmentType.CENTER,
             children: [new ImageRun({
@@ -217,13 +281,13 @@ export const generateDocx = async (lesson: LessonMemo, config: MemoConfig, activ
               transformation: { width: 430, height: 295 }
             })]
           }),
-          ...(diagram.description ? [createParagraph(diagram.description, false, "333333", 20)] : []),
+          ...(diagram.description ? [createParagraph(diagram.description, false, "333333", 20, AlignmentType.RIGHT, { ...hwOpts, semantic: true })] : []),
           new Paragraph({ text: "", spacing: { after: 300 } })
         ])
       )).flat()
     : lesson.diagramSvg
       ? [
-          createParagraph(lesson.diagramTitle || "المخطط", true, theme.hex, 22, AlignmentType.CENTER),
+          createParagraph(lesson.diagramTitle || "المخطط", true, blueHex, 22, AlignmentType.CENTER, hwOpts),
           new Paragraph({
             alignment: AlignmentType.CENTER,
             children: [new ImageRun({
@@ -232,7 +296,7 @@ export const generateDocx = async (lesson: LessonMemo, config: MemoConfig, activ
               transformation: { width: 430, height: 295 }
             })]
           }),
-          ...(lesson.diagramDescription ? [createParagraph(lesson.diagramDescription, false, "333333", 20)] : []),
+          ...(lesson.diagramDescription ? [createParagraph(lesson.diagramDescription, false, "333333", 20, AlignmentType.RIGHT, { ...hwOpts, semantic: true })] : []),
           new Paragraph({ text: "", spacing: { after: 300 } })
         ]
       : [];
@@ -241,7 +305,7 @@ export const generateDocx = async (lesson: LessonMemo, config: MemoConfig, activ
     styles: {
       default: {
         document: {
-          run: { rightToLeft: true, font: "Arial" },
+          run: { rightToLeft: true, font: wordFontAttrs },
           paragraph: {  alignment: AlignmentType.RIGHT }
         }
       }
@@ -254,10 +318,10 @@ export const generateDocx = async (lesson: LessonMemo, config: MemoConfig, activ
               alignment: AlignmentType.CENTER,
               children: [
                 teacherStampRun,
-                new TextRun({ text: "   الصفحة ", font: "Arial" }),
-                new TextRun({ children: [PageNumber.CURRENT], font: "Arial" }),
-                new TextRun({ text: " من ", font: "Arial" }),
-                new TextRun({ children: [PageNumber.TOTAL_PAGES], font: "Arial" })
+                new TextRun({ text: "   الصفحة ", font: wordFontAttrs }),
+                new TextRun({ children: [PageNumber.CURRENT], font: wordFontAttrs }),
+                new TextRun({ text: " من ", font: wordFontAttrs }),
+                new TextRun({ children: [PageNumber.TOTAL_PAGES], font: wordFontAttrs })
               ]
             })
           ]
@@ -289,24 +353,24 @@ export const generateDocx = async (lesson: LessonMemo, config: MemoConfig, activ
                   shading: { fill: theme.bgSoft, type: ShadingType.CLEAR, color: "auto" },
                   margins: { top: 150, bottom: 150, left: 150, right: 150 },
                   children: [
-                    createParagraph("الجمهورية الجزائرية الديمقراطية الشعبية — وزارة التربية الوطنية", true, "666666", 20, AlignmentType.CENTER),
-                    createParagraph(isMergedFormat ? "مذكرة بيداغوجية بنشاط الأستاذ المدمج (بدون خانة نشاط المتعلم)" : "مذكرة بيداغوجية لمادة علوم الطبيعة والحياة (النموذج المفصل)", true, theme.hex, 22, AlignmentType.CENTER),
+                    createParagraph("الجمهورية الجزائرية الديمقراطية الشعبية — وزارة التربية الوطنية", true, "666666", 20, AlignmentType.CENTER, hwOpts),
+                    createParagraph(isMergedFormat ? "مذكرة بيداغوجية بنشاط الأستاذ المدمج (بدون خانة نشاط المتعلم)" : "مذكرة بيداغوجية لمادة علوم الطبيعة والحياة (النموذج المفصل)", true, blueHex, 22, AlignmentType.CENTER, hwOpts),
                   ]
                 })
               ]
             }),
             new TableRow({
               children: [
-                createCell(`رقم المذكرة: ${config.memoNumber || ''}`, true, theme.hex, theme.bgSoft, 1, 1, 24, AlignmentType.RIGHT),
-                createCell(`المستوى: ${levelLabel}`, true, theme.hex, theme.bgSoft, 1, 1, 26, AlignmentType.CENTER),
-                createCell(`الأستاذ: ${config.teacherName}`, true, "000000", theme.bgSoft, 1, 1, 24, AlignmentType.LEFT),
+                createCell(`رقم المذكرة: ${config.memoNumber || ''}`, true, blueHex, theme.bgSoft, 1, 1, 24, AlignmentType.RIGHT, hwOpts),
+                createCell(`المستوى: ${levelLabel}`, true, blueHex, theme.bgSoft, 1, 1, 26, AlignmentType.CENTER, hwOpts),
+                createCell(`الأستاذ: ${config.teacherName}`, true, "000000", theme.bgSoft, 1, 1, 24, AlignmentType.LEFT, hwOpts),
               ]
             }),
             new TableRow({
               children: [
-                createCell(`مديرية التربية: ${config.directorate}`, true, "333333", theme.bgSoft, 1, 1, 22, AlignmentType.RIGHT),
-                createCell(`المتوسطة: ${config.schoolName}`, true, "333333", theme.bgSoft, 1, 1, 22, AlignmentType.CENTER),
-                createCell(`الموسم: ${config.schoolYear}`, true, "333333", theme.bgSoft, 1, 1, 22, AlignmentType.LEFT),
+                createCell(`مديرية التربية: ${config.directorate}`, true, "333333", theme.bgSoft, 1, 1, 22, AlignmentType.RIGHT, hwOpts),
+                createCell(`المتوسطة: ${config.schoolName}`, true, "333333", theme.bgSoft, 1, 1, 22, AlignmentType.CENTER, hwOpts),
+                createCell(`الموسم: ${config.schoolYear}`, true, "333333", theme.bgSoft, 1, 1, 22, AlignmentType.LEFT, hwOpts),
               ]
             }),
           ]
@@ -331,7 +395,7 @@ export const generateDocx = async (lesson: LessonMemo, config: MemoConfig, activ
                     shading: { fill: "F9FAFB", type: ShadingType.CLEAR, color: "auto" },
                     margins: { top: 150, bottom: 150, left: 150, right: 150 },
                     children: [
-                      createParagraph(`الكفاءة الختامية: ${lesson.kafaaKhitamiya}`, true, "333333", 22)
+                      createParagraph(`الكفاءة الختامية: ${lesson.kafaaKhitamiya}`, true, greenHex, 22, AlignmentType.RIGHT, { ...hwOpts, semantic: true, defaultRole: 'defGreen' })
                     ]
                   })
                 ]
@@ -356,32 +420,32 @@ export const generateDocx = async (lesson: LessonMemo, config: MemoConfig, activ
           rows: [
             new TableRow({
               children: [
-                new TableCell({ width: { size: 20, type: WidthType.PERCENTAGE }, shading: { fill: theme.bg, type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("الميدان", true, theme.text)] }),
-                new TableCell({ width: { size: 80, type: WidthType.PERCENTAGE }, children: [createParagraph(lesson.midan, true, "000000")] }),
+                new TableCell({ width: { size: 20, type: WidthType.PERCENTAGE }, shading: { fill: theme.bg, type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("الميدان", true, blueHex, 22, AlignmentType.RIGHT, hwOpts)] }),
+                new TableCell({ width: { size: 80, type: WidthType.PERCENTAGE }, children: [createParagraph(lesson.midan, true, blueHex, 22, AlignmentType.RIGHT, hwOpts)] }),
               ]
             }),
             new TableRow({
               children: [
-                new TableCell({ width: { size: 20, type: WidthType.PERCENTAGE }, shading: { fill: "F9FAFB", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("المقطع التعلمي", true, theme.hex)] }),
-                new TableCell({ width: { size: 80, type: WidthType.PERCENTAGE }, children: [createParagraph(lesson.maqta, true, "333333")] }),
+                new TableCell({ width: { size: 20, type: WidthType.PERCENTAGE }, shading: { fill: "F9FAFB", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("المقطع التعلمي", true, blueHex, 22, AlignmentType.RIGHT, hwOpts)] }),
+                new TableCell({ width: { size: 80, type: WidthType.PERCENTAGE }, children: [createParagraph(lesson.maqta, true, blueHex, 22, AlignmentType.RIGHT, hwOpts)] }),
               ]
             }),
             new TableRow({
               children: [
-                new TableCell({ width: { size: 20, type: WidthType.PERCENTAGE }, shading: { fill: theme.bg, type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("المورد التعلمي", true, theme.text)] }),
-                new TableCell({ width: { size: 80, type: WidthType.PERCENTAGE }, children: [createParagraph(lesson.mawrid, true, "000000")] }),
+                new TableCell({ width: { size: 20, type: WidthType.PERCENTAGE }, shading: { fill: theme.bg, type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("المورد التعلمي", true, blueHex, 22, AlignmentType.RIGHT, hwOpts)] }),
+                new TableCell({ width: { size: 80, type: WidthType.PERCENTAGE }, children: [createParagraph(lesson.mawrid, true, blueHex, 22, AlignmentType.RIGHT, hwOpts)] }),
               ]
             }),
             new TableRow({
               children: [
-                new TableCell({ width: { size: 20, type: WidthType.PERCENTAGE }, shading: { fill: "F9FAFB", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("تعلم المورد", true, theme.hex)] }),
-                new TableCell({ width: { size: 80, type: WidthType.PERCENTAGE }, children: [createParagraph(lesson.ta3alom, true, theme.hex, 24)] }),
+                new TableCell({ width: { size: 20, type: WidthType.PERCENTAGE }, shading: { fill: "F9FAFB", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("تعلم المورد", true, blueHex, 22, AlignmentType.RIGHT, hwOpts)] }),
+                new TableCell({ width: { size: 80, type: WidthType.PERCENTAGE }, children: [createParagraph(lesson.ta3alom, true, blueHex, 24, AlignmentType.RIGHT, hwOpts)] }),
               ]
             }),
             new TableRow({
               children: [
-                new TableCell({ width: { size: 20, type: WidthType.PERCENTAGE }, shading: { fill: theme.bg, type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("مركبة الكفاءة", true, theme.text)] }),
-                new TableCell({ width: { size: 80, type: WidthType.PERCENTAGE }, children: [createParagraph(lesson.markaba || '—', true, "333333")] }),
+                new TableCell({ width: { size: 20, type: WidthType.PERCENTAGE }, shading: { fill: theme.bg, type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("مركبة الكفاءة", true, greenHex, 22, AlignmentType.RIGHT, hwOpts)] }),
+                new TableCell({ width: { size: 80, type: WidthType.PERCENTAGE }, children: [createParagraph(lesson.markaba || '—', true, greenHex, 22, AlignmentType.RIGHT, { ...hwOpts, semantic: true, defaultRole: 'defGreen' })] }),
               ]
             }),
           ]
@@ -407,17 +471,17 @@ export const generateDocx = async (lesson: LessonMemo, config: MemoConfig, activ
                   width: { size: 50, type: WidthType.PERCENTAGE },
                   margins: { top: 150, bottom: 150, left: 150, right: 150 },
                   children: [
-                    createParagraph("معايير التقويم", true, theme.hex),
-                    createParagraph(lesson.ma3ayirTaqwim || '', false, "333333")
+                    createParagraph("معايير التقويم", true, redHex, 22, AlignmentType.RIGHT, hwOpts),
+                    createParagraph(lesson.ma3ayirTaqwim || '', false, "333333", 22, AlignmentType.RIGHT, { ...hwOpts, semantic: true })
                   ]
                 }),
                 new TableCell({
                   width: { size: 50, type: WidthType.PERCENTAGE },
                   margins: { top: 150, bottom: 150, left: 150, right: 150 },
                   children: [
-                    createParagraph("الموارد المعرفية والمصطلحات", true, theme.hex),
-                    createParagraph(lesson.marifa || '', false, "333333"),
-                    createParagraph(lesson.mostalahat ? `المصطلحات: ${lesson.mostalahat}` : '', true, "666666", 20)
+                    createParagraph("الموارد المعرفية والمصطلحات", true, blueHex, 22, AlignmentType.RIGHT, hwOpts),
+                    createParagraph(lesson.marifa || '', false, "333333", 22, AlignmentType.RIGHT, { ...hwOpts, semantic: true }),
+                    createParagraph(lesson.mostalahat ? `المصطلحات: ${lesson.mostalahat}` : '', true, purpleHex, 20, AlignmentType.RIGHT, { ...hwOpts, semantic: true, defaultRole: 'termPurple' })
                   ]
                 }),
               ]
@@ -445,21 +509,21 @@ export const generateDocx = async (lesson: LessonMemo, config: MemoConfig, activ
                   shading: { fill: "F9FAFB", type: ShadingType.CLEAR, color: "auto" },
                   margins: { top: 150, bottom: 150, left: 150, right: 150 },
                   children: [
-                    createParagraph(`الوسائل: ${lesson.wasail || 'الكتاب المدرسي، وثائق ودعامات تعليمية'}`, true, "333333")
+                    createParagraph(`الوسائل: ${lesson.wasail || 'الكتاب المدرسي، وثائق ودعامات تعليمية'}`, true, "333333", 22, AlignmentType.RIGHT, { ...hwOpts, semantic: true })
                   ]
                 }),
                 new TableCell({
                   shading: { fill: "F9FAFB", type: ShadingType.CLEAR, color: "auto" },
                   margins: { top: 150, bottom: 150, left: 150, right: 150 },
                   children: [
-                    createParagraph(`المراجع: ${lesson.marajie || ''}`, true, "333333")
+                    createParagraph(`المراجع: ${lesson.marajie || ''}`, true, "333333", 22, AlignmentType.RIGHT, hwOpts)
                   ]
                 }),
                 new TableCell({
                   shading: { fill: "F9FAFB", type: ShadingType.CLEAR, color: "auto" },
                   margins: { top: 150, bottom: 150, left: 150, right: 150 },
                   children: [
-                    createParagraph(`الزمن الكلي: ${lesson.zamanKoli || ''}`, true, "000000", 22, AlignmentType.LEFT)
+                    createParagraph(`الزمن الكلي: ${lesson.zamanKoli || ''}`, true, "000000", 22, AlignmentType.LEFT, hwOpts)
                   ]
                 }),
               ]
@@ -488,17 +552,17 @@ export const generateDocx = async (lesson: LessonMemo, config: MemoConfig, activ
               cantSplit: true,
               children: isMergedFormat 
                 ? [
-                    new TableCell({ width: { size: 15, type: WidthType.PERCENTAGE }, shading: { fill: "F3F4F6", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("المراحل", true, "000000", 22, AlignmentType.CENTER)] }),
-                    new TableCell({ width: { size: 60, type: WidthType.PERCENTAGE }, shading: { fill: "F3F4F6", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("نشاط الأستاذ (المهام وسيرورة بناء التعلمات)", true, "000000", 22, AlignmentType.CENTER)] }),
-                    new TableCell({ width: { size: 10, type: WidthType.PERCENTAGE }, shading: { fill: "F3F4F6", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("الزمن", true, "000000", 22, AlignmentType.CENTER)] }),
-                    new TableCell({ width: { size: 15, type: WidthType.PERCENTAGE }, shading: { fill: "F3F4F6", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("ملاحظة", true, "000000", 22, AlignmentType.CENTER)] }),
+                    new TableCell({ width: { size: 15, type: WidthType.PERCENTAGE }, shading: { fill: "F3F4F6", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("المراحل", true, "000000", 22, AlignmentType.CENTER, hwOpts)] }),
+                    new TableCell({ width: { size: 60, type: WidthType.PERCENTAGE }, shading: { fill: "F3F4F6", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("نشاط الأستاذ (المهام وسيرورة بناء التعلمات)", true, "000000", 22, AlignmentType.CENTER, hwOpts)] }),
+                    new TableCell({ width: { size: 10, type: WidthType.PERCENTAGE }, shading: { fill: "F3F4F6", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("الزمن", true, "000000", 22, AlignmentType.CENTER, hwOpts)] }),
+                    new TableCell({ width: { size: 15, type: WidthType.PERCENTAGE }, shading: { fill: "F3F4F6", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("ملاحظة", true, "000000", 22, AlignmentType.CENTER, hwOpts)] }),
                   ]
                 : [
-                    new TableCell({ width: { size: 15, type: WidthType.PERCENTAGE }, shading: { fill: "F3F4F6", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("المراحل", true, "000000", 22, AlignmentType.CENTER)] }),
-                    new TableCell({ width: { size: 30, type: WidthType.PERCENTAGE }, shading: { fill: "F3F4F6", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("نشاط الأستاذ", true, "000000", 22, AlignmentType.CENTER)] }),
-                    new TableCell({ width: { size: 30, type: WidthType.PERCENTAGE }, shading: { fill: "F3F4F6", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("نشاط المتعلم", true, "000000", 22, AlignmentType.CENTER)] }),
-                    new TableCell({ width: { size: 10, type: WidthType.PERCENTAGE }, shading: { fill: "F3F4F6", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("الزمن", true, "000000", 22, AlignmentType.CENTER)] }),
-                    new TableCell({ width: { size: 15, type: WidthType.PERCENTAGE }, shading: { fill: "F3F4F6", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("ملاحظة", true, "000000", 22, AlignmentType.CENTER)] }),
+                    new TableCell({ width: { size: 15, type: WidthType.PERCENTAGE }, shading: { fill: "F3F4F6", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("المراحل", true, "000000", 22, AlignmentType.CENTER, hwOpts)] }),
+                    new TableCell({ width: { size: 30, type: WidthType.PERCENTAGE }, shading: { fill: "F3F4F6", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("نشاط الأستاذ", true, "000000", 22, AlignmentType.CENTER, hwOpts)] }),
+                    new TableCell({ width: { size: 30, type: WidthType.PERCENTAGE }, shading: { fill: "F3F4F6", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("نشاط المتعلم", true, "000000", 22, AlignmentType.CENTER, hwOpts)] }),
+                    new TableCell({ width: { size: 10, type: WidthType.PERCENTAGE }, shading: { fill: "F3F4F6", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("الزمن", true, "000000", 22, AlignmentType.CENTER, hwOpts)] }),
+                    new TableCell({ width: { size: 15, type: WidthType.PERCENTAGE }, shading: { fill: "F3F4F6", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("ملاحظة", true, "000000", 22, AlignmentType.CENTER, hwOpts)] }),
                   ]
             }),
             // وضعية الانطلاق
@@ -506,17 +570,17 @@ export const generateDocx = async (lesson: LessonMemo, config: MemoConfig, activ
               cantSplit: true,
               children: isMergedFormat
                 ? [
-                    new TableCell({ shading: { fill: theme.bg, type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("وضعية الانطلاق", true, theme.hex, 22, AlignmentType.CENTER)] }),
-                    new TableCell({ children: [createParagraph(`تقديم الوضعية وطرح المشكل العلمي:\n${lesson.wadiya}\n\nالمشكلة:\n${lesson.moshkila}\n\nالفرضيات:\n${lesson.faradiyat}`, false, "333333"), ...renderTables(lesson.wadiyaTables)] }),
-                    new TableCell({ children: [createParagraph("10 د", true, "333333", 22, AlignmentType.CENTER)] }),
-                    new TableCell({ children: [createParagraph("جماعي", false, "666666", 20, AlignmentType.CENTER)] }),
+                    new TableCell({ shading: { fill: theme.bg, type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("وضعية الانطلاق", true, blueHex, 22, AlignmentType.CENTER, hwOpts)] }),
+                    new TableCell({ children: [createParagraph(`تقديم الوضعية وطرح المشكل العلمي:\n${lesson.wadiya}\n\nالمشكلة:\n${lesson.moshkila}\n\nالفرضيات:\n${lesson.faradiyat}`, false, "333333", 22, AlignmentType.RIGHT, { ...hwOpts, semantic: true }), ...renderTables(lesson.wadiyaTables, hwOpts)] }),
+                    new TableCell({ children: [createParagraph("10 د", true, "333333", 22, AlignmentType.CENTER, hwOpts)] }),
+                    new TableCell({ children: [createParagraph("جماعي", false, orangeHex, 20, AlignmentType.CENTER, hwOpts)] }),
                   ]
                 : [
-                    new TableCell({ shading: { fill: theme.bg, type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("وضعية الانطلاق", true, theme.hex, 22, AlignmentType.CENTER)] }),
-                    new TableCell({ children: [createParagraph(`تقديم الوضعية:\n${lesson.wadiya}\n\nالمشكلة:\n${lesson.moshkila}`, false, "333333")] }),
-                    new TableCell({ children: [createParagraph(`يقرأ الوضعية ويحاول الفهم.\n\nالفرضيات:\n${lesson.faradiyat}`, false, "333333"), ...renderTables(lesson.wadiyaTables)] }),
-                    new TableCell({ children: [createParagraph("10 د", true, "333333", 22, AlignmentType.CENTER)] }),
-                    new TableCell({ children: [createParagraph("جماعي", false, "666666", 20, AlignmentType.CENTER)] }),
+                    new TableCell({ shading: { fill: theme.bg, type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("وضعية الانطلاق", true, blueHex, 22, AlignmentType.CENTER, hwOpts)] }),
+                    new TableCell({ children: [createParagraph(`تقديم الوضعية:\n${lesson.wadiya}\n\nالمشكلة:\n${lesson.moshkila}`, false, "333333", 22, AlignmentType.RIGHT, { ...hwOpts, semantic: true })] }),
+                    new TableCell({ children: [createParagraph(`يقرأ الوضعية ويحاول الفهم.\n\nالفرضيات:\n${lesson.faradiyat}`, false, "333333", 22, AlignmentType.RIGHT, { ...hwOpts, semantic: true }), ...renderTables(lesson.wadiyaTables, hwOpts)] }),
+                    new TableCell({ children: [createParagraph("10 د", true, "333333", 22, AlignmentType.CENTER, hwOpts)] }),
+                    new TableCell({ children: [createParagraph("جماعي", false, orangeHex, 20, AlignmentType.CENTER, hwOpts)] }),
                   ]
             }),
             // الأنشطة
@@ -527,33 +591,33 @@ export const generateDocx = async (lesson: LessonMemo, config: MemoConfig, activ
                 children: isMergedFormat
                   ? [
                       new TableCell({ children: [
-    createParagraph("مرحلة البحث والتقصي", true, theme.hex, 22, AlignmentType.CENTER),
+    createParagraph("مرحلة البحث والتقصي", true, blueHex, 22, AlignmentType.CENTER, hwOpts),
     
   ] }),
                       new TableCell({
                         children: [
-                          createParagraph(activity.title, true, "333333", 22, AlignmentType.RIGHT),
-                          createParagraph(`المهمة والتعليمة:\n${activity.asila}\n\nالاستجابة والمنتوج المنتظر:\n${activity.ajwiba}`, false, "333333"),
-                          ...renderTables(activity.tables)
+                          createParagraph(activity.title, true, blueHex, 22, AlignmentType.RIGHT, hwOpts),
+                          createParagraph(`المهمة والتعليمة:\n${activity.asila}\n\nالاستجابة والمنتوج المنتظر:\n${activity.ajwiba}`, false, "333333", 22, AlignmentType.RIGHT, { ...hwOpts, semantic: true }),
+                          ...renderTables(activity.tables, hwOpts)
                         ]
                       }),
-                      new TableCell({ children: [createParagraph(activity.zaman || '', true, "333333", 22, AlignmentType.CENTER)] }),
-                      new TableCell({ children: [createParagraph(activity.mola7adha || '', false, "666666", 20, AlignmentType.CENTER)] }),
+                      new TableCell({ children: [createParagraph(activity.zaman || '', true, "333333", 22, AlignmentType.CENTER, hwOpts)] }),
+                      new TableCell({ children: [createParagraph(activity.mola7adha || '', false, orangeHex, 20, AlignmentType.CENTER, hwOpts)] }),
                     ]
                   : [
                       new TableCell({ children: [
-    createParagraph("مرحلة البحث والتقصي", true, theme.hex, 22, AlignmentType.CENTER),
+    createParagraph("مرحلة البحث والتقصي", true, blueHex, 22, AlignmentType.CENTER, hwOpts),
     
   ] }),
-                      new TableCell({ children: [createParagraph(activity.title, true, "333333", 22, AlignmentType.RIGHT), createParagraph(`التعليمة:\n${activity.asila}`, false, "333333")] }),
+                      new TableCell({ children: [createParagraph(activity.title, true, blueHex, 22, AlignmentType.RIGHT, hwOpts), createParagraph(`التعليمة:\n${activity.asila}`, false, "333333", 22, AlignmentType.RIGHT, { ...hwOpts, semantic: true })] }),
                       new TableCell({
                         children: [
-                          createParagraph(`الاستجابة والمنتوج المنتظر:\n${activity.ajwiba}`, false, "333333"),
-                          ...renderTables(activity.tables)
+                          createParagraph(`الاستجابة والمنتوج المنتظر:\n${activity.ajwiba}`, false, "333333", 22, AlignmentType.RIGHT, { ...hwOpts, semantic: true }),
+                          ...renderTables(activity.tables, hwOpts)
                         ]
                       }),
-                      new TableCell({ children: [createParagraph(activity.zaman || '', true, "333333", 22, AlignmentType.CENTER)] }),
-                      new TableCell({ children: [createParagraph(activity.mola7adha || '', false, "666666", 20, AlignmentType.CENTER)] }),
+                      new TableCell({ children: [createParagraph(activity.zaman || '', true, "333333", 22, AlignmentType.CENTER, hwOpts)] }),
+                      new TableCell({ children: [createParagraph(activity.mola7adha || '', false, orangeHex, 20, AlignmentType.CENTER, hwOpts)] }),
                     ]
               });
             }).filter(Boolean) as TableRow[],
@@ -562,17 +626,17 @@ export const generateDocx = async (lesson: LessonMemo, config: MemoConfig, activ
               cantSplit: true,
               children: isMergedFormat
                 ? [
-                    new TableCell({ shading: { fill: theme.bg, type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("إرساء الموارد", true, theme.hex, 22, AlignmentType.CENTER)] }),
-                    new TableCell({ children: [createParagraph(`توجيه وهيكلة التعلمات:\n${lesson.ustadhNashat?.irsae || "يوجه المناقشة لتلخيص المكتسبات، وتنسيق الإجابات وهيكلة المفاهيم لبناء الحصيلة المعرفية المشتركة للمورد."}\n\nالحصيلة المعرفية والمفاهيم المستخلصة:\n${lesson.irsae}`, false, "333333"), ...renderTables(lesson.irsaeTables)] }),
-                    new TableCell({ children: [createParagraph("15 د", true, "333333", 22, AlignmentType.CENTER)] }),
-                    new TableCell({ children: [createParagraph("فردي / كراس", false, "666666", 20, AlignmentType.CENTER)] }),
+                    new TableCell({ shading: { fill: theme.bg, type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("إرساء الموارد", true, greenHex, 22, AlignmentType.CENTER, hwOpts)] }),
+                    new TableCell({ children: [createParagraph(`توجيه وهيكلة التعلمات:\n${lesson.ustadhNashat?.irsae || "يوجه المناقشة لتلخيص المكتسبات، وتنسيق الإجابات وهيكلة المفاهيم لبناء الحصيلة المعرفية المشتركة للمورد."}\n\nالحصيلة المعرفية والمفاهيم المستخلصة:\n${lesson.irsae}`, false, greenHex, 22, AlignmentType.RIGHT, { ...hwOpts, semantic: true, defaultRole: 'defGreen' }), ...renderTables(lesson.irsaeTables, hwOpts)] }),
+                    new TableCell({ children: [createParagraph("15 د", true, "333333", 22, AlignmentType.CENTER, hwOpts)] }),
+                    new TableCell({ children: [createParagraph("فردي / كراس", false, orangeHex, 20, AlignmentType.CENTER, hwOpts)] }),
                   ]
                 : [
-                    new TableCell({ shading: { fill: theme.bg, type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("إرساء الموارد", true, theme.hex, 22, AlignmentType.CENTER)] }),
-                    new TableCell({ children: [createParagraph(`توجيه وهيكلة التعلمات:\n${lesson.ustadhNashat?.irsae || "يوجه المناقشة لتلخيص المكتسبات، وتنسيق الإجابات وهيكلة المفاهيم لبناء الحصيلة المعرفية المشتركة للمورد."}`, false, "333333")] }),
-                    new TableCell({ children: [createParagraph(`دور المتعلم:\n${lesson.mutaalimNashat?.irsae || "يشارك بنشاط في استخلاص النتائج وصياغة المفاهيم، ويدون حصيلة إرساء المورد في كراسه."}\n\nالحصيلة المعرفية والمفاهيم المستخلصة (إرساء المورد):\n${lesson.irsae}`, false, "333333"), ...renderTables(lesson.irsaeTables)] }),
-                    new TableCell({ children: [createParagraph("15 د", true, "333333", 22, AlignmentType.CENTER)] }),
-                    new TableCell({ children: [createParagraph("فردي / كراس", false, "666666", 20, AlignmentType.CENTER)] }),
+                    new TableCell({ shading: { fill: theme.bg, type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("إرساء الموارد", true, greenHex, 22, AlignmentType.CENTER, hwOpts)] }),
+                    new TableCell({ children: [createParagraph(`توجيه وهيكلة التعلمات:\n${lesson.ustadhNashat?.irsae || "يوجه المناقشة لتلخيص المكتسبات، وتنسيق الإجابات وهيكلة المفاهيم لبناء الحصيلة المعرفية المشتركة للمورد."}`, false, "333333", 22, AlignmentType.RIGHT, { ...hwOpts, semantic: true })] }),
+                    new TableCell({ children: [createParagraph(`دور المتعلم:\n${lesson.mutaalimNashat?.irsae || "يشارك بنشاط في استخلاص النتائج وصياغة المفاهيم، ويدون حصيلة إرساء المورد في كراسه."}\n\nالحصيلة المعرفية والمفاهيم المستخلصة (إرساء المورد):\n${lesson.irsae}`, false, greenHex, 22, AlignmentType.RIGHT, { ...hwOpts, semantic: true, defaultRole: 'defGreen' }), ...renderTables(lesson.irsaeTables, hwOpts)] }),
+                    new TableCell({ children: [createParagraph("15 د", true, "333333", 22, AlignmentType.CENTER, hwOpts)] }),
+                    new TableCell({ children: [createParagraph("فردي / كراس", false, orangeHex, 20, AlignmentType.CENTER, hwOpts)] }),
                   ]
             }),
             // تقويم الموارد
@@ -580,17 +644,17 @@ export const generateDocx = async (lesson: LessonMemo, config: MemoConfig, activ
               cantSplit: true,
               children: isMergedFormat
                 ? [
-                    new TableCell({ shading: { fill: "F9FAFB", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("تقويم الموارد", true, theme.hex, 22, AlignmentType.CENTER)] }),
-                    new TableCell({ children: [createParagraph(`تطبيق وتحكم:\n${lesson.ustadhNashat?.taqwim || "يطرح تمرين تقويمي لقياس مدى تحقق معايير الكفاءة والتحكم في المورد."}\n\n${lesson.taqwim}`, false, "333333"), ...renderTables(lesson.taqwimTables)] }),
-                    new TableCell({ children: [createParagraph("10 د", true, "333333", 22, AlignmentType.CENTER)] }),
-                    new TableCell({ children: [createParagraph("تقويم تكويني", false, "666666", 20, AlignmentType.CENTER)] }),
+                    new TableCell({ shading: { fill: "F9FAFB", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("تقويم الموارد", true, orangeHex, 22, AlignmentType.CENTER, hwOpts)] }),
+                    new TableCell({ children: [createParagraph(`تطبيق وتحكم:\n${lesson.ustadhNashat?.taqwim || "يطرح تمرين تقويمي لقياس مدى تحقق معايير الكفاءة والتحكم في المورد."}\n\n${lesson.taqwim}`, false, "333333", 22, AlignmentType.RIGHT, { ...hwOpts, semantic: true, defaultRole: 'noteOrange' }), ...renderTables(lesson.taqwimTables, hwOpts)] }),
+                    new TableCell({ children: [createParagraph("10 د", true, "333333", 22, AlignmentType.CENTER, hwOpts)] }),
+                    new TableCell({ children: [createParagraph("تقويم تكويني", false, orangeHex, 20, AlignmentType.CENTER, hwOpts)] }),
                   ]
                 : [
-                    new TableCell({ shading: { fill: "F9FAFB", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("تقويم الموارد", true, theme.hex, 22, AlignmentType.CENTER)] }),
-                    new TableCell({ children: [createParagraph(lesson.ustadhNashat?.taqwim || "يطرح تمرين تقويمي لقياس مدى تحقق معايير الكفاءة والتحكم في المورد.", false, "333333")] }),
-                    new TableCell({ children: [createParagraph(`تطبيق وتحكم:\n${lesson.taqwim}`, false, "333333"), ...renderTables(lesson.taqwimTables)] }),
-                    new TableCell({ children: [createParagraph("10 د", true, "333333", 22, AlignmentType.CENTER)] }),
-                    new TableCell({ children: [createParagraph("تقويم تكويني", false, "666666", 20, AlignmentType.CENTER)] }),
+                    new TableCell({ shading: { fill: "F9FAFB", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("تقويم الموارد", true, orangeHex, 22, AlignmentType.CENTER, hwOpts)] }),
+                    new TableCell({ children: [createParagraph(lesson.ustadhNashat?.taqwim || "يطرح تمرين تقويمي لقياس مدى تحقق معايير الكفاءة والتحكم في المورد.", false, "333333", 22, AlignmentType.RIGHT, { ...hwOpts, semantic: true })] }),
+                    new TableCell({ children: [createParagraph(`تطبيق وتحكم:\n${lesson.taqwim}`, false, "333333", 22, AlignmentType.RIGHT, { ...hwOpts, semantic: true, defaultRole: 'noteOrange' }), ...renderTables(lesson.taqwimTables, hwOpts)] }),
+                    new TableCell({ children: [createParagraph("10 د", true, "333333", 22, AlignmentType.CENTER, hwOpts)] }),
+                    new TableCell({ children: [createParagraph("تقويم تكويني", false, orangeHex, 20, AlignmentType.CENTER, hwOpts)] }),
                   ]
             })
           ]
@@ -614,19 +678,19 @@ export const generateDocx = async (lesson: LessonMemo, config: MemoConfig, activ
                 new TableCell({
                   width: { size: 50, type: WidthType.PERCENTAGE },
                   children: [
-                    createParagraph("تأشيرة الإدارة / المفتش:", true, "000000", 22),
-                    ...(config.principalName ? [createParagraph(`المدير(ة): ${config.principalName}`, true, "333333", 20)] : []),
-                    ...(config.inspectorName ? [createParagraph(`المفتش(ة): ${config.inspectorName}`, true, "333333", 20)] : []),
+                    createParagraph("تأشيرة الإدارة / المفتش:", true, "000000", 22, AlignmentType.RIGHT, hwOpts),
+                    ...(config.principalName ? [createParagraph(`المدير(ة): ${config.principalName}`, true, "333333", 20, AlignmentType.RIGHT, hwOpts)] : []),
+                    ...(config.inspectorName ? [createParagraph(`المفتش(ة): ${config.inspectorName}`, true, "333333", 20, AlignmentType.RIGHT, hwOpts)] : []),
                     new Paragraph({ text: "", spacing: { after: 600 } }),
-                    createParagraph("مساحة الختم", false, "999999", 20, AlignmentType.CENTER)
+                    createParagraph("مساحة الختم", false, "999999", 20, AlignmentType.CENTER, hwOpts)
                   ]
                 }),
                 new TableCell({
                   width: { size: 50, type: WidthType.PERCENTAGE },
                   children: [
-                    createParagraph("ختم وتأشيرة الأستاذ:", true, "000000", 22),
-                    createParagraph(`الأستاذ(ة): ${config.teacherName || ''}`, true, "333333", 20),
-                    createParagraph(config.schoolName || '', false, "666666", 20),
+                    createParagraph("ختم وتأشيرة الأستاذ:", true, "000000", 22, AlignmentType.RIGHT, hwOpts),
+                    createParagraph(`الأستاذ(ة): ${config.teacherName || ''}`, true, "333333", 20, AlignmentType.RIGHT, hwOpts),
+                    createParagraph(config.schoolName || '', false, "666666", 20, AlignmentType.RIGHT, hwOpts),
                     new Paragraph({ text: "", spacing: { after: 600 } }),
 (config.teacherStamp && config.teacherStamp.startsWith('data:image/'))
                       ? new Paragraph({

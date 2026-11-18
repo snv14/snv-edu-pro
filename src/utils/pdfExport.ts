@@ -1,6 +1,13 @@
 import jsPDF from 'jspdf';
 import { safeHtml2Canvas, sanitizeOklchForHtml2Canvas } from './html2canvasSanitizer';
 import type { MemoConfig } from '../types';
+import {
+  applyHandwritingCssVars,
+  getEffectiveExportFontFamily,
+  isHandwritingActiveFor,
+  loadHandwritingSettings,
+  type HandwritingStyleSettings,
+} from '../services/handwritingStyle';
 
 const waitForImages = async (root: HTMLElement): Promise<void> => {
   const images = Array.from(root.querySelectorAll('img'));
@@ -32,9 +39,12 @@ const prepareExportPage = (
   children: HTMLElement[],
   pageNumber: number,
   totalPages: number,
-  pageHeightPx: number
+  pageHeightPx: number,
+  hwStyle: HandwritingStyleSettings
 ): { page: HTMLElement; cleanup: () => void } => {
   const page = source.cloneNode(false) as HTMLElement;
+  const hwActive = isHandwritingActiveFor('memos', hwStyle);
+  const exportFont = getEffectiveExportFontFamily('pdf', hwStyle, 'memos');
 
   const widthPx = Math.round(source.getBoundingClientRect().width) || 794;
   page.style.boxShadow = 'none';
@@ -48,7 +58,19 @@ const prepareExportPage = (
   page.style.transform = 'none';
   page.style.backgroundColor = '#ffffff';
   page.style.direction = 'rtl';
-  page.style.fontFamily = "'Tajawal', 'Cairo', system-ui, sans-serif";
+  page.style.fontFamily = exportFont;
+  page.style.setProperty('--hw-font', exportFont);
+  page.style.setProperty('--hw-blue', hwStyle.palette.titleBlue);
+  page.style.setProperty('--hw-red', hwStyle.palette.subRed);
+  page.style.setProperty('--hw-green', hwStyle.palette.defGreen);
+  page.style.setProperty('--hw-black', hwStyle.palette.bodyBlack);
+  page.style.setProperty('--hw-purple', hwStyle.palette.termPurple);
+  page.style.setProperty('--hw-orange', hwStyle.palette.noteOrange);
+  if (hwActive) {
+    page.classList.add('hw-notebook-scope');
+  } else {
+    page.classList.remove('hw-notebook-scope');
+  }
   page.style.setProperty('-webkit-print-color-adjust', 'exact');
   page.style.setProperty('print-color-adjust', 'exact');
 
@@ -98,7 +120,7 @@ const prepareExportPage = (
   host.style.overflow = 'hidden';
   host.style.background = '#ffffff';
   host.style.direction = 'rtl';
-  host.style.fontFamily = "'Tajawal', 'Cairo', system-ui, sans-serif";
+  host.style.fontFamily = exportFont;
   host.style.zIndex = '99999';
   host.style.pointerEvents = 'none';
   host.style.opacity = '1';
@@ -244,6 +266,9 @@ export const generateMemoPdf = async (
   const paper = document.getElementById('memo-paper');
   if (!paper) throw new Error('لم يتم العثور على المذكرة للتصدير');
 
+  const hwStyle = loadHandwritingSettings();
+  applyHandwritingCssVars(hwStyle);
+
   if (document.fonts?.ready) await document.fonts.ready;
   await waitForImages(paper);
   await nextFrame();
@@ -268,7 +293,8 @@ export const generateMemoPdf = async (
       smartPages[index].children,
       index + 1,
       smartPages.length,
-      smartPages[index].pageHeightPx
+      smartPages[index].pageHeightPx,
+      hwStyle
     );
 
     try {

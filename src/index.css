@@ -1,17 +1,88 @@
 @import "@fontsource/cairo/400.css";
+@import "@fontsource/cairo/600.css";
 @import "@fontsource/cairo/700.css";
+@import "@fontsource/cairo/800.css";
+@import "@fontsource/playpen-sans-arabic/400.css";
+@import "@fontsource/playpen-sans-arabic/600.css";
+@import "@fontsource/playpen-sans-arabic/700.css";
+@import "@fontsource/harmattan/400.css";
+@import "@fontsource/harmattan/700.css";
+@import "@fontsource/lateef/400.css";
+@import "@fontsource/lateef/700.css";
+@import "@fontsource/marhey/400.css";
+@import "@fontsource/marhey/700.css";
+@import "@fontsource/tajawal/400.css";
+@import "@fontsource/tajawal/500.css";
+@import "@fontsource/tajawal/700.css";
+@import "@fontsource/tajawal/800.css";
 @import "tailwindcss";
 
-:root { --platform-ink:#172033; --platform-teal:#0f766e; --platform-teal-dark:#115e59; }
+:root {
+  --platform-ink: #0f172a;
+  --platform-teal: #0f766e;
+  --platform-teal-dark: #115e59;
+  --platform-blue: #0284c7;
+  --hw-font: 'Playpen Sans Arabic', 'Harmattan', 'Tajawal', 'Cairo', sans-serif;
+  --hw-scale: 1;
+  --hw-line-height: 1.55;
+  --hw-word-spacing: 0.03em;
+  --hw-blue: #1d4ed8;
+  --hw-red: #b91c1c;
+  --hw-green: #15803d;
+  --hw-black: #18181b;
+  --hw-purple: #6d28d9;
+  --hw-orange: #c2410c;
+}
 html,body,#root{min-height:100%;}
-body{margin:0;color:var(--platform-ink);background:#eef4f3;font-family:"Cairo","Tajawal","Noto Sans Arabic","Segoe UI",Tahoma,Arial,sans-serif;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;}
+body{margin:0;color:var(--platform-ink);background:#f6faf9;font-family:"Cairo","Tajawal","Noto Sans Arabic","Segoe UI",Tahoma,Arial,sans-serif;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;}
 button,input,textarea,select{font-family:inherit;}
-.app-shell{background:radial-gradient(circle at 10% 0%,rgba(15,118,110,.08),transparent 28%),radial-gradient(circle at 90% 12%,rgba(37,99,235,.07),transparent 30%),linear-gradient(135deg,#f7faf9 0%,#edf5f4 48%,#f5f7fb 100%);}
-.app-header{background:rgba(255,255,255,.88);border-bottom:1px solid rgba(148,163,184,.22);box-shadow:0 8px 28px rgba(15,23,42,.07);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);}
-.brand-mark{background:linear-gradient(135deg,#0f766e,#164e63);}
-.icon-button{background:rgba(241,245,249,.9);border:1px solid rgba(148,163,184,.2);}
-.icon-button:hover{background:#fff;color:#0f766e;box-shadow:0 6px 18px rgba(15,118,110,.12);}
-.glass-panel{background:rgba(255,255,255,.78);border:1px solid rgba(255,255,255,.85);box-shadow:0 18px 45px rgba(15,23,42,.08);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);}
+
+/* أسلوب الكتابة اليدوية للكراس المدرسي والأقلام الملونة دون تغيير البنية العامة */
+html[data-hw-enabled="true"] .hw-notebook-scope {
+  font-family: var(--hw-font);
+  word-spacing: var(--hw-word-spacing);
+}
+html[data-hw-enabled="true"] .hw-notebook-scope .hw-scaled-body {
+  font-size: calc(1em * var(--hw-scale, 1));
+  line-height: var(--hw-line-height, 1.55);
+}
+html[data-hw-enabled="true"][data-hw-ruled="true"] .hw-ruled-paper {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent,
+    transparent 23px,
+    rgba(37, 99, 235, 0.11) 24px
+  );
+}
+html[data-hw-enabled="true"] .hw-notebook-scope .memo-diagram-canvas svg text,
+html[data-hw-enabled="true"] .hw-notebook-scope .memo-diagram-canvas svg tspan {
+  font-family: var(--hw-font) !important;
+}
+.hw-title-accent {
+  color: var(--hw-blue);
+  text-decoration: underline;
+  text-decoration-color: var(--hw-red);
+  text-underline-offset: 4px;
+}
+.hw-sub-accent {
+  color: var(--hw-red);
+}
+.hw-def-accent {
+  color: var(--hw-green);
+}
+.hw-term-accent {
+  color: var(--hw-purple);
+}
+.hw-note-accent {
+  color: var(--hw-orange);
+}
+.app-shell{background:radial-gradient(circle at 8% 0%,rgba(15,118,110,.06),transparent 34%),radial-gradient(circle at 92% 8%,rgba(2,132,199,.06),transparent 34%),linear-gradient(180deg,#f8fbfa 0%,#f2f7f6 55%,#f6f9fc 100%);}
+.app-header{background:rgba(255,255,255,.94);border-bottom:1px solid rgba(15,23,42,.08);box-shadow:0 4px 20px rgba(15,23,42,.04);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);}
+.brand-mark{background:linear-gradient(135deg,#0f766e 0%,#0284c7 100%);}
+.icon-button{background:#f8fafc;border:1px solid rgba(148,163,184,.28);}
+.icon-button:hover{background:#ffffff;color:#0f766e;border-color:rgba(15,118,110,.35);box-shadow:0 4px 12px rgba(15,118,110,.10);}
+.glass-panel{background:rgba(255,255,255,.90);border:1px solid rgba(226,232,240,.9);box-shadow:0 10px 30px rgba(15,23,42,.05);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);}
+@media (prefers-reduced-motion: reduce){*,*::before,*::after{animation-duration:.01ms !important;transition-duration:.01ms !important;}}
 
 
 @media print {
@@ -218,7 +289,7 @@ button,input,textarea,select{font-family:inherit;}
     break-inside: avoid !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
-    font-family: 'Tajawal', system-ui, sans-serif !important;
+    font-family: var(--hw-font, 'Playpen Sans Arabic', 'Tajawal', 'Cairo', system-ui, sans-serif) !important;
   }
 
   .print-preview-root .logbook-content-page,
@@ -317,7 +388,7 @@ button,input,textarea,select{font-family:inherit;}
     table-layout: fixed !important;
     direction: rtl !important;
     unicode-bidi: plaintext !important;
-    font-family: "Cairo", sans-serif !important;
+    font-family: var(--hw-font, 'Cairo', sans-serif) !important;
     font-size: 9.5pt !important;
     line-height: 1.25 !important;
     color: #111827 !important;

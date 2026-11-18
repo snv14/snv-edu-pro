@@ -32,18 +32,31 @@ import {
   Info,
   Save,
   Download,
+  PenTool,
 } from 'lucide-react';
 import { LessonMemo, MemoConfig, Activity } from '../types';
 import { TeacherOfficialStamp } from './TeacherOfficialStamp';
 import { LogbookPrintBook } from './LogbookPrintBook';
-import { generateLogbookEntries, isLogbookRowOnOrAfter } from '../utils/dailyLogbookGenerator';
+import {
+  generateLogbookEntries,
+  isLogbookRowOnOrAfter,
+  reorganizeSubsequentSessions,
+} from '../utils/dailyLogbookGenerator';
 import { collectPreservedRows, preservedRowsInPeriod } from '../utils/logbookPreservation';
 import { DailyLogSheetTemplate, ScienceHeaderLeft, ScienceHeaderRight, CornerLeaves } from './DailyLogSheetTemplate';
 import { TealLogSheetTemplate } from './TealLogSheetTemplate';
-import { DAILY_LOGBOOK_PROGRAM_1AM } from '../data/logbook/dailyLogbookProgram1am';
-import { DAILY_LOGBOOK_PROGRAM_2AM } from '../data/logbook/dailyLogbookProgram2am';
-import { DAILY_LOGBOOK_PROGRAM_3AM } from '../data/logbook/dailyLogbookProgram3am';
-import { DAILY_LOGBOOK_PROGRAM_4AM } from '../data/logbook/dailyLogbookProgram4am';
+import { paginateLogbookEntries, type LogbookA4Page } from '../utils/logbookA4Pagination';
+import {
+  LOGBOOK_PROGRESSIONS,
+  logbookProgressionOf,
+  type PedagogicalUnitRecord,
+} from '../data/logbook';
+import { useHandwritingStyle } from '../hooks/useHandwritingStyle';
+import { getEffectiveExportFontFamily, isHandwritingActiveFor } from '../services/handwritingStyle';
+import { SelectionPenStrip } from './HandwrittenText';
+import { HandwritingStylePanel } from './HandwritingStylePanel';
+import { recallActivityBundle } from '../data/archive1am';
+import type { ActivityRecallBundle } from '../data/memos/archiveSchema';
 
 interface DailyLogbookProps {
   selectedLevel?: '1am' | '2am' | '3am' | '4am';
@@ -52,6 +65,7 @@ interface DailyLogbookProps {
   setConfig?: React.Dispatch<React.SetStateAction<MemoConfig>>;
   showToast: (msg: string) => void;
   curriculumLessons?: LessonMemo[];
+  initialOpenTimetable?: boolean;
 }
 
 export interface CurriculumResourceItem {
@@ -170,6 +184,18 @@ export interface LogEntry {
   sourceLearningUnitId?: string;
   sourceActivityId?: string;
   sourceActivityId2?: string;
+  sectionGroup?: string;
+  irsaaText?: string;
+  progressionUnitId?: string;
+  progressionOrder?: number;
+  weekNumber?: number;
+  sessionNumberInUnit?: number;
+  totalSessionsInUnit?: number;
+  sessionNumberInActivity?: number;
+  totalSessionsInActivity?: number;
+  completionStatus?: 'scheduled' | 'in_progress' | 'completed' | 'postponed';
+  sourceFile?: { pdfPath: string; sourcePage: number };
+  officialDurationSessions?: number | null;
 }
 
 const EMPTY_TIMETABLE_ROWS: TimetableGridRow[] = Array.from({ length: 8 }, (_, i) => ({
@@ -190,12 +216,9 @@ export const AUTO_FILLED_TIMETABLE_ROWS: TimetableGridRow[] = [
   { id: 'r8', time: '16:30 - 17:30', cells: createEmptyDayCells() },
 ];
 
-const LOGBOOK_DATA_VERSION = '2026-10-24-sheet-template-v19';
-const ROWS_PER_PAGE = 10;
+const LOGBOOK_DATA_VERSION = '2026-11-17-progression-pdfs-v20';
 const getPageDimensions = (orientation: 'portrait' | 'landscape') => orientation === 'landscape' ? { w: 297, h: 210 } : { w: 210, h: 297 };
-const PRINT_MARGIN = '14mm';
 const PAGE_INNER_PADDING = '12px';
-const NOTEBOOK_CONTENT_MIN_HEIGHT = '58px';
 
 function getSchoolWeekKey(dateStr: string): string {
   const clean = (dateStr || '').split(' ')[0];
@@ -214,10 +237,6 @@ function getSchoolWeekNumber(dateStr: string, startDate: string): number {
   start.setDate(start.getDate() - start.getDay());
   const diff = Math.floor((current.getTime() - start.getTime()) / 86400000);
   return Math.max(1, Math.floor(diff / 7) + 1);
-}
-
-function getTotalLogbookPages(rowCount: number): number {
-  return Math.max(1, Math.ceil(rowCount / ROWS_PER_PAGE));
 }
 
 export function detectLevelFromSection(sec: string): '1م' | '2م' | '3م' | '4م' | null {
@@ -604,7 +623,12 @@ function buildHierarchicalContent(
     addLine('النشاط المنجز', row.content);
   }
 
-  // 6. التقويم (إن وجد لهذه الحصة)
+  // 6. إرساء المورد والتقويم (إن وجدا لهذه الحصة)
+  const irsaa = clean(row.irsaaText);
+  if (irsaa) {
+    addLine('إرساء المورد', irsaa === 'إرساء المورد' ? 'تثبيت وبناء المفهوم الأساسي للمورد' : irsaa);
+  }
+
   const taqwim = clean(row.taqwim);
   if (taqwim) {
     addLine('التقويم', taqwim);
@@ -789,23 +813,27 @@ const auditGeneratedDailyLogbook = (
 export function buildCurriculumDatabase(
   _curriculumLessons?: LessonMemo[]
 ): Record<'1م' | '2م' | '3م' | '4م', CurriculumResourceItem[]> {
-  // تم إلغاء ربط الدفتر اليومي بالمذكرات: يعتمد الدفتر اليومي حصراً على المنهاج والتدرج السنوي الوزاري الرسمي
+  // يعتمد الدفتر الرقمي للأستاذ حصراً على ملفات التدرج البيداغوجي الأربعة المرفقة فقط
   return {
-    '1م': DAILY_LOGBOOK_PROGRAM_1AM.map((p) => ({
-      ...p,
+    '1م': LOGBOOK_PROGRESSIONS['1am'].map((u) => ({
+      ...u,
       level: '1م',
+      sourceLearningUnitId: u.id,
     })),
-    '2م': DAILY_LOGBOOK_PROGRAM_2AM.map((p) => ({
-      ...p,
+    '2م': LOGBOOK_PROGRESSIONS['2am'].map((u) => ({
+      ...u,
       level: '2م',
+      sourceLearningUnitId: u.id,
     })),
-    '3م': DAILY_LOGBOOK_PROGRAM_3AM.map((p) => ({
-      ...p,
+    '3م': LOGBOOK_PROGRESSIONS['3am'].map((u) => ({
+      ...u,
       level: '3م',
+      sourceLearningUnitId: u.id,
     })),
-    '4م': DAILY_LOGBOOK_PROGRAM_4AM.map((p) => ({
-      ...p,
+    '4م': LOGBOOK_PROGRESSIONS['4am'].map((u) => ({
+      ...u,
       level: '4م',
+      sourceLearningUnitId: u.id,
     })),
   };
 }
@@ -816,9 +844,9 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
   config,
   setConfig,
   showToast,
+  initialOpenTimetable = false,
 }) => {
-  // State for Header Info (synced with config initially)
-  // يعتمد الدفتر على ملفات برنامجه الداخلية فقط، ويتجاهل المذكرات القادمة من بقية المنصة.
+  // يعتمد الدفتر الرقمي على قاعدة التدرج البيداغوجي المعزولة فقط، ولا يقرأ من المذكرات أو التدرج السنوي.
   const CURRICULUM_DATABASE = useMemo(() => buildCurriculumDatabase(), []);
 
   const [wilaya, setWilaya] = useState<string>(config.directorate || '');
@@ -847,7 +875,14 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
     return AUTO_FILLED_TIMETABLE_ROWS;
   });
 
-  const [isTimetableModalOpen, setIsTimetableModalOpen] = useState<boolean>(false);
+  const [isTimetableModalOpen, setIsTimetableModalOpen] = useState<boolean>(Boolean(initialOpenTimetable));
+  const [recalled1amBundle, setRecalled1amBundle] = useState<ActivityRecallBundle | null>(null);
+
+  useEffect(() => {
+    if (initialOpenTimetable) {
+      setIsTimetableModalOpen(true);
+    }
+  }, [initialOpenTimetable]);
 
   // Holidays with date ranges (من تاريخ إلى تاريخ)
   const [holidays, setHolidays] = useState<HolidayEntry[]>([]);
@@ -869,6 +904,18 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
     } catch {}
     return 1;
   });
+  const [unitSessionsMap, setUnitSessionsMap] = useState<Record<string, number>>(() => {
+    try {
+      const item = localStorage.getItem('daftar_table_v2027');
+      if (item) {
+        const parsed = JSON.parse(item);
+        if (parsed.unitSessionsMap && typeof parsed.unitSessionsMap === 'object') {
+          return parsed.unitSessionsMap;
+        }
+      }
+    } catch {}
+    return {};
+  });
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait');
   const [pageTemplate, setPageTemplate] = useState<'standard' | 'teal'>(() => {
     try { return localStorage.getItem('logbook_page_template') === 'teal' ? 'teal' : 'standard'; } catch { return 'standard'; }
@@ -876,33 +923,31 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
   const SheetTemplate = pageTemplate === 'teal' ? TealLogSheetTemplate : DailyLogSheetTemplate;
   useEffect(() => { try { localStorage.setItem('logbook_page_template', pageTemplate); } catch {} }, [pageTemplate]);
   const pageDimensions = getPageDimensions(orientation);
+
+  // تاريخ بداية الدفتر: يقرأ من بيانات الدفتر المحفوظة فقط، أو من تاريخ الدخول الافتراضي للسنة الدراسية.
+  // لا يقع أبداً في خطأ تاريخ تسجيل الدخول (new Date) ولا يعتمد على التدرج السنوي.
   const [startDate, setStartDate] = useState<string>(() => {
     try {
       const item = localStorage.getItem('daftar_table_v2027');
       if (item) {
         const parsed = JSON.parse(item);
-        if (typeof parsed.startDate === 'string') return parsed.startDate;
+        if (typeof parsed.startDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(parsed.startDate)) {
+          return parsed.startDate;
+        }
       }
     } catch {}
-    try {
-      const stored = JSON.parse(localStorage.getItem('algeria_sciences_annual_dist_exact_user_v1') || '{}');
-      if (stored.globalCalendarSettings?.startDate) return stored.globalCalendarSettings.startDate;
-      if (stored['1am']?.startDate) return stored['1am'].startDate;
-    } catch {}
-    return getDefaultNotebookStartDate(config.schoolYear || '2026-2027') || formatDateToIsoString(new Date());
+    return getDefaultNotebookStartDate(config.schoolYear || '2026-2027');
   });
 
-  // The projected curriculum timeline starts at school entry, aligned with
-  // the official annual distribution calendar.
   const [sequenceStartDate, setSequenceStartDate] = useState<string>(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('daftar_table_v2027') || '{}');
-      if (saved.sequenceStartDate) return saved.sequenceStartDate;
-    } catch {}
-    try {
-      const stored = JSON.parse(localStorage.getItem('algeria_sciences_annual_dist_exact_user_v1') || '{}');
-      if (stored.globalCalendarSettings?.startDate) return stored.globalCalendarSettings.startDate;
-      if (stored['1am']?.startDate) return stored['1am'].startDate;
+      if (typeof saved.sequenceStartDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(saved.sequenceStartDate)) {
+        return saved.sequenceStartDate;
+      }
+      if (typeof saved.startDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(saved.startDate)) {
+        return saved.startDate;
+      }
     } catch {}
     return getDefaultNotebookStartDate(config.schoolYear || '2026-2027');
   });
@@ -912,19 +957,6 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       return Array.isArray(saved.archivedRows) ? saved.archivedRows : [];
     } catch { return []; }
   });
-
-  // مزامنة رزنامة الدفتر اليومي تلقائياً عند تحديث الرزنامة في التدرج السنوي
-  useEffect(() => {
-    const handleCalendarUpdate = (e: any) => {
-      const newStart = e.detail?.startDate;
-      if (newStart) {
-        setStartDate((prev) => (prev ? prev : newStart));
-        setSequenceStartDate(newStart);
-      }
-    };
-    window.addEventListener('school-calendar-updated', handleCalendarUpdate);
-    return () => window.removeEventListener('school-calendar-updated', handleCalendarUpdate);
-  }, []);
 
   // Generated Daily Log Entries
   const [rows, setRows] = useState<LogEntry[]>(() => {
@@ -936,15 +968,13 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
           parsed.logbookDataVersion === LOGBOOK_DATA_VERSION &&
           Array.isArray(parsed.rows)
         ) {
-          const effectiveStart = typeof parsed.startDate === 'string' ? parsed.startDate : startDate;
+          const effectiveStart = typeof parsed.startDate === 'string' && parsed.startDate ? parsed.startDate : startDate;
           const normalized = normalizeDailyLogbookRows(
             effectiveStart ? parsed.rows.filter((r: LogEntry) => isLogbookRowOnOrAfter(r.dateStr || '', effectiveStart)) : parsed.rows,
             CURRICULUM_DATABASE
           );
           if (effectiveStart) {
-            return normalized.filter((r) => {
-              return isLogbookRowOnOrAfter(r.dateStr || '', effectiveStart);
-            });
+            return normalized.filter((r) => isLogbookRowOnOrAfter(r.dateStr || '', effectiveStart));
           }
           return normalized;
         }
@@ -954,9 +984,10 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       startDate: startDate || getDefaultNotebookStartDate(config.schoolYear || '2026-2027'),
       sequenceStartDate,
       gridRows: AUTO_FILLED_TIMETABLE_ROWS,
-      period: 'سنة',
+      period: 'شهر',
       holidays: [],
-      curriculumDb: CURRICULUM_DATABASE,
+      sessionsPerActivity,
+      unitSessionsMap,
     });
   });
 
@@ -1058,25 +1089,40 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
     setTimeout(() => setUserAlert(null), 3500);
   };
 
-  // Load saved state from localStorage
+  // Load saved state from localStorage (with recoverable backup of legacy logbook-only records)
   const loadFromStorage = () => {
     const OLD_KEYS_TO_REMOVE = [
       'daftar_table',
       'daftar_table_v1',
       'daftar_table_v2',
-      'mizaniyati_curriculum_db_v2027',
-      'mizaniyati_curriculum_db_v2027_1am',
     ];
+    const backupBundle: Record<string, any> = {};
     for (const oldKey of OLD_KEYS_TO_REMOVE) {
-      try { localStorage.removeItem(oldKey); } catch {}
+      try {
+        const raw = localStorage.getItem(oldKey);
+        if (raw) {
+          backupBundle[oldKey] = JSON.parse(raw);
+          localStorage.removeItem(oldKey);
+        }
+      } catch {}
     }
 
-    const keys = ['daftar_table_v2027'];
-    for (const key of keys) {
-      const item = localStorage.getItem(key);
-      if (!item) continue;
+    const item = localStorage.getItem('daftar_table_v2027');
+    if (item) {
       try {
         const parsed = JSON.parse(item);
+        if (parsed.logbookDataVersion !== LOGBOOK_DATA_VERSION) {
+          backupBundle['daftar_table_v2027'] = parsed;
+        }
+        if (Object.keys(backupBundle).length > 0 && !localStorage.getItem('daftar_logbook_legacy_backup_v1')) {
+          try {
+            localStorage.setItem(
+              'daftar_logbook_legacy_backup_v1',
+              JSON.stringify({ backedUpAt: new Date().toISOString(), keys: backupBundle })
+            );
+          } catch {}
+        }
+
         if (parsed.wilaya) setWilaya(parsed.wilaya);
         if (parsed.school) setSchool(parsed.school);
         if (parsed.teacher) setTeacher(parsed.teacher);
@@ -1094,17 +1140,34 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
           if (normalized.length > 0) setHolidays(normalized);
         }
 
+        const restoredSessionsPerActivity = parsed.sessionsPerActivity ? (Number(parsed.sessionsPerActivity) || 1) : sessionsPerActivity;
         if (parsed.sessionsPerActivity) {
-          setSessionsPerActivity(Number(parsed.sessionsPerActivity) || 1);
+          setSessionsPerActivity(restoredSessionsPerActivity);
+        }
+        const restoredUnitSessionsMap =
+          parsed.unitSessionsMap && typeof parsed.unitSessionsMap === 'object'
+            ? parsed.unitSessionsMap
+            : unitSessionsMap;
+        if (parsed.unitSessionsMap && typeof parsed.unitSessionsMap === 'object') {
+          setUnitSessionsMap(parsed.unitSessionsMap);
         }
 
-        if (parsed.sequenceStartDate) setSequenceStartDate(parsed.sequenceStartDate);
+        const restoredStartDate =
+          typeof parsed.startDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(parsed.startDate)
+            ? parsed.startDate
+            : startDate;
+        const restoredSequenceStartDate =
+          typeof parsed.sequenceStartDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(parsed.sequenceStartDate)
+            ? parsed.sequenceStartDate
+            : restoredStartDate;
+
+        setStartDate(restoredStartDate);
+        setSequenceStartDate(restoredSequenceStartDate);
         if (Array.isArray(parsed.archivedRows)) setArchivedRows(parsed.archivedRows);
-        if (typeof parsed.startDate === 'string') {
-          setStartDate(parsed.startDate);
-        }
         if (parsed.period) setPeriod(parsed.period);
         if (parsed.orientation === 'portrait' || parsed.orientation === 'landscape') setOrientation(parsed.orientation);
+
+        let effectiveGrid = gridRows;
         if (parsed.gridRows && Array.isArray(parsed.gridRows)) {
           const valid: TimetableGridRow[] = [];
           const seen = new Set<string>();
@@ -1119,9 +1182,9 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
           if (valid.length > 0) {
             valid.sort((a, b) => getTimeRank(a.time) - getTimeRank(b.time));
             setGridRows(valid);
+            effectiveGrid = valid;
           }
         }
-
 
         let hasValidRows = false;
         if (
@@ -1129,74 +1192,75 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
           parsed.rows &&
           Array.isArray(parsed.rows)
         ) {
-          const effectiveStart = typeof parsed.startDate === 'string' ? parsed.startDate : startDate;
           const normalized = normalizeDailyLogbookRows(
-            effectiveStart ? parsed.rows.filter((r: LogEntry) => isLogbookRowOnOrAfter(r.dateStr || '', effectiveStart)) : parsed.rows,
+            restoredStartDate ? parsed.rows.filter((r: LogEntry) => isLogbookRowOnOrAfter(r.dateStr || '', restoredStartDate)) : parsed.rows,
             CURRICULUM_DATABASE
           );
-          setRows(effectiveStart ? normalized.filter((r) => {
-            return isLogbookRowOnOrAfter(r.dateStr || '', effectiveStart);
-          }) : normalized);
+          setRows(restoredStartDate ? normalized.filter((r) => isLogbookRowOnOrAfter(r.dateStr || '', restoredStartDate)) : normalized);
           hasValidRows = true;
         }
 
-        // إذا لم تكن هناك صفوف صالحة أو كانت النسخة قديمة أو محتوية على قاعدة بيانات سابقة، نحدث فورياً
         if (!hasValidRows) {
-          const effectiveStart = parsed.startDate || startDate || getDefaultNotebookStartDate(config.schoolYear || '2026-2027');
-          const isGridValid = parsed.gridRows && Array.isArray(parsed.gridRows) && parsed.gridRows.some((r: any) => Object.values(r.cells).some((c: any) => c && String(c).trim()));
-          const effectiveGrid = isGridValid ? parsed.gridRows : AUTO_FILLED_TIMETABLE_ROWS;
-          
-          if (!isGridValid) {
-            setGridRows(AUTO_FILLED_TIMETABLE_ROWS);
-          }
+          const isGridValid = effectiveGrid.some((r: any) => Object.values(r.cells || {}).some((c: any) => c && String(c).trim()));
+          const targetGrid = isGridValid ? effectiveGrid : AUTO_FILLED_TIMETABLE_ROWS;
+          if (!isGridValid) setGridRows(AUTO_FILLED_TIMETABLE_ROWS);
 
           const generatedRows = generateLogbookEntries({
-            startDate: effectiveStart,
-            sequenceStartDate: parsed.sequenceStartDate || sequenceStartDate,
-            gridRows: effectiveGrid,
-            period: parsed.period || period || 'سنة',
+            startDate: restoredStartDate,
+            sequenceStartDate: restoredSequenceStartDate,
+            gridRows: targetGrid,
+            period: parsed.period || period || 'شهر',
             holidays: parsed.holidays || holidays,
-            curriculumDb: CURRICULUM_DATABASE,
+            sessionsPerActivity: restoredSessionsPerActivity,
+            unitSessionsMap: restoredUnitSessionsMap,
           });
-          const fresh = mergeGeneratedWithPreservedRows(generatedRows, parsed.rows, effectiveStart);
-          if (fresh.length > 0) {
-            setRows(fresh);
-            const dataToSave = {
-              logbookDataVersion: LOGBOOK_DATA_VERSION,
-              wilaya: parsed.wilaya || wilaya,
-              school: parsed.school || school,
-              teacher: parsed.teacher || teacher,
-              subject: parsed.subject ?? subject,
-              showSubjectInHeader: parsed.showSubjectInHeader ?? showSubjectInHeader,
-              showYearInHeader: parsed.showYearInHeader ?? showYearInHeader,
-              gridRows: effectiveGrid,
-              holidays: parsed.holidays || holidays,
-              rows: fresh,
-              archivedRows: parsed.archivedRows || [],
-              sequenceStartDate: parsed.sequenceStartDate || sequenceStartDate,
-              startDate: effectiveStart,
-              period: parsed.period || period || 'سنة',
-              orientation: parsed.orientation || orientation,
-            };
-            try {
-              localStorage.setItem('daftar_table_v2027', JSON.stringify(dataToSave));
-            } catch {}
-          }
+          const fresh = mergeGeneratedWithPreservedRows(generatedRows, parsed.rows, restoredStartDate);
+          setRows(fresh);
+          const dataToSave = {
+            logbookDataVersion: LOGBOOK_DATA_VERSION,
+            wilaya: parsed.wilaya || wilaya,
+            school: parsed.school || school,
+            teacher: parsed.teacher || teacher,
+            subject: parsed.subject ?? subject,
+            showSubjectInHeader: parsed.showSubjectInHeader ?? showSubjectInHeader,
+            showYearInHeader: parsed.showYearInHeader ?? showYearInHeader,
+            gridRows: targetGrid,
+            holidays: parsed.holidays || holidays,
+            rows: fresh,
+            archivedRows: parsed.archivedRows || [],
+            sequenceStartDate: restoredSequenceStartDate,
+            startDate: restoredStartDate,
+            period: parsed.period || period || 'شهر',
+            sessionsPerActivity: restoredSessionsPerActivity,
+            unitSessionsMap: restoredUnitSessionsMap,
+            orientation: parsed.orientation || orientation,
+          };
+          try {
+            localStorage.setItem('daftar_table_v2027', JSON.stringify(dataToSave));
+          } catch {}
         }
       } catch {
-        // ignore
+        // ignore malformed storage
       }
+    } else if (Object.keys(backupBundle).length > 0 && !localStorage.getItem('daftar_logbook_legacy_backup_v1')) {
+      try {
+        localStorage.setItem(
+          'daftar_logbook_legacy_backup_v1',
+          JSON.stringify({ backedUpAt: new Date().toISOString(), keys: backupBundle })
+        );
+      } catch {}
     }
 
     if (!localStorage.getItem('daftar_table_v2027')) {
       const effectiveStart = startDate || getDefaultNotebookStartDate(config.schoolYear || '2026-2027');
       const fresh = generateLogbookEntries({
         startDate: effectiveStart,
-        sequenceStartDate,
-        gridRows: AUTO_FILLED_TIMETABLE_ROWS,
-        period: 'سنة',
+        sequenceStartDate: sequenceStartDate || effectiveStart,
+        gridRows,
+        period: period || 'شهر',
         holidays,
-        curriculumDb: CURRICULUM_DATABASE,
+        sessionsPerActivity,
+        unitSessionsMap,
       });
       if (fresh.length > 0) {
         setRows(fresh);
@@ -1216,12 +1280,8 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
 
   // Save to localStorage on change
   useEffect(() => {
-    // Wait until all saved settings have been restored before writing them back.
     if (!storageLoaded) return;
-    // Only persist rows that are on or after startDate to prevent orphan rows from prior dates
-    const filteredRows = startDate ? rows.filter((r) => {
-      return isLogbookRowOnOrAfter(r.dateStr || '', startDate);
-    }) : rows;
+    const filteredRows = startDate ? rows.filter((r) => isLogbookRowOnOrAfter(r.dateStr || '', startDate)) : rows;
     const dataToSave = {
       logbookDataVersion: LOGBOOK_DATA_VERSION,
       wilaya,
@@ -1238,16 +1298,14 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       startDate,
       period,
       sessionsPerActivity,
+      unitSessionsMap,
       orientation,
     };
-    localStorage.setItem(
-      'daftar_table_v2027',
-      JSON.stringify(dataToSave)
-    );
+    localStorage.setItem('daftar_table_v2027', JSON.stringify(dataToSave));
     if ((window as any).syncToCloud) {
       (window as any).syncToCloud('logbook', dataToSave);
     }
-  }, [wilaya, school, teacher, subject, config.schoolYear, showSubjectInHeader, showYearInHeader, gridRows, holidays, rows, startDate, period, sessionsPerActivity, orientation, storageLoaded, archivedRows, sequenceStartDate]);
+  }, [wilaya, school, teacher, subject, config.schoolYear, showSubjectInHeader, showYearInHeader, gridRows, holidays, rows, startDate, period, sessionsPerActivity, unitSessionsMap, orientation, storageLoaded, archivedRows, sequenceStartDate]);
 
   // Keyboard navigation for preview modal
   useEffect(() => {
@@ -1445,12 +1503,14 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
 
 
 
-  // دالة مركزية لتوليد وتطبيق وحفظ الدفتر انطلاقاً من التاريخ المختار بالضبط
+  // دالة مركزية لتوليد وتطبيق وحفظ الدفتر انطلاقاً من التاريخ المختار بالضبط وفق التدرج البيداغوجي المعتمد
   const generateAndApplyLogbook = (
     targetStartDate: string,
     targetPeriod: string = period,
     targetSessionsPerActivity: number = sessionsPerActivity,
-    targetGrid: TimetableGridRow[] = gridRows
+    targetGrid: TimetableGridRow[] = gridRows,
+    targetSequenceStart: string = sequenceStartDate || targetStartDate,
+    targetUnitSessionsMap: Record<string, number> = unitSessionsMap
   ): LogEntry[] => {
     if (!targetStartDate) return [];
 
@@ -1462,15 +1522,14 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
 
     const fresh = generateLogbookEntries({
       startDate: targetStartDate,
-      sequenceStartDate,
+      sequenceStartDate: targetSequenceStart,
       gridRows: effectiveGrid,
       period: targetPeriod || 'سنة',
       holidays,
-      curriculumDb: CURRICULUM_DATABASE,
       sessionsPerActivity: targetSessionsPerActivity,
+      unitSessionsMap: targetUnitSessionsMap,
     });
 
-    // Keep teacher-entered changes even when they fall outside the new period.
     const archive = collectPreservedRows(archivedRows, rows);
     setArchivedRows(archive);
     const relevantManualRows = preservedRowsInPeriod(archive, targetStartDate, targetPeriod);
@@ -1490,10 +1549,11 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
           holidays,
           rows: combined,
           archivedRows: archive,
-          sequenceStartDate,
+          sequenceStartDate: targetSequenceStart,
           startDate: targetStartDate,
           period: targetPeriod || 'سنة',
           sessionsPerActivity: targetSessionsPerActivity,
+          unitSessionsMap: targetUnitSessionsMap,
           orientation,
         };
         localStorage.setItem('daftar_table_v2027', JSON.stringify(dataToSave));
@@ -1505,7 +1565,41 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
     }
   };
 
-  // توليد الدفتر اليومي من البرنامج المستقل الخاص بكل مستوى، مع احترام المدة المحددة
+  // إعادة تنظيم الحصص اللاحقة عند تمديد درس أو تأجيل حصة
+  const handleReorganizeRow = (
+    anchorRowId: string,
+    options: { extraSessionsForUnit?: number; newStatus?: 'scheduled' | 'in_progress' | 'completed' | 'postponed' }
+  ) => {
+    if (options.newStatus === 'completed' || (options.newStatus === 'scheduled' && !options.extraSessionsForUnit)) {
+      handleUpdateLogbookRow(anchorRowId, { completionStatus: options.newStatus });
+      showToast(options.newStatus === 'completed' ? '✅ تم تأشير الحصة كمنجزة' : 'تم تحديث حالة الحصة');
+      return;
+    }
+
+    const effectiveSeqStart = sequenceStartDate || startDate;
+    const res = reorganizeSubsequentSessions({
+      rows,
+      anchorRowId,
+      extraSessionsForUnit: options.extraSessionsForUnit || 0,
+      newStatus: options.newStatus,
+      startDate,
+      sequenceStartDate: effectiveSeqStart,
+      gridRows,
+      period,
+      holidays,
+      sessionsPerActivity,
+      unitSessionsMap,
+    });
+    setUnitSessionsMap(res.updatedUnitSessionsMap);
+    setRows(res.updatedRows);
+    showToast(
+      res.changedCount > 0
+        ? `🔄 تم تحديث الحصة وإعادة تنظيم ${res.changedCount} حصة لاحقة داخل استعمال الزمن`
+        : 'تم تحديث حالة الحصة'
+    );
+  };
+
+  // توليد الدفتر اليومي من التدرج البيداغوجي المعتمد لكل مستوى
   const handleGenerateSmartLogbook = () => {
     if (!startDate) {
       displayUserAlert('يرجى تحديد تاريخ بداية الدفتر أولاً.');
@@ -1534,12 +1628,12 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
     const effectiveStart = startDate;
     const fresh = generateLogbookEntries({
       startDate: effectiveStart,
-      sequenceStartDate,
+      sequenceStartDate: sequenceStartDate || effectiveStart,
       gridRows,
       period: period || 'سنة',
       holidays,
-      curriculumDb: CURRICULUM_DATABASE,
       sessionsPerActivity,
+      unitSessionsMap,
     });
     if (fresh.length > 0) {
       setRows(fresh);
@@ -1556,9 +1650,11 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
           holidays,
           rows: fresh,
           archivedRows,
-          sequenceStartDate,
+          sequenceStartDate: sequenceStartDate || effectiveStart,
           startDate: effectiveStart,
           period: period || 'سنة',
+          sessionsPerActivity,
+          unitSessionsMap,
           orientation,
         };
         localStorage.setItem('daftar_table_v2027', JSON.stringify(dataToSave));
@@ -1697,14 +1793,16 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
         return;
       }
       showToast('جاري تصدير الدفتر كملف Word قابل للتعديل...');
+      const exportRows = orderedRows.length > 0 ? orderedRows : activeRows;
+      const exportPages = paginatedA4Pages.length > 0 ? paginatedA4Pages : undefined;
       const blob = await generateLogbookDocx(
-        activeRows,
+        exportRows,
         config,
         gridRows,
         holidays,
         assignedLevels,
         orientation,
-        paginatedPages,
+        exportPages,
         pageTemplate
       );
       const url = window.URL.createObjectURL(blob);
@@ -1838,58 +1936,29 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
     }
   };
 
-  const weeklyGroups = useMemo(() => {
-    const groups = new Map<string, LogEntry[]>();
-    [...rows].sort((a, b) => a.dateStr.localeCompare(b.dateStr) || a.time.localeCompare(b.time)).forEach((row) => {
-      const key = getSchoolWeekKey(row.dateStr);
-      const current = groups.get(key) || [];
-      current.push(row);
-      groups.set(key, current);
-    });
-    return Array.from(groups.entries()).map(([weekKey, weekRows]) => ({
-      weekKey,
-      weekNumber: getSchoolWeekNumber(weekRows[0]?.dateStr || startDate, startDate),
-      rows: weekRows,
-    }));
-  }, [rows, startDate]);
+  const orderedRows = useMemo(
+    () =>
+      [...rows].sort(
+        (a, b) =>
+          (a.dateStr || '').localeCompare(b.dateStr || '') ||
+          getTimeMinutes(a.time || '') - getTimeMinutes(b.time || '') ||
+          (a.section || '').localeCompare(b.section || '')
+      ),
+    [rows]
+  );
 
-  const paginatedPages = useMemo(() => {
-    const pages: LogEntry[][] = [];
-    // تقدير ارتفاع كل حصة اعتماداً على النص الذي سيلتف داخل الأعمدة.
-    // هذا يجعل التقسيم يتأثر بطول المحتوى، لا بعدد الصفوف وحده.
-    const pageHeightPx = pageDimensions.h * 3.7795;
-    const availableHeightPx = Math.max(360, pageHeightPx - (orientation === 'landscape' ? 330 : 390));
-    const estimateLines = (value: unknown, charsPerLine: number) => {
-      const plain = String(value ?? '').replace(/<[^>]*>/g, '');
-      const text = (pageTemplate === 'teal' ? plain.replace(/[^\S\n]+/g, ' ') : plain.replace(/\s+/g, ' ')).trim();
-      if (!text) return 1;
-      return text.split('\n').reduce((sum, part) => sum + Math.max(1, Math.ceil(part.length / charsPerLine)), 0);
-    };
-    const estimateRowHeight = (row: LogEntry) => {
-      const content = buildHierarchicalContent(row);
-      const contentLines = estimateLines(content, pageTemplate === 'teal' ? (orientation === 'landscape' ? 70 : 48) : (orientation === 'landscape' ? 95 : 65));
-      const noteLines = estimateLines(row.note, orientation === 'landscape' ? 30 : 22);
-      const sectionLines = estimateLines(row.section, 12);
-      return Math.max(58, 26 + Math.max(contentLines, noteLines, sectionLines) * 17);
-    };
-
-    weeklyGroups.forEach((group) => {
-      let pageRows: LogEntry[] = [];
-      let usedHeight = 0;
-      group.rows.forEach((row) => {
-        const rowHeight = estimateRowHeight(row);
-        if (pageRows.length > 0 && (usedHeight + rowHeight > availableHeightPx || pageRows.length >= ROWS_PER_PAGE)) {
-          pages.push(pageRows);
-          pageRows = [];
-          usedHeight = 0;
-        }
-        pageRows.push(row);
-        usedHeight += rowHeight;
-      });
-      if (pageRows.length) pages.push(pageRows);
+  const paginatedA4Pages = useMemo<LogbookA4Page<LogEntry>[]>(() => {
+    return paginateLogbookEntries({
+      rows: orderedRows,
+      orientation,
+      template: pageTemplate,
+      buildContent: buildHierarchicalContent,
+      findPreviousComparable: findPreviousComparableCurriculumRow,
+      getWeekKey: getSchoolWeekKey,
     });
-    return pages;
-  }, [weeklyGroups, pageDimensions.h, orientation, pageTemplate]);
+  }, [orderedRows, orientation, pageTemplate]);
+
+  const paginatedPages = useMemo(() => paginatedA4Pages.map((p) => p.rows), [paginatedA4Pages]);
 
   const levelDistributionSummary = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -2120,7 +2189,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
     </tr>
   );
 
-  // صفحة تعريفية مستقلة للدفتر: أول صفحة في المعاينة والطباعة، بدون مربعات الكتابة.
+  // صفحة تعريفية مستقلة للدفتر: أول صفحة في المعاينة والطباعة، متوازنة وملاءمة لمقاس A4.
   const renderNotebookIntroPage = (isPreview = false) => {
     const totalAssignedHours = levelStats.reduce((sum, item) => sum + item.slots, 0);
 
@@ -2128,73 +2197,72 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       <div
         id={isPreview ? "preview-page-intro" : "page-intro"}
         data-preview-export-page="true"
-        className={isPreview ? "print-page notebook-intro-page shadow-[0_25px_80px_rgba(0,0,0,0.5)] bg-white overflow-hidden mx-auto mb-8 flex flex-col justify-between" : "print-page notebook-intro-page shadow-[0_20px_60px_rgba(0,0,0,0.12)] bg-white overflow-hidden mx-auto mb-8 flex flex-col justify-between"}
+        className={isPreview ? "print-page notebook-intro-page shadow-[0_25px_80px_rgba(0,0,0,0.5)] bg-white overflow-hidden mx-auto mb-6 flex flex-col justify-between" : "print-page notebook-intro-page shadow-[0_20px_60px_rgba(0,0,0,0.12)] bg-white overflow-hidden mx-auto mb-6 flex flex-col justify-between"}
         style={{ width: `${pageDimensions.w}mm`, height: `${pageDimensions.h}mm`, minHeight: `${pageDimensions.h}mm`, maxWidth: '100%' }}
         dir="rtl"
       >
         <div>
           {/* Top Algerian Flag Ribbon */}
-          <div className="h-2 flex shrink-0">
+          <div className="h-1.5 flex shrink-0">
             <div className="flex-1 bg-[#006233]" />
             <div className="flex-1 bg-[#D21034]" />
           </div>
 
-          <div className="px-10 pt-6">
+          <div className="px-6 sm:px-8 pt-3.5">
             {/* Header with Science Graphics and Official Republic text */}
-            <div className="flex items-center justify-between pb-3 border-b-2 border-[#bae6fd]">
-              <ScienceHeaderRight />
-              <div className="text-center px-4 space-y-1">
-                <div className="text-[14px] font-extrabold text-zinc-900 flex items-center justify-center gap-1.5">
+            <div className="flex items-center justify-between pb-2 border-b-2 border-[#bae6fd]">
+              <ScienceHeaderRight compact />
+              <div className="text-center px-3 space-y-0.5">
+                <div className="text-[13px] font-extrabold text-zinc-900 flex items-center justify-center gap-1.5">
                   <span>🇩🇿</span> الجمهورية الجزائرية الديمقراطية الشعبية <span>🇩🇿</span>
                 </div>
-                <div className="text-[12px] font-extrabold text-[#0369a1]">وزارة التربية الوطنية</div>
-                <div className="text-[11px] font-bold text-zinc-600">
+                <div className="text-[11.5px] font-extrabold text-[#0369a1]">وزارة التربية الوطنية</div>
+                <div className="text-[10.5px] font-bold text-zinc-600">
                   مديرية التربية لولاية {wilaya || '—'} • متوسطة: {school || '—'}
                 </div>
-                <div className="text-[#0284c7] text-[13px] tracking-widest">◆ ◆ ◆</div>
               </div>
-              <ScienceHeaderLeft />
+              <ScienceHeaderLeft compact />
             </div>
 
             {/* Title Banner */}
-            <div className="my-6 text-center">
-              <div className="inline-block bg-gradient-to-r from-[#0369a1] via-[#0284c7] to-[#0369a1] text-white px-10 py-3 rounded-2xl shadow-sm border border-[#38bdf8]">
-                <h1 className="text-[28px] font-black tracking-tight leading-tight">الدفتر اليومي للأستاذ</h1>
-                <div className="text-[13px] font-bold opacity-95 mt-1 flex items-center justify-center gap-2">
+            <div className="my-3 text-center">
+              <div className="inline-block bg-gradient-to-r from-[#0369a1] via-[#0284c7] to-[#0369a1] text-white px-8 py-2 rounded-2xl shadow-sm border border-[#38bdf8]">
+                <h1 className="text-[22px] font-black tracking-tight leading-tight">الدفتر اليومي للأستاذ</h1>
+                <div className="text-[12px] font-bold opacity-95 mt-0.5 flex items-center justify-center gap-2">
                   <span>علوم الطبيعة والحياة</span>
                   <span>◆</span>
                   <span>مرحلة التعليم المتوسط</span>
                 </div>
               </div>
-              <div className="mt-2 text-[11px] font-bold text-zinc-500">
+              <div className="mt-1.5 text-[10.5px] font-bold text-zinc-500">
                 وثيقة بيداغوجية رسمية معتمدة لتدوين ومتابعة سير الحصص وفق التدرج السنوي
               </div>
             </div>
 
             {/* Teacher and School Info Cards */}
-            <div className="grid grid-cols-2 gap-3.5 max-w-[170mm] mx-auto text-[12px]">
-              <div className="rounded-xl border border-[#bae6fd] bg-[#f0f9ff] px-4 py-3 flex items-center justify-between shadow-2xs">
+            <div className="grid grid-cols-2 gap-2.5 max-w-[175mm] mx-auto text-[11px]">
+              <div className="rounded-xl border border-[#bae6fd] bg-[#f0f9ff] px-3 py-2 flex items-center justify-between shadow-2xs">
                 <span className="font-bold text-[#0369a1]">الأستاذ(ة):</span>
                 <span className="font-extrabold text-zinc-900">{teacher || '—'}</span>
               </div>
-              <div className="rounded-xl border border-[#bae6fd] bg-[#f0f9ff] px-4 py-3 flex items-center justify-between shadow-2xs">
+              <div className="rounded-xl border border-[#bae6fd] bg-[#f0f9ff] px-3 py-2 flex items-center justify-between shadow-2xs">
                 <span className="font-bold text-[#0369a1]">المتوسطة:</span>
                 <span className="font-extrabold text-zinc-900">{school || '—'}</span>
               </div>
-              <div className="rounded-xl border border-[#bae6fd] bg-[#f0f9ff] px-4 py-3 flex items-center justify-between shadow-2xs">
+              <div className="rounded-xl border border-[#bae6fd] bg-[#f0f9ff] px-3 py-2 flex items-center justify-between shadow-2xs">
                 <span className="font-bold text-[#0369a1]">المديرية الولائية:</span>
                 <span className="font-extrabold text-zinc-900">ولاية {wilaya || '—'}</span>
               </div>
-              <div className="rounded-xl border border-[#bae6fd] bg-[#f0f9ff] px-4 py-3 flex items-center justify-between shadow-2xs">
+              <div className="rounded-xl border border-[#bae6fd] bg-[#f0f9ff] px-3 py-2 flex items-center justify-between shadow-2xs">
                 <span className="font-bold text-[#0369a1]">السنة الدراسية:</span>
                 <span className="font-extrabold text-zinc-900 font-mono">{config.schoolYear || '2026-2027'}</span>
               </div>
-              <div className="col-span-2 rounded-xl border-2 border-[#0284c7] bg-[#e1f0fa] px-4 py-3 flex items-center justify-between shadow-2xs">
+              <div className="col-span-2 rounded-xl border-[1.5px] border-[#0284c7] bg-[#e1f0fa] px-3 py-2 flex items-center justify-between shadow-2xs">
                 <span className="font-extrabold text-[#0369a1]">المستويات المسندة:</span>
-                <div className="flex gap-2">
+                <div className="flex gap-1.5 flex-wrap">
                   {assignedLevels.length > 0 ? (
                     assignedLevels.map((lvl) => (
-                      <span key={lvl} className="bg-white border border-[#0284c7] text-[#0369a1] px-3 py-1 rounded-full font-black text-[11px] shadow-2xs">
+                      <span key={lvl} className="bg-white border border-[#0284c7] text-[#0369a1] px-2.5 py-0.5 rounded-full font-black text-[10.5px] shadow-2xs">
                         {lvl}
                       </span>
                     ))
@@ -2203,26 +2271,26 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                   )}
                 </div>
               </div>
-              <div className="col-span-2 rounded-xl border border-zinc-200 bg-white px-4 py-2.5 flex items-center justify-between text-[11px]">
+              <div className="col-span-2 rounded-xl border border-zinc-200 bg-white px-3 py-1.5 flex items-center justify-between text-[10.5px]">
                 <span className="font-bold text-zinc-500">تاريخ بداية الدفتر:</span>
                 <span className="font-extrabold text-zinc-800 font-mono">{startDate || '—'}</span>
               </div>
             </div>
 
             {/* Timetable summary */}
-            <div className="max-w-[170mm] mx-auto mt-6">
-              <div className="flex items-center justify-between mb-2">
-                <div className="text-[12px] font-black text-zinc-800">ملخص الحجم الساعي الأسبوعي للمستويات المسندة:</div>
-                <div className="text-[10px] font-bold text-[#0369a1] bg-[#f0f9ff] border border-[#bae6fd] px-2.5 py-1 rounded-full">
+            <div className="max-w-[175mm] mx-auto mt-3.5">
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="text-[11px] font-black text-zinc-800">ملخص الحجم الساعي الأسبوعي للمستويات المسندة:</div>
+                <div className="text-[9.5px] font-bold text-[#0369a1] bg-[#f0f9ff] border border-[#bae6fd] px-2 py-0.5 rounded-full">
                   {totalAssignedHours} حصة/ساعة أسبوعياً
                 </div>
               </div>
               <div className="grid grid-cols-4 gap-2">
                 {levelStats.map((item) => (
-                  <div key={item.level} className={`rounded-xl border px-2 py-2 text-center ${levelColors[item.level] || 'border-zinc-200 bg-zinc-50 text-zinc-700'}`}>
-                    <div className="text-[15px] font-black">{item.level}</div>
-                    <div className="text-[10px] font-bold mt-1">{item.slots} ساعة/أسبوع</div>
-                    <div className="text-[9px] mt-0.5">{item.sections} قسم</div>
+                  <div key={item.level} className={`rounded-xl border px-2 py-1.5 text-center ${levelColors[item.level] || 'border-zinc-200 bg-zinc-50 text-zinc-700'}`}>
+                    <div className="text-[13.5px] font-black">{item.level}</div>
+                    <div className="text-[9.5px] font-bold mt-0.5">{item.slots} ساعة/أسبوع</div>
+                    <div className="text-[8.5px] mt-0.5">{item.sections} قسم</div>
                   </div>
                 ))}
               </div>
@@ -2231,19 +2299,19 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
         </div>
 
         {/* Footer with botanical ornaments and numbering */}
-        <div className="px-10 pb-4">
-          <div className="flex items-center justify-between border-t border-zinc-200 pt-3">
-            <CornerLeaves />
-            <div className="text-center text-[10px] text-zinc-500 space-y-1">
+        <div className="px-8 pb-3 shrink-0">
+          <div className="flex items-center justify-between border-t border-zinc-200 pt-2">
+            <CornerLeaves compact />
+            <div className="text-center text-[9.5px] text-zinc-500 space-y-0.5">
               <div>دفتر بيداغوجي لتدوين محتوى الدرس وسير الحصص اليومية وفق التدرج الرسمي</div>
               <div className="inline-block bg-[#f0f9ff] border border-[#bae6fd] text-[#0369a1] px-3 py-0.5 rounded-full font-bold">
                 الصفحة التعريفية — 🇩🇿
               </div>
             </div>
-            <CornerLeaves flip={true} />
+            <CornerLeaves flip={true} compact />
           </div>
 
-          <div className="h-1 flex shrink-0 mt-3 -mx-10">
+          <div className="h-1 flex shrink-0 mt-2 -mx-8">
             <div className="flex-1 bg-[#006233]" />
             <div className="flex-1 bg-[#D21034]" />
           </div>
@@ -2252,11 +2320,11 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
     );
   };
 
-  // مكون بطاقة/صفحة الغلاف واستعمال الزمن (بعد الصفحة التعريفية)
+  // مكون بطاقة/صفحة الغلاف واستعمال الزمن (بعد الصفحة التعريفية) — مضبوط ليتسع داخل A4 عمودي وأفقي
   const renderCoverFirstPage = () => (
     <div
       data-preview-export-page="true"
-      className="print-page cover-page shadow-[0_20px_60px_rgba(0,0,0,0.12)] rounded-[2px] border border-zinc-200 overflow-hidden mx-auto mb-8 flex flex-col justify-between"
+      className="print-page cover-page shadow-[0_20px_60px_rgba(0,0,0,0.12)] rounded-[2px] border border-zinc-200 overflow-hidden mx-auto mb-6 flex flex-col justify-between"
       style={{
         width: `${pageDimensions.w}mm`,
         height: `${pageDimensions.h}mm`,
@@ -2264,50 +2332,48 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
         maxWidth: '100%',
       }}
     >
-      <div>
+      <div className="min-h-0">
         {/* Header Flag */}
-        <div className="h-1.5 flex -mx-[1px] mb-3">
+        <div className="h-1 flex -mx-[1px] mb-1.5">
           <div className="flex-1 bg-[#006233]" />
           <div className="flex-1 bg-[#D21034]" />
         </div>
 
-        <div style={{ padding: '0 16px' }}>
+        <div style={{ padding: '0 14px' }}>
           {/* Header with Science Graphics and Official Republic text */}
-          <div className="flex items-center justify-between pb-3 border-b-2 border-[#bae6fd]">
-            <ScienceHeaderRight />
-            <div className="text-center px-4 space-y-1">
-              <div className="text-[13px] font-extrabold flex items-center justify-center gap-1.5 text-zinc-900">
+          <div className="flex items-center justify-between pb-1.5 border-b-2 border-[#bae6fd]">
+            <ScienceHeaderRight compact />
+            <div className="text-center px-3 space-y-0.5">
+              <div className="text-[12px] font-extrabold flex items-center justify-center gap-1 text-zinc-900">
                 <span>🇩🇿</span> الجمهورية الجزائرية الديمقراطية الشعبية <span>🇩🇿</span>
               </div>
-              <div className="text-[12px] font-bold text-[#0369a1]">وزارة التربية الوطنية</div>
-              <div className="text-[11px] font-semibold text-zinc-600">مديرية التربية لولاية {wilaya || '—'}</div>
-              <div className="text-[12px] font-extrabold text-zinc-800">متوسطة: {school || '—'}</div>
+              <div className="text-[11px] font-bold text-[#0369a1]">وزارة التربية الوطنية</div>
+              <div className="text-[10px] font-semibold text-zinc-600">مديرية التربية لولاية {wilaya || '—'} • متوسطة: {school || '—'}</div>
             </div>
-            <ScienceHeaderLeft />
+            <ScienceHeaderLeft compact />
           </div>
 
           {/* Cover Title */}
-          <div className="my-4 text-center bg-gradient-to-r from-[#0369a1] via-[#0284c7] to-[#0369a1] text-white py-3 rounded-xl shadow-xs border border-[#38bdf8]">
-            <div className="text-[10px] tracking-widest uppercase opacity-85 mb-0.5">وثيقة بيداغوجية رسمية معتمدة</div>
-            <h1 className="text-[22px] font-[800] tracking-tight">الدفتر اليومي للأستاذ</h1>
-            <div className="text-[12px] font-medium opacity-95 mt-1">
-              مرحلة التعليم المتوسط {showSubjectInHeader && subject ? `• مادة ${subject}` : ''}
+          <div className="my-2 text-center bg-gradient-to-r from-[#0369a1] via-[#0284c7] to-[#0369a1] text-white py-2 rounded-xl shadow-xs border border-[#38bdf8]">
+            <h1 className="text-[18px] font-[800] tracking-tight leading-tight">الدفتر اليومي للأستاذ</h1>
+            <div className="text-[10.5px] font-medium opacity-95 mt-0.5 flex flex-wrap items-center justify-center gap-2">
+              <span>مرحلة التعليم المتوسط {showSubjectInHeader && subject ? `• مادة ${subject}` : ''}</span>
+              {showYearInHeader && config.schoolYear && (
+                <span className="bg-white/20 px-2 py-0 rounded-full text-[9.5px] font-bold">
+                  السنة الدراسية: {config.schoolYear}
+                </span>
+              )}
             </div>
-            {showYearInHeader && config.schoolYear && (
-              <div className="inline-block mt-1 bg-white/20 px-3 py-0.5 rounded-full text-[10px] font-bold">
-                السنة الدراسية: {config.schoolYear}
-              </div>
-            )}
           </div>
 
           {/* Teacher & Assignment Info Grid in Sky Blue */}
-          <div className="grid grid-cols-2 gap-3 mb-4 text-[11px]">
-            <div className="bg-[#f0f9ff] border border-[#bae6fd] rounded-xl p-3 space-y-1.5">
-              <div className="text-[11.5px] font-extrabold text-[#0369a1] border-b border-[#bae6fd] pb-1 flex items-center gap-1.5">
+          <div className="grid grid-cols-2 gap-2.5 mb-2 text-[10px]">
+            <div className="bg-[#f0f9ff] border border-[#bae6fd] rounded-lg p-2 space-y-1">
+              <div className="text-[10.5px] font-extrabold text-[#0369a1] border-b border-[#bae6fd] pb-0.5 flex items-center gap-1.5">
                 <GraduationCap className="w-3.5 h-3.5" />
                 <span>معلومات الأستاذ(ة) والإسناد التربوي:</span>
               </div>
-              <div className="grid grid-cols-[75px_1fr] gap-1 text-zinc-800">
+              <div className="grid grid-cols-[68px_1fr] gap-0.5 text-zinc-800">
                 <span className="text-zinc-500 font-medium">الأستاذ(ة):</span>
                 <span className="font-bold">{teacher || '—'}</span>
 
@@ -2315,13 +2381,6 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                   <>
                     <span className="text-zinc-500 font-medium">المادة:</span>
                     <span className="font-bold">{subject}</span>
-                  </>
-                )}
-
-                {showYearInHeader && config.schoolYear && (
-                  <>
-                    <span className="text-zinc-500 font-medium">السنة الدراسية:</span>
-                    <span className="font-bold">{config.schoolYear}</span>
                   </>
                 )}
 
@@ -2337,21 +2396,21 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
               </div>
             </div>
 
-            <div className="bg-[#e1f0fa] border border-[#7dd3fc] rounded-xl p-3 space-y-1.5">
-              <div className="text-[11.5px] font-extrabold text-[#0369a1] border-b border-[#7dd3fc] pb-1 flex items-center gap-1.5">
+            <div className="bg-[#e1f0fa] border border-[#7dd3fc] rounded-lg p-2 space-y-1">
+              <div className="text-[10.5px] font-extrabold text-[#0369a1] border-b border-[#7dd3fc] pb-0.5 flex items-center gap-1.5">
                 <Layers className="w-3.5 h-3.5 text-[#0284c7]" />
                 <span>ملخص الحجم الساعي والسنوات المسندة:</span>
               </div>
-              <div className="space-y-1 text-[11px] text-zinc-800">
-                <div className="flex justify-between items-center bg-white px-2 py-1 rounded border border-[#bae6fd]">
+              <div className="space-y-1 text-[10px] text-zinc-800">
+                <div className="flex justify-between items-center bg-white px-2 py-0.5 rounded border border-[#bae6fd]">
                   <span>إجمالي الحصص الأسبوعية:</span>
-                  <b className="text-[#0369a1] font-mono text-[11px]">{totalFilledTimetableSlots} حصة/أسبوع</b>
+                  <b className="text-[#0369a1] font-mono text-[10px]">{totalFilledTimetableSlots} حصة/أسبوع</b>
                 </div>
-                <div className="flex flex-wrap gap-1 mt-1">
+                <div className="flex flex-wrap gap-1">
                   {assignedLevels.map((lvl) => (
                     <span
                       key={lvl}
-                      className={`text-[9.5px] font-bold px-2 py-0.5 rounded-full border ${
+                      className={`text-[9px] font-bold px-1.5 py-0 rounded-full border ${
                         lvl === '4م'
                           ? 'bg-red-50 text-red-800 border-red-200'
                           : lvl === '3م'
@@ -2361,35 +2420,32 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                           : 'bg-emerald-50 text-emerald-800 border-emerald-200'
                       }`}
                     >
-                      {lvl} ({CURRICULUM_DATABASE[lvl]?.length || 0} مورد بالمنهاج)
+                      {lvl} ({CURRICULUM_DATABASE[lvl]?.length || 0} مورد)
                     </span>
                   ))}
-                </div>
-                <div className="text-[9.5px] text-zinc-500 leading-tight pt-0.5">
-                  • تُدون حصص المستويات المسندة حصراً وفق التدرج السنوي المعتمد.
                 </div>
               </div>
             </div>
           </div>
 
           {/* Official Weekly Timetable */}
-          <div className="rounded-xl border border-[#bae6fd] overflow-hidden mb-3">
-            <div className="bg-[#0284c7] text-white px-3 py-1.5 flex items-center justify-between text-[11px] font-bold">
+          <div className="rounded-lg border border-[#bae6fd] overflow-hidden mb-1.5">
+            <div className="bg-[#0284c7] text-white px-2.5 py-1 flex items-center justify-between text-[10px] font-bold">
               <span className="flex items-center gap-1.5">
-                <TableIcon className="w-3.5 h-3.5" />
-                جدول استعمال الزمن الأسبوعي للأستاذ (من الأحد إلى الخميس)
+                <TableIcon className="w-3 h-3" />
+                جدول استعمال الزمن الأسبوعي للأستاذ (الأحد — الخميس)
               </span>
-              <span className="text-[9.5px] bg-white/20 px-2 py-0.5 rounded-full font-bold">
-                نظام الدوام بفترتين: صباحية ومسائية
+              <span className="text-[9px] bg-white/20 px-2 py-0 rounded-full font-bold">
+                فترة صباحية ومسائية
               </span>
             </div>
 
-            <table className="w-full border-collapse text-[10px] leading-4 text-center">
+            <table className="w-full border-collapse text-[9.5px] leading-tight text-center">
               <thead>
                 <tr className="bg-[#f0f9ff] text-[#0369a1] font-bold border-b border-[#bae6fd]">
-                  <th className="border border-[#bae6fd] px-2 py-1.5 w-[90px]">التوقيت</th>
+                  <th className="border border-[#bae6fd] px-1.5 py-1 w-[82px]">التوقيت</th>
                   {WEEK_DAYS.map((day) => (
-                    <th key={day} className="border border-[#bae6fd] px-2 py-1.5 font-bold">
+                    <th key={day} className="border border-[#bae6fd] px-1.5 py-1 font-bold">
                       {day}
                     </th>
                   ))}
@@ -2399,17 +2455,17 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                 {/* Morning Shift */}
                 {morningRows.map((row) => (
                   <tr key={row.id} className="hover:bg-amber-50/30">
-                    <td className="border border-zinc-200 px-1.5 py-1 font-mono font-bold bg-[#f8fafc] text-zinc-700">
+                    <td className="border border-zinc-200 px-1 py-0.5 font-mono font-bold bg-[#f8fafc] text-zinc-700 text-[9px]">
                       {row.time}
                     </td>
                     {WEEK_DAYS.map((day) => {
                       const cellVal = row.cells[day] || '';
                       const lvl = detectLevelFromSection(cellVal);
                       return (
-                        <td key={day} className="border border-zinc-200 px-1 py-1 font-bold">
+                        <td key={day} className="border border-zinc-200 px-1 py-0.5 font-bold">
                           {cellVal ? (
                             <span
-                              className={`inline-block px-1.5 py-0.5 rounded text-[10px] border ${
+                              className={`inline-block px-1.5 py-0 rounded text-[9px] border ${
                                 lvl === '4م'
                                   ? 'bg-red-50 text-red-800 border-red-200'
                                   : lvl === '3م'
@@ -2431,26 +2487,26 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                 ))}
 
                 {/* Lunch break */}
-                <tr className="bg-[#fffbeb] text-amber-900 font-bold text-[9px]">
-                  <td colSpan={6} className="border border-amber-200 py-1 text-center">
-                    🍽️ استراحة الغداء 12:00 - 13:30 (فترة راحة رسمية)
+                <tr className="bg-[#fffbeb] text-amber-900 font-bold text-[8.5px]">
+                  <td colSpan={6} className="border border-amber-200 py-0.5 text-center">
+                    🍽️ استراحة الغداء 12:00 - 13:30
                   </td>
                 </tr>
 
                 {/* Afternoon Shift */}
                 {afternoonRows.map((row) => (
                   <tr key={row.id} className="hover:bg-indigo-50/30">
-                    <td className="border border-zinc-200 px-1.5 py-1 font-mono font-bold bg-[#f8fafc] text-zinc-700">
+                    <td className="border border-zinc-200 px-1 py-0.5 font-mono font-bold bg-[#f8fafc] text-zinc-700 text-[9px]">
                       {row.time}
                     </td>
                     {WEEK_DAYS.map((day) => {
                       const cellVal = row.cells[day] || '';
                       const lvl = detectLevelFromSection(cellVal);
                       return (
-                        <td key={day} className="border border-zinc-200 px-1 py-1 font-bold">
+                        <td key={day} className="border border-zinc-200 px-1 py-0.5 font-bold">
                           {cellVal ? (
                             <span
-                              className={`inline-block px-1.5 py-0.5 rounded text-[10px] border ${
+                              className={`inline-block px-1.5 py-0 rounded text-[9px] border ${
                                 lvl === '4م'
                                   ? 'bg-red-50 text-red-800 border-red-200'
                                   : lvl === '3م'
@@ -2477,35 +2533,35 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       </div>
 
       {/* Cover Page Footer with 4 Signatures & Official Teacher Stamp */}
-      <div style={{ padding: '0 16px' }} className="mt-auto pt-2 border-t-2 border-[#bae6fd]">
-        <div className="grid grid-cols-4 gap-3 text-[10px] text-center mb-2">
-          <div className="border border-dashed border-zinc-300 rounded-lg p-2 bg-[#f8fafc]">
+      <div style={{ padding: '0 14px' }} className="mt-auto pt-1.5 border-t border-[#bae6fd] shrink-0">
+        <div className="grid grid-cols-4 gap-2 text-[9.5px] text-center mb-1 items-center">
+          <div className="border border-dashed border-zinc-300 rounded-lg p-1.5 bg-[#f8fafc]">
             <div className="font-bold text-zinc-800">توقيع الأستاذ(ة)</div>
-            <div className="mt-4 border-t border-dashed border-zinc-400 h-6" />
+            <div className="mt-3 border-t border-dashed border-zinc-400 h-4" />
           </div>
           <div className="border border-dashed border-[#bae6fd] rounded-lg p-1 bg-[#f0f9ff] flex flex-col items-center justify-center">
-            <div className="font-bold text-[#0369a1] text-[9.5px] mb-0.5">الختم الرسمي للأستاذ</div>
-            <TeacherOfficialStamp config={config} size="sm" />
+            <div className="font-bold text-[#0369a1] text-[9px] mb-0.5">الختم الرسمي للأستاذ</div>
+            <TeacherOfficialStamp config={config} size="sm" sizeMm={15} />
           </div>
-          <div className="border border-dashed border-zinc-300 rounded-lg p-2 bg-[#f8fafc]">
+          <div className="border border-dashed border-zinc-300 rounded-lg p-1.5 bg-[#f8fafc]">
             <div className="font-bold text-zinc-800">تأشيرة مدير المؤسسة</div>
-            <div className="mt-4 border-t border-dashed border-zinc-400 h-6" />
+            <div className="mt-3 border-t border-dashed border-zinc-400 h-4" />
           </div>
-          <div className="border border-dashed border-zinc-300 rounded-lg p-2 bg-[#f8fafc]">
+          <div className="border border-dashed border-zinc-300 rounded-lg p-1.5 bg-[#f8fafc]">
             <div className="font-bold text-zinc-800">تأشيرة مفتش المادة</div>
-            <div className="mt-4 border-t border-dashed border-zinc-400 h-6" />
+            <div className="mt-3 border-t border-dashed border-zinc-400 h-4" />
           </div>
         </div>
 
-        <div className="flex justify-between items-center text-[9px] text-zinc-500 pt-1 border-t border-zinc-100">
+        <div className="flex justify-between items-center text-[8.5px] text-zinc-500 pt-0.5 border-t border-zinc-100">
           <span>الغلاف الرسمي واستعمال الزمن</span>
-          <span className="font-bold text-[#0369a1] bg-[#f0f9ff] border border-[#bae6fd] px-2.5 py-0.5 rounded-full">
+          <span className="font-bold text-[#0369a1] bg-[#f0f9ff] border border-[#bae6fd] px-2 py-0 rounded-full">
             صفحة الغلاف — 🇩🇿
           </span>
           <span>الجمهورية الجزائرية الديمقراطية الشعبية 🇩🇿</span>
         </div>
 
-        <div className="h-1.5 flex -mx-4 mt-2">
+        <div className="h-1 flex -mx-3.5 mt-1">
           <div className="flex-1 bg-[#006233]" />
           <div className="flex-1 bg-[#D21034]" />
         </div>
@@ -2660,11 +2716,16 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
     );
   };
 
+  const { settings: hwStyle } = useHandwritingStyle();
+  const [isHwPanelOpen, setIsHwPanelOpen] = useState(false);
+  const hwActive = isHandwritingActiveFor('logbook', hwStyle);
+  const logbookFontFamily = getEffectiveExportFontFamily('pdf', hwStyle, 'logbook');
+
   return (
     <div
       dir="rtl"
-      className="min-h-screen bg-[#edf9f6] grid-paper-bg text-zinc-900 selection:bg-[#006233]/20"
-      style={{ fontFamily: "'Tajawal', system-ui, sans-serif" }}
+      className={`min-h-screen bg-[#edf9f6] grid-paper-bg text-zinc-900 selection:bg-[#006233]/20 ${hwActive ? 'hw-notebook-scope' : ''}`}
+      style={{ fontFamily: logbookFontFamily }}
     >
       {isAddLessonModalOpen && (
         <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" role="dialog" aria-modal="true" aria-label="إضافة حصة أو تسجيل حالة">
@@ -2720,7 +2781,6 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
         </div>
       )}
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap');
         @media print {
           @page {
             size: A4 ${orientation};
@@ -2842,15 +2902,17 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
             break-after: auto !important;
           }
           .logbook-table { border-collapse: collapse !important; }
+          .logbook-table thead { display: table-header-group !important; }
+          .logbook-table tr, table tr { break-inside: avoid !important; page-break-inside: avoid !important; }
           .writing-grid-cell, .logbook-grid-cell { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
         }
         @media screen and (max-width: 820px) {
-          .print-page {
+          main .print-page {
             max-width: 100% !important;
             height: auto !important;
             min-height: 0 !important;
           }
-          .logbook-content-page, .notebook-intro-page, .cover-page {
+          main .logbook-content-page, main .notebook-intro-page, main .cover-page {
             width: 100% !important;
             max-width: 100% !important;
             min-height: auto !important;
@@ -2925,13 +2987,13 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
 
             <div className="text-right">
               <h1 className="text-[22px] md:text-[28px] font-[800] tracking-tight leading-none text-zinc-900">
-                الدفتر اليومي - استعمال زمن جدولي
+                الدفتر الرقمي للأستاذ - استعمال زمن جدولي
               </h1>
               <p className="text-[13px] font-bold text-[#159a8c] mt-1">
-                ربط تلقائي بالمنهاج الرسمي والتدرج السنوي للمستويات المسندة للأستاذ
+                مرتبط حصرياً بملفات التدرج البيداغوجي الرسمي للمستويات المسندة للأستاذ
               </p>
               <p className="text-[11px] text-zinc-500 mt-1">
-                A4 • {ROWS_PER_PAGE} سطر • فلترة ذكية للسنوات المسندة • تسلسل بيداغوجي للموارد
+                A4 • توزيع ذكي حسب الحجم الساعي • احترام تام للتسلسل البيداغوجي • تاريخ انطلاق ثابت ومحفوظ
               </p>
             </div>
           </div>
@@ -3473,10 +3535,14 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold text-zinc-700 mb-1">تاريخ الدخول المدرسي (مرجع تقدير تسلسل الدروس)</label>
-                  <input type="date" value={sequenceStartDate} onChange={(e) => setSequenceStartDate(e.target.value)}
-                    className="w-full border border-zinc-200 rounded-lg px-2 py-2 text-[12px] bg-white outline-none" />
-                  <p className="text-[10px] text-zinc-500 mt-1">يُقدَّر تقدم الدروس وفق استعمال الزمن والعطل؛ اضغط توليد بعد تعديل المرجع.</p>
+                  <label className="block text-[10px] font-bold text-zinc-700 mb-1">مرجع حساب التسلسل البيداغوجي (اختياري)</label>
+                  <input
+                    type="date"
+                    value={sequenceStartDate}
+                    onChange={(e) => setSequenceStartDate(e.target.value)}
+                    className="w-full border border-zinc-200 rounded-lg px-2 py-2 text-[12px] bg-white outline-none"
+                  />
+                  <p className="text-[10px] text-zinc-500 mt-1">يطابق تاريخ بداية الدفتر افتراضياً؛ عدّله فقط إن أردت تقدير التقدم انطلاقاً من تاريخ سابق.</p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
@@ -3489,9 +3555,19 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                       value={startDate}
                       onChange={(e) => {
                         const selectedDate = e.target.value;
+                        const wasAligned = !sequenceStartDate || sequenceStartDate === startDate;
+                        const nextSequenceStart = wasAligned ? selectedDate : sequenceStartDate;
                         setStartDate(selectedDate);
+                        if (wasAligned) setSequenceStartDate(selectedDate);
                         if (selectedDate) {
-                          const fresh = generateAndApplyLogbook(selectedDate, period, sessionsPerActivity);
+                          const fresh = generateAndApplyLogbook(
+                            selectedDate,
+                            period,
+                            sessionsPerActivity,
+                            gridRows,
+                            nextSequenceStart,
+                            unitSessionsMap
+                          );
                           if (fresh.length > 0) {
                             showToast(`تم توليد الدفتر انطلاقاً من: ${selectedDate} (${fresh.length} حصة) بنجاح 🇩🇿`);
                           } else {
@@ -3502,7 +3578,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                       className="w-full border border-emerald-300 rounded-lg px-2 py-2 text-[12px] bg-white outline-none font-bold text-[#064e3b] focus:ring-2 focus:ring-emerald-400"
                     />
                     <p className="text-[10px] text-zinc-500 mt-1">
-                      تبدأ الحصص من التاريخ المحدد أو أول يوم مبرمج بعده، مع مراعاة العطل ({startDate || 'غير محدد'})
+                      يبدأ الدفتر من التاريخ المحدد ويحتفظ به عند إعادة فتح الصفحة ({startDate || 'غير محدد'})
                     </p>
                   </div>
                   <div>
@@ -3642,7 +3718,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                 {rows.length > 0 && (
                   <div className="text-[11px] text-center bg-white border border-emerald-200 rounded-lg py-2 font-bold text-[#064e3b] space-y-1">
                     <div>
-                      {rows.length} حصة • {paginatedPages.length} صفحة • A4 • تقسيم ذكي حسب عدد الحصص • حتى 12 حصة في الصفحة • {orientation === 'landscape' ? 'أفقي' : 'عمودي'}
+                      {rows.length} حصة • {paginatedPages.length} صفحة • A4 • توزيع ذكي حسب حجم المحتوى • {orientation === 'landscape' ? 'أفقي' : 'عمودي'}
                     </div>
                     <div className="text-[10px] text-zinc-600 font-medium">
                       المستويات المسندة في الدفتر: {levelDistributionSummary}
@@ -3657,11 +3733,11 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
 
         {/* Main Printable Area */}
         <main className={`bg-[#edf9f6] p-2 md:p-6 lg:p-8 ${isPreviewModalOpen ? 'print:hidden' : ''}`}>
-          <div id="pages-start" className="no-print mb-4 flex items-center justify-between gap-2 text-[12px] text-zinc-600">
+          <div id="pages-start" className="no-print mb-4 flex flex-wrap items-center justify-between gap-2 text-[12px] text-zinc-600">
             <div className="flex items-center gap-2">
               <FileStack className="w-4 h-4 text-[#064e3b]" />
               <span>
-                معاينة الدفتر اليومي ({paginatedPages.length} صفحة) — A4 • تقسيم ذكي حسب عدد الحصص • حتى 12 حصة في الصفحة • {orientation === 'landscape' ? 'أفقي' : 'عمودي'} •{' '}
+                معاينة الدفتر الرقمي ({paginatedPages.length} صفحة) — A4 • {orientation === 'landscape' ? 'أفقي' : 'عمودي'} •{' '}
                 {paginatedPages.length > 0 ? formatPageNumberLabel(0, paginatedPages.length) : 'جاهز للتوليد'}
               </span>
             </div>
@@ -3671,6 +3747,106 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
               </span>
             )}
           </div>
+
+          {orderedRows.length > 0 && (
+            <details className="no-print mb-5 rounded-xl border border-emerald-200 bg-white shadow-2xs overflow-hidden">
+              <summary className="cursor-pointer px-4 py-3 flex flex-wrap items-center justify-between gap-2 bg-gradient-to-l from-emerald-50 to-white text-[12.5px] font-extrabold text-[#064e3b] select-none">
+                <span className="flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-emerald-700" />
+                  <span>متابعة تنفيذ التدرج البيداغوجي وإدارة الحصص ({orderedRows.length} حصة)</span>
+                </span>
+                <span className="flex items-center gap-2 text-[10.5px] font-bold">
+                  <span className="bg-emerald-100 text-emerald-900 px-2 py-0.5 rounded-full">
+                    منجزة: {orderedRows.filter((r) => r.completionStatus === 'completed').length}
+                  </span>
+                  <span className="bg-sky-100 text-sky-900 px-2 py-0.5 rounded-full">
+                    مبرمجة: {orderedRows.filter((r) => !r.completionStatus || r.completionStatus === 'scheduled' || r.completionStatus === 'in_progress').length}
+                  </span>
+                  <span className="bg-amber-100 text-amber-900 px-2 py-0.5 rounded-full">
+                    مؤجلة: {orderedRows.filter((r) => r.completionStatus === 'postponed').length}
+                  </span>
+                </span>
+              </summary>
+              <div className="p-3 border-t border-emerald-100 max-h-[340px] overflow-auto space-y-2">
+                <div className="text-[11px] text-zinc-600 bg-zinc-50 border border-zinc-200 rounded-lg px-3 py-1.5">
+                  يمكنك تأشير إنجاز أي حصة، أو تمديد درس بحصة إضافية (+1)، أو تأجيل حصة لترحيل الحصص اللاحقة تلقائياً داخل خانات استعمال الزمن الأسبوعي دون المساس بترتيب التدرج الرسمي.
+                </div>
+                <div className="divide-y divide-zinc-100 border border-zinc-200 rounded-lg overflow-hidden">
+                  {orderedRows.slice(0, 40).map((r) => (
+                    <div key={`tracker-${r.id}`} className="p-2.5 bg-white hover:bg-emerald-50/30 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                      <div className="space-y-0.5 min-w-[240px] flex-1">
+                        <div className="flex flex-wrap items-center gap-1.5 font-bold text-zinc-900">
+                          <span className="bg-[#064e3b] text-white px-2 py-0.5 rounded text-[10px]">{r.section}</span>
+                          <span className="font-mono text-[10px] text-zinc-600">{r.dayName} {r.dateStr}</span>
+                          {r.weekNumber && (
+                            <span className="bg-sky-50 text-sky-800 border border-sky-200 px-1.5 py-0.5 rounded text-[9.5px]">
+                              الأسبوع {r.weekNumber}
+                            </span>
+                          )}
+                          {r.progressionOrder && (
+                            <span className="bg-zinc-100 text-zinc-700 px-1.5 py-0.5 rounded text-[9.5px]">
+                              درس #{r.progressionOrder}
+                              {r.totalSessionsInUnit && r.totalSessionsInUnit > 1 ? ` (حصة ${r.sessionNumberInUnit}/${r.totalSessionsInUnit})` : ''}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-zinc-800 font-semibold truncate max-w-[680px]" title={r.content}>
+                          {r.maqta ? `${r.maqta} ← ` : ''}{r.content}
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <select
+                          aria-label={`حالة الحصة ${r.dateStr}`}
+                          value={r.completionStatus || 'scheduled'}
+                          onChange={(e) =>
+                            handleReorganizeRow(r.id, {
+                              newStatus: e.target.value as 'scheduled' | 'in_progress' | 'completed' | 'postponed',
+                            })
+                          }
+                          className="border border-zinc-300 rounded-md px-2 py-1 text-[10.5px] font-bold bg-white"
+                        >
+                          <option value="scheduled">مبرمجة</option>
+                          <option value="in_progress">قيد الإنجاز</option>
+                          <option value="completed">منجزة</option>
+                          <option value="postponed">مؤجلة (ترحيل)</option>
+                        </select>
+                        {r.progressionUnitId && (
+                          <button
+                            type="button"
+                            onClick={() => handleReorganizeRow(r.id, { extraSessionsForUnit: 1, newStatus: 'in_progress' })}
+                            className="bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 rounded-md px-2 py-1 text-[10.5px] font-bold cursor-pointer"
+                            title="تمديد هذا الدرس بحصة إضافية وإعادة جدولة الحصص اللاحقة تلقائياً"
+                          >
+                            +1 حصة وترحيل اللاحق
+                          </button>
+                        )}
+                        {r.level === '1م' && (r.sourceActivityId || r.sourceLearningUnitId) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const bundle =
+                                (r.sourceActivityId && recallActivityBundle(r.sourceActivityId)) ||
+                                (r.sourceLearningUnitId && recallActivityBundle(r.sourceLearningUnitId)) ||
+                                null;
+                              if (bundle) {
+                                setRecalled1amBundle(bundle);
+                              } else {
+                                showToast('لا تتوفر حزمة أرشيف مطابقة لهذه الحصة حالياً');
+                              }
+                            }}
+                            className="bg-sky-50 hover:bg-sky-100 text-sky-900 border border-sky-300 rounded-md px-2 py-1 text-[10.5px] font-bold cursor-pointer"
+                            title="استدعاء التجارب والصور الأصلية والجداول والتقويم من أرشيف السنة الأولى متوسط"
+                          >
+                            موارد الأرشيف (1م)
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </details>
+          )}
 
 
 
@@ -3742,18 +3918,28 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
             </div>
           )}
 
+          {/* Selection Pen Strip & Handwriting Controls */}
+          <div className="no-print w-full flex justify-center mb-3">
+            <SelectionPenStrip
+              compact
+              settings={hwStyle}
+              onNotify={showToast}
+              onOpenCustomizer={() => setIsHwPanelOpen(true)}
+            />
+          </div>
+
           {/* Render Pages */}
           <div className="w-full overflow-x-auto flex flex-col items-center py-2 px-0 sm:px-2">
             <div className="w-full flex flex-col items-center space-y-6 sm:space-y-8" style={{ maxWidth: orientation === 'landscape' ? '297mm' : '210mm' }}>
               {renderNotebookIntroPage(false)}
               {renderCoverFirstPage()}
-              {paginatedPages.map((pageRows, pageIdx) => (
+              {paginatedA4Pages.map((pageObj, pageIdx) => (
                 <SheetTemplate
                   key={`page-${pageIdx}`}
-                  pageRows={pageRows}
-                  allRows={rows}
+                  pageRows={pageObj.rows}
+                  allRows={orderedRows}
                   pageIndex={pageIdx}
-                  totalPages={paginatedPages.length}
+                  totalPages={paginatedA4Pages.length}
                   config={config}
                   assignedLevels={assignedLevels}
                   startDate={startDate}
@@ -3764,6 +3950,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                   getSchoolWeekNumber={getSchoolWeekNumber}
                   formatLogbookDateLabel={formatLogbookDateLabel}
                   onUpdateRow={handleUpdateLogbookRow}
+                  emptyFillerRows={pageObj.emptyFillerRows}
                 />
               ))}
             </div>
@@ -3780,7 +3967,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
               <div className="flex items-center gap-2">
                 <BookOpen className="w-5 h-5 text-[#064e3b]" />
                 <h3 className="font-extrabold text-[15px] text-zinc-900">
-                  المناهج والموارد التعليمية المعتمدة
+                  التدرج البيداغوجي الرسمي المعتمد (المصدر الوحيد للدفتر)
                 </h3>
               </div>
               <button
@@ -3820,20 +4007,25 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
               </div>
 
               <div className="text-[11px] text-zinc-600 font-medium">
-                إجمالي وحدات التعلم: <b>{(['1م', '2م', '3م', '4م'] as const).reduce((sum, lvl) => sum + CURRICULUM_DATABASE[lvl].length, 0)} وحدة</b>
+                إجمالي الوحدات البيداغوجية: <b>{(['1م', '2م', '3م', '4م'] as const).reduce((sum, lvl) => sum + CURRICULUM_DATABASE[lvl].length, 0)} وحدة</b>
               </div>
             </div>
 
             {/* Modal Body */}
             <div className="p-5 overflow-auto max-h-[60vh] space-y-5">
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-[11px] text-amber-900 font-medium">
+                ملاحظة مرجعية: ملفات التدرج البيداغوجي المرفقة لا تنص على مدد ساعية أو تواريخ محددة للدروس؛ لذا يمكنك ضبط عدد الحصص لكل وحدة أدناه حسب التقدير البيداغوجي الفعلي لقسمك.
+              </div>
+
               {(['1م', '2م', '3م', '4م'] as const)
                 .filter((lvl) => (modalFilterLevel === 'assigned' ? assignedLevels.includes(lvl) : true))
                 .map((lvl) => {
                   const isAssigned = assignedLevels.includes(lvl);
+                  const lookup = logbookProgressionOf(lvl);
                   return (
                     <div key={lvl} className="rounded-xl border border-zinc-200 overflow-hidden shadow-2xs">
                       <div
-                        className={`px-4 py-2.5 font-extrabold text-[13px] flex items-center justify-between ${
+                        className={`px-4 py-2.5 font-extrabold text-[13px] flex flex-wrap items-center justify-between gap-2 ${
                           lvl === '4م'
                             ? 'bg-red-50 text-red-900 border-b border-red-200'
                             : lvl === '3م'
@@ -3856,38 +4048,77 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                           )}
                         </div>
                         <span className="text-[11px] bg-white border px-2.5 py-0.5 rounded-full font-bold">
-                          {CURRICULUM_DATABASE[lvl].length} مورد تعليمي
+                          {lookup.available ? `${lookup.units.length} وحدة • ${lookup.source?.totalPages || 0} صفحات PDF` : lookup.unavailableReason}
                         </span>
                       </div>
 
-                      <div className="divide-y divide-zinc-100 max-h-[220px] overflow-auto">
-                        {CURRICULUM_DATABASE[lvl].map((res, resIdx) => (
-                          <div key={resIdx} className="px-4 py-2.5 text-[11px] leading-relaxed flex items-start gap-3 hover:bg-zinc-50 transition">
-                            <span className="font-mono text-[10px] bg-zinc-900 text-white w-5 h-5 grid place-items-center rounded-full shrink-0 mt-0.5">
-                              {resIdx + 1}
-                            </span>
-                            <div className="flex-1 space-y-0.5">
-                              <div className="font-bold text-zinc-900">{res.mawrid}</div>
-                              <div className="text-[10px] text-zinc-600">الميدان: {res.midan}</div>
-                              <div className="text-[10px] text-zinc-600">المقطع: {res.maqta}</div>
-                              <div className="text-[10px] text-zinc-600">المورد التعلمي: {res.mawrid}</div>
-                              <div className="text-[10px] text-zinc-600">تعلم المورد: {res.ta3alom}</div>
-                              {res.activities.length > 0 && (
-                                <div className="text-[10px] text-[#064e3b] font-medium">
-                                  الأنشطة: {res.activities.slice(0, 2).join(' + ')}
+                      {!lookup.available ? (
+                        <div className="p-4 text-[12px] text-rose-700 font-bold bg-rose-50">
+                          {lookup.unavailableReason || 'ملف التدرج البيداغوجي غير متوفر لهذه السنة'}
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-zinc-100 max-h-[260px] overflow-auto">
+                          {lookup.units.map((res: PedagogicalUnitRecord) => {
+                            const configuredUnitSessions = unitSessionsMap[res.id] || '';
+                            return (
+                              <div key={res.id} className="px-4 py-2.5 text-[11px] leading-relaxed flex items-start gap-3 hover:bg-zinc-50 transition">
+                                <span className="font-mono text-[10px] bg-zinc-900 text-white w-5 h-5 grid place-items-center rounded-full shrink-0 mt-0.5">
+                                  {res.order}
+                                </span>
+                                <div className="flex-1 space-y-0.5">
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <span className="font-bold text-zinc-900">{res.ta3alom || res.mawrid}</span>
+                                    <select
+                                      aria-label={`عدد حصص ${res.id}`}
+                                      value={configuredUnitSessions}
+                                      onChange={(e) => {
+                                        const val = e.target.value ? Number(e.target.value) : 0;
+                                        const nextMap = { ...unitSessionsMap };
+                                        if (val > 0) nextMap[res.id] = val;
+                                        else delete nextMap[res.id];
+                                        setUnitSessionsMap(nextMap);
+                                        if (startDate) {
+                                          generateAndApplyLogbook(startDate, period, sessionsPerActivity, gridRows, sequenceStartDate || startDate, nextMap);
+                                        }
+                                      }}
+                                      className="border border-zinc-300 rounded px-1.5 py-0.5 text-[10px] font-bold bg-white"
+                                    >
+                                      <option value="">حسب الإعداد العام ({res.activities.length * sessionsPerActivity} حصة)</option>
+                                      <option value={1}>1 حصة</option>
+                                      <option value={2}>2 حصة</option>
+                                      <option value={3}>3 حصص</option>
+                                      <option value={4}>4 حصص</option>
+                                    </select>
+                                  </div>
+                                  <div className="text-[10px] text-zinc-600">الميدان: {res.midan}</div>
+                                  <div className="text-[10px] text-zinc-600">
+                                    المقطع: {res.maqta}{res.sectionGroup ? ` (${res.sectionGroup})` : ''}
+                                  </div>
+                                  <div className="text-[10px] text-zinc-600">المورد التعلمي: {res.mawrid}</div>
+                                  {res.moshkila && <div className="text-[10px] text-zinc-700">المشكلة: {res.moshkila}</div>}
+                                  {res.activities.length > 0 && (
+                                    <div className="text-[10px] text-[#064e3b] font-medium">
+                                      الأنشطة: {res.activities.join(' + ')}
+                                    </div>
+                                  )}
+                                  {res.taqwim && (
+                                    <div className="text-[10px] text-sky-800">التقويم: {res.taqwim}</div>
+                                  )}
+                                  <div className="text-[9.5px] text-zinc-400 font-mono">
+                                    المصدر: ص {res.sourceFile.sourcePage} — المدة الرسمية غير محددة بالوثيقة (قابلة للتخصيص)
+                                  </div>
                                 </div>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
 
               <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-3.5 text-[11px] leading-relaxed text-zinc-600">
-                <b>آلية التوليد البيداغوجي الذكي:</b> عند إدراج قسم في جدول التوقيت (مثل 1م1 أو 4م2)، يستخرج النظام المستوى التعليمي، ويسحب المورد التالي بالترتيب الرسمي وفق التدرج السنوي الرسمي للتعلمات لمادة علوم الطبيعة والحياة (الدفتر مستقل عن المذكرات).
-                <b> السنوات التي لا تدرسها لن تظهر في دفترك اليومي إطلاقاً</b>، مما يحقق الدقة والتنظيم التام.
+                <b>آلية التوليد البيداغوجي للدفتر الرقمي:</b> عند إدراج قسم في جدول التوقيت (مثل 1م1 أو 4م2)، يستخرج النظام المستوى التعليمي، ويسحب الدروس والأنشطة بالترتيب الرسمي الحرفي من ملف التدرج البيداغوجي المعتمد لتلك السنة دون خلط بين السنوات ودون اختلاق محتوى أو مدد غير منصوص عليها.
               </div>
             </div>
 
@@ -3932,13 +4163,21 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                   )}
                 </div>
                 <div className="text-zinc-400 text-[10px] mt-1 hidden md:block">
-                  A4 • {ROWS_PER_PAGE} سطر • المستويات المسندة: {assignedLevels.join('، ') || '—'}
+                  A4 ({orientation === 'landscape' ? 'أفقي' : 'عمودي'}) • توزيع تلقائي حسب المحتوى • المستويات المسندة: {assignedLevels.join('، ') || '—'}
                 </div>
               </div>
             </div>
 
             <div className="flex items-center gap-1.5 md:gap-2">
-              
+              <button
+                type="button"
+                onClick={() => setIsHwPanelOpen(true)}
+                className="inline-flex items-center gap-1.5 bg-blue-900/80 hover:bg-blue-800 text-white border border-blue-700 px-2.5 sm:px-3 py-1.5 rounded-full text-[11px] font-bold transition shadow-sm cursor-pointer"
+                title="تخصيص خط اليد والأقلام الملونة في الدفتر"
+              >
+                <PenTool className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">خط اليد والأقلام</span>
+              </button>
 
               <button
                 type="button"
@@ -4049,9 +4288,9 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                   <SheetTemplate
                     key={`preview-page-${pageIdx}`}
                     pageRows={pageRows}
-                    allRows={rows}
+                    allRows={orderedRows}
                     pageIndex={previewMode === 'single' ? 0 : pageIdx}
-                    totalPages={paginatedPages.length}
+                    totalPages={paginatedA4Pages.length}
                     config={config}
                     assignedLevels={assignedLevels}
                     startDate={startDate}
@@ -4062,6 +4301,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                     getSchoolWeekNumber={getSchoolWeekNumber}
                     formatLogbookDateLabel={formatLogbookDateLabel}
                     onUpdateRow={handleUpdateLogbookRow}
+                    emptyFillerRows={paginatedA4Pages[previewMode === 'single' ? 0 : pageIdx]?.emptyFillerRows}
                   />
                 ))}
               </div>
@@ -4281,9 +4521,91 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
 
       {/* Page Footer */}
       <footer className="no-print text-center text-[10px] text-zinc-500 py-6 border-t border-zinc-200 bg-white">
-        الدفتر اليومي - استعمال زمن جدولي • A4 • {ROWS_PER_PAGE} سطر • علوم الطبيعة والحياة للطور المتوسط • 🇩🇿 •{' '}
+        الدفتر اليومي - استعمال زمن جدولي • A4 • توزيع ذكي حسب المحتوى • علوم الطبيعة والحياة للطور المتوسط • 🇩🇿 •{' '}
         {totalFilledTimetableSlots} حصة أسبوعياً • {assignedLevels.length} مستويات مسندة
       </footer>
+      <HandwritingStylePanel
+        isOpen={isHwPanelOpen}
+        onClose={() => setIsHwPanelOpen(false)}
+        showToast={showToast}
+      />
+
+      {recalled1amBundle && (
+        <div
+          className="fixed inset-0 z-[120] bg-black/65 backdrop-blur-xs flex items-center justify-center p-4 no-print"
+          dir="rtl"
+          onClick={() => setRecalled1amBundle(null)}
+        >
+          <div
+            className="bg-white rounded-2xl p-5 max-w-3xl w-full max-h-[88vh] overflow-y-auto shadow-2xl space-y-4 border border-emerald-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between border-b pb-3 gap-2">
+              <div>
+                <div className="text-xs font-black text-emerald-800">
+                  أرشيف السنة الأولى متوسط — مذكرة {recalled1amBundle.lesson.memoNumber} (ص {recalled1amBundle.lesson.sourcePage})
+                </div>
+                <h3 className="font-black text-base text-slate-900 mt-0.5">
+                  {recalled1amBundle.lesson.ta3alom} — {recalled1amBundle.activity.title}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRecalled1amBundle(null)}
+                className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+              <div className="bg-blue-50/70 p-3 rounded-xl border border-blue-200 whitespace-pre-wrap">
+                <strong className="text-blue-950 block mb-1">تعليمات النشاط:</strong>
+                {recalled1amBundle.activity.instructions}
+              </div>
+              <div className="bg-emerald-50/70 p-3 rounded-xl border border-emerald-200 whitespace-pre-wrap">
+                <strong className="text-emerald-950 block mb-1">الإجابات والاستنتاجات:</strong>
+                {recalled1amBundle.activity.answersAndConclusions}
+              </div>
+            </div>
+
+            {recalled1amBundle.experiments.length > 0 && (
+              <div className="space-y-2 text-xs">
+                <strong className="text-indigo-950 block">التجارب المخبرية المرتبطة ({recalled1amBundle.experiments.length}):</strong>
+                {recalled1amBundle.experiments.map((exp) => (
+                  <div key={exp.id} className="p-2.5 rounded-xl bg-indigo-50/60 border border-indigo-200 space-y-1">
+                    <div className="font-black text-indigo-900">{exp.title}</div>
+                    <div><strong>الأدوات:</strong> {exp.tools.join('، ')}</div>
+                    <div><strong>الملاحظة:</strong> {exp.observation}</div>
+                    <div><strong>الاستنتاج:</strong> {exp.conclusion}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {recalled1amBundle.media.length > 0 && (
+              <div>
+                <strong className="text-cyan-950 text-xs block mb-2">الوسائط الأصلية ({recalled1amBundle.media.length}):</strong>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {recalled1amBundle.media.map((med) => (
+                    <div key={med.id} className="border border-slate-200 rounded-xl p-1.5 bg-slate-50 text-center">
+                      <img src={med.imageUrl} alt={med.title} className="w-full h-20 object-contain rounded" />
+                      <div className="text-[10px] font-bold text-slate-700 mt-1 line-clamp-2">{med.title}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {recalled1amBundle.evaluations[0] && (
+              <div className="p-3 rounded-xl bg-rose-50/70 border border-rose-200 text-xs whitespace-pre-wrap">
+                <strong className="text-rose-950 block mb-1">تقويم المورد:</strong>
+                {recalled1amBundle.evaluations[0].prompt}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -21,10 +21,65 @@ import { MemoConfig } from "../types";
 import { LogEntry, getBaseSection } from "../components/DailyLogbook";
 import { safeHtml2Canvas } from "./html2canvasSanitizer";
 import { splitLogbookTime } from "./logbookPageTemplate";
+import {
+  paginateLogbookEntries,
+  STANDARD_FILLER_ROW_HEIGHT_PX,
+  getAvailableBodyHeightPx,
+  estimateEntryHeightPx,
+  type LogbookA4Page,
+} from "./logbookA4Pagination";
+import {
+  applyHandwritingCssVars,
+  buildDocxTextRuns,
+  getEffectiveExportFontFamily,
+  isHandwritingActiveFor,
+  loadHandwritingSettings,
+  type HandwritingStyleSettings,
+  type PenRole,
+} from "../services/handwritingStyle";
 
-const createParagraph = (text: string, bold = false, color = "000000", size = 20, alignment: any = AlignmentType.CENTER) => {
+interface LogbookParaOpts {
+  semantic?: boolean;
+  defaultRole?: PenRole;
+  hwStyle?: HandwritingStyleSettings;
+  hwActive?: boolean;
+  wordFont?: string;
+}
+
+const createParagraph = (
+  text: string,
+  bold = false,
+  color = "000000",
+  size = 20,
+  alignment: any = AlignmentType.CENTER,
+  keepNext = false,
+  opts: LogbookParaOpts = {}
+) => {
+  const hwStyle = opts.hwStyle ?? loadHandwritingSettings();
+  const hwActive = opts.hwActive ?? isHandwritingActiveFor("logbook", hwStyle);
+  const wordFont = opts.wordFont ?? getEffectiveExportFontFamily("docx", hwStyle, "logbook");
+  const fontAttrs = { ascii: wordFont, hAnsi: wordFont, cs: wordFont, hint: "cs" };
+
+  if (opts.semantic && hwActive) {
+    return new Paragraph({
+      alignment,
+      keepNext,
+      bidirectional: true,
+      spacing: { before: 0, after: 20, line: 240 },
+      children: buildDocxTextRuns(text || "", hwStyle, {
+        size,
+        bold,
+        defaultRole: opts.defaultRole || "bodyBlack",
+        fallbackColorHex: color,
+        fontName: wordFont,
+      }),
+    });
+  }
+
   return new Paragraph({
     alignment: alignment,
+    keepNext,
+    spacing: { before: 0, after: 20, line: 240 },
     children: (text || "").split('\n').map((line, i, arr) => {
       const parts = line.split(/(<u>.*?<\/u>)/g);
       const runs = parts.map(part => {
@@ -36,7 +91,7 @@ const createParagraph = (text: string, bold = false, color = "000000", size = 20
             color: color,
             rightToLeft: true,
             size: size,
-            font: "Tajawal"
+            font: fontAttrs
           });
         }
         return new TextRun({
@@ -45,7 +100,7 @@ const createParagraph = (text: string, bold = false, color = "000000", size = 20
           color: color,
           rightToLeft: true,
           size: size,
-          font: "Tajawal"
+          font: fontAttrs
         });
       });
       return [ ...runs, ...(i < arr.length - 1 ? [new TextRun({ break: 1 })] : []) ];
@@ -63,7 +118,9 @@ const createCell = (
   alignment: any = AlignmentType.CENTER,
   widthPercent?: number,
   customTextColor?: string,
-  borders?: any
+  borders?: any,
+  cellMarginY = 60,
+  paraOpts: LogbookParaOpts = {}
 ) => {
   const fill = bgColor === "000000" ? "064E3B" : (bgColor || "FFFFFF");
   let textColor = customTextColor;
@@ -79,13 +136,13 @@ const createCell = (
 
   const children = Array.isArray(text)
     ? text
-    : [createParagraph(text, bold, textColor, size, alignment)];
+    : [createParagraph(text, bold, textColor, size, alignment, false, paraOpts)];
 
   return new TableCell({
     columnSpan,
     rowSpan,
     shading: { fill, type: ShadingType.CLEAR, color: "auto" },
-    margins: { top: 80, bottom: 80, left: 80, right: 80 },
+    margins: { top: cellMarginY, bottom: cellMarginY, left: 65, right: 65 },
     verticalAlign: VerticalAlign.CENTER,
     width: widthPercent ? { size: widthPercent, type: WidthType.PERCENTAGE } : undefined,
     borders: borders || undefined,
@@ -338,6 +395,17 @@ const svgToPngData = async (svg: string, width = 420, height = 420): Promise<Uin
 };
 
 
+const getDocxSchoolWeekKey = (dateStr: string): string => {
+  const clean = (dateStr || '').split(' ')[0];
+  const d = new Date(`${clean}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return dateStr || '';
+  d.setDate(d.getDate() - d.getDay());
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
 export const generateLogbookDocx = async (
   logs: LogEntry[],
   config: MemoConfig,
@@ -345,7 +413,7 @@ export const generateLogbookDocx = async (
   holidays: any[] = [],
   assignedLevels: string[] = [],
   orientation: 'portrait' | 'landscape' = 'portrait',
-  paginatedPages?: LogEntry[][],
+  paginatedPages?: Array<LogEntry[] | LogbookA4Page<LogEntry>>,
   pageTemplate: 'standard' | 'teal' = 'standard'
 ): Promise<Blob> => {
   // 1. استخراج الختم الرسمي وكافة الرسومات البيداغوجية والزخارف كصور PNG عالية الدقة
@@ -358,23 +426,46 @@ export const generateLogbookDocx = async (
     svgToPngData(CORNER_LEAVES_SVG, 65, 65),
   ]);
 
-  // 2. تحديد صفحات الدفتر: إما من paginatedPages أو بتقسيم الحصص بمعدل 10 أسطر
-  const pages: LogEntry[][] = paginatedPages && paginatedPages.length > 0
-    ? paginatedPages
-    : (() => {
-        const chunks: LogEntry[][] = [];
-        for (let i = 0; i < logs.length; i += 10) {
-          chunks.push(logs.slice(i, i + 10));
+  // 2. تحديد صفحات الدفتر بتوافق تام مع نظام التقسيم الذكي A4
+  const normalizedPages: Array<{ rows: LogEntry[]; emptyFillerRows: number }> = (() => {
+    if (paginatedPages && paginatedPages.length > 0) {
+      const availablePx = getAvailableBodyHeightPx(orientation, pageTemplate);
+      return paginatedPages.map((entry) => {
+        if (Array.isArray(entry)) {
+          const usedPx = entry.reduce((sum, log) => {
+            const idx = logs.findIndex((l) => l.id === log.id);
+            const prev = findPreviousComparableCurriculumLog(logs, idx >= 0 ? idx : 0, log);
+            return sum + estimateEntryHeightPx(log, getExportLessonContent(log, prev), orientation, pageTemplate);
+          }, 0);
+          const filler = pageTemplate === 'standard'
+            ? Math.min(8, Math.max(0, Math.floor((availablePx - usedPx) / STANDARD_FILLER_ROW_HEIGHT_PX)))
+            : 0;
+          return { rows: entry, emptyFillerRows: filler };
         }
-        return chunks.length > 0 ? chunks : [[]];
-      })();
+        return { rows: entry.rows, emptyFillerRows: entry.emptyFillerRows };
+      });
+    }
 
-  const totalPages = pages.length;
+    const autoPages = paginateLogbookEntries({
+      rows: logs,
+      orientation,
+      template: pageTemplate,
+      buildContent: getExportLessonContent,
+      findPreviousComparable: findPreviousComparableCurriculumLog,
+      getWeekKey: getDocxSchoolWeekKey,
+    });
+    if (autoPages.length > 0) {
+      return autoPages.map((p) => ({ rows: p.rows, emptyFillerRows: p.emptyFillerRows }));
+    }
+    return [{ rows: [], emptyFillerRows: pageTemplate === 'standard' ? 6 : 0 }];
+  })();
+
+  const totalPages = normalizedPages.length;
 
   // أبعاد الصفحة بوحدات twips (1 مم ≈ 56.7 twips)
   const pageWidthTwips = orientation === 'landscape' ? 16838 : 11906;
   const pageHeightTwips = orientation === 'landscape' ? 11906 : 16838;
-  const pageMargin = { top: 380, bottom: 380, left: 450, right: 450 };
+  const pageMargin = { top: 280, bottom: 260, left: 360, right: 360 };
 
   const skyBorder = { style: BorderStyle.SINGLE, size: 2, color: "0284C7" };
   const dashedBorder = { style: BorderStyle.DASHED, size: 1, color: "7DD3FC" };
@@ -493,9 +584,10 @@ export const generateLogbookDocx = async (
     const timetableRows: TableRow[] = [];
     timetableRows.push(new TableRow({
       tableHeader: true,
+      cantSplit: true,
       children: [
-        createCell("اليوم \\ التوقيت", true, "E1F0FA", 1, 1, 17, AlignmentType.CENTER, 15, "0369A1"),
-        ...gridRows.map((r: any) => createCell(r.time, true, "E1F0FA", 1, 1, 15, AlignmentType.CENTER, undefined, "0369A1"))
+        createCell("اليوم \\ التوقيت", true, "E1F0FA", 1, 1, 15, AlignmentType.CENTER, 15, "0369A1", undefined, 40),
+        ...gridRows.map((r: any) => createCell(r.time, true, "E1F0FA", 1, 1, 14, AlignmentType.CENTER, undefined, "0369A1", undefined, 40))
       ]
     }));
 
@@ -503,8 +595,9 @@ export const generateLogbookDocx = async (
     WEEK_DAYS.forEach((day, index) => {
       const bgColor = index % 2 === 0 ? "FFFFFF" : "F8FAFC";
       timetableRows.push(new TableRow({
+        cantSplit: true,
         children: [
-          createCell(day, true, "F0F9FF", 1, 1, 17, AlignmentType.CENTER, 15, "0369A1"),
+          createCell(day, true, "F0F9FF", 1, 1, 15, AlignmentType.CENTER, 15, "0369A1", undefined, 40),
           ...gridRows.map((r: any) => {
             const val = r.cells[day] || '';
             let cellBg = bgColor;
@@ -514,15 +607,15 @@ export const generateLogbookDocx = async (
               else if (val.includes('2م')) cellBg = "DBEAFE";
               else cellBg = "E0F2FE";
             }
-            return createCell(val || '—', !!val, cellBg, 1, 1, 16, AlignmentType.CENTER);
+            return createCell(val || '—', !!val, cellBg, 1, 1, 14, AlignmentType.CENTER, undefined, undefined, undefined, 40);
           })
         ]
       }));
     });
 
     coverChildren.push(
-      createParagraph("جدول استعمال الزمن الأسبوعي الرسمي للأستاذ", true, "0369A1", 20, AlignmentType.RIGHT),
-      new Paragraph({ text: "", spacing: { after: 80 } }),
+      createParagraph("جدول استعمال الزمن الأسبوعي الرسمي للأستاذ", true, "0369A1", 18, AlignmentType.RIGHT, true),
+      new Paragraph({ text: "", spacing: { after: 40 } }),
       new Table({
         visuallyRightToLeft: true,
         width: { size: 100, type: WidthType.PERCENTAGE },
@@ -532,7 +625,7 @@ export const generateLogbookDocx = async (
         },
         rows: timetableRows
       }),
-      new Paragraph({ text: "", spacing: { after: 160 } })
+      new Paragraph({ text: "", spacing: { after: 80 } })
     );
   }
 
@@ -547,23 +640,24 @@ export const generateLogbookDocx = async (
       },
       rows: [
         new TableRow({
+          cantSplit: true,
           children: [
-            createCell("توقيع الأستاذ(ة)\n\n\n....................", true, "F8FAFC", 1, 1, 16, AlignmentType.CENTER, 25),
+            createCell("توقيع الأستاذ(ة)\n\n....................", true, "F8FAFC", 1, 1, 15, AlignmentType.CENTER, 25, undefined, undefined, 45),
             createCell([
-              createParagraph("ختم الأستاذ(ة)", true, "18181B", 16),
+              createParagraph("ختم الأستاذ(ة)", true, "18181B", 15),
               new Paragraph({
                 alignment: AlignmentType.CENTER,
                 children: [
                   new ImageRun({
                     type: "png",
                     data: stampPngBytes,
-                    transformation: { width: 50, height: 50 },
+                    transformation: { width: 42, height: 42 },
                   }),
                 ],
               }),
-            ], false, "F8FAFC", 1, 1, 16, AlignmentType.CENTER, 25),
-            createCell("تأشيرة مدير المؤسسة\n\n\n....................", true, "F8FAFC", 1, 1, 16, AlignmentType.CENTER, 25),
-            createCell("تأشيرة مفتش المادة\n\n\n....................", true, "F8FAFC", 1, 1, 16, AlignmentType.CENTER, 25),
+            ], false, "F8FAFC", 1, 1, 15, AlignmentType.CENTER, 25, undefined, undefined, 45),
+            createCell("تأشيرة مدير المؤسسة\n\n....................", true, "F8FAFC", 1, 1, 15, AlignmentType.CENTER, 25, undefined, undefined, 45),
+            createCell("تأشيرة مفتش المادة\n\n....................", true, "F8FAFC", 1, 1, 15, AlignmentType.CENTER, 25, undefined, undefined, 45),
           ]
         })
       ]
@@ -574,38 +668,39 @@ export const generateLogbookDocx = async (
   // صفحات الدفتر اليومي (Content Pages)
   // قسم مستقل لكل صفحة يطابق قالَب المعاينة الرسمي بدقة طبق الأصل
   // ==========================================
-  const contentSections = pages.map((pageRows, pageIdx) => {
+  const contentSections = normalizedPages.map((pageObj, pageIdx) => {
+    const pageRows = pageObj.rows;
     const pageChildren: any[] = [];
     if (pageTemplate === 'teal') {
       const border = { style: BorderStyle.SINGLE, size: 4, color: "8AC1C5" };
       const cells = [13, 6, 6, 9, 45, 21];
-      const header = new TableRow({ tableHeader: true, children: [
-        createCell('التاريخ\nمن   إلى', true, 'DEEFF1', 1, 1, 18, AlignmentType.CENTER, cells[0]),
-        createCell('الوقت\nمن', true, 'DEEFF1', 1, 1, 18, AlignmentType.CENTER, cells[1]),
-        createCell('الوقت\nإلى', true, 'DEEFF1', 1, 1, 18, AlignmentType.CENTER, cells[2]),
-        createCell('القسم', true, 'DEEFF1', 1, 1, 18, AlignmentType.CENTER, cells[3]),
-        createCell('سير الحصة و الأنشطة', true, 'DEEFF1', 1, 1, 18, AlignmentType.CENTER, cells[4]),
-        createCell('ملاحظات', true, 'DEEFF1', 1, 1, 18, AlignmentType.CENTER, cells[5]),
+      const header = new TableRow({ tableHeader: true, cantSplit: true, children: [
+        createCell('التاريخ\nمن   إلى', true, 'DEEFF1', 1, 1, 17, AlignmentType.CENTER, cells[0], undefined, undefined, 45),
+        createCell('الوقت\nمن', true, 'DEEFF1', 1, 1, 17, AlignmentType.CENTER, cells[1], undefined, undefined, 45),
+        createCell('الوقت\nإلى', true, 'DEEFF1', 1, 1, 17, AlignmentType.CENTER, cells[2], undefined, undefined, 45),
+        createCell('القسم', true, 'DEEFF1', 1, 1, 17, AlignmentType.CENTER, cells[3], undefined, undefined, 45),
+        createCell('سير الحصة و الأنشطة', true, 'DEEFF1', 1, 1, 17, AlignmentType.CENTER, cells[4], undefined, undefined, 45),
+        createCell('ملاحظات', true, 'DEEFF1', 1, 1, 17, AlignmentType.CENTER, cells[5], undefined, undefined, 45),
       ] });
       const body = pageRows.map(log => {
         const previous = findPreviousComparableCurriculumLog(logs, logs.findIndex(item => item.id === log.id), log);
         const [from, to] = splitLogbookTime(log.time);
         return new TableRow({ cantSplit: true, children: [
-          createCell(`${log.dayName || ''}\n${log.dateStr || ''}`.trim(), false, 'FFFFFF', 1, 1, 16, AlignmentType.CENTER, cells[0]),
-          createCell(from, false, 'FFFFFF', 1, 1, 16, AlignmentType.CENTER, cells[1]),
-          createCell(to, false, 'FFFFFF', 1, 1, 16, AlignmentType.CENTER, cells[2]),
-          createCell(log.section || '', true, 'FFFFFF', 1, 1, 16, AlignmentType.CENTER, cells[3]),
-          createCell(getExportLessonContent(log, previous), false, 'FFFFFF', 1, 1, 16, AlignmentType.RIGHT, cells[4]),
-          createCell(log.note || '', false, 'FFFFFF', 1, 1, 16, AlignmentType.RIGHT, cells[5]),
+          createCell(`${log.dayName || ''}\n${log.dateStr || ''}`.trim(), false, 'FFFFFF', 1, 1, 15, AlignmentType.CENTER, cells[0], undefined, undefined, 45),
+          createCell(from, false, 'FFFFFF', 1, 1, 15, AlignmentType.CENTER, cells[1], undefined, undefined, 45),
+          createCell(to, false, 'FFFFFF', 1, 1, 15, AlignmentType.CENTER, cells[2], undefined, undefined, 45),
+          createCell(log.section || '', true, 'FFFFFF', 1, 1, 15, AlignmentType.CENTER, cells[3], undefined, undefined, 45),
+          createCell(getExportLessonContent(log, previous), false, 'FFFFFF', 1, 1, 15, AlignmentType.RIGHT, cells[4], undefined, undefined, 45, { semantic: true }),
+          createCell(log.note || '', false, 'FFFFFF', 1, 1, 15, AlignmentType.RIGHT, cells[5], undefined, undefined, 45, { semantic: true, defaultRole: 'noteOrange' }),
         ] });
       });
       return {
         properties: { page: { size: { width: pageWidthTwips, height: pageHeightTwips, orientation: orientation === 'landscape' ? PageOrientation.LANDSCAPE : PageOrientation.PORTRAIT }, margin: pageMargin } },
         children: [
-          createParagraph('التاريخ: ........................                         الموافق لـ: ........................', true, '255960', 20),
+          createParagraph('التاريخ: ........................                         الموافق لـ: ........................', true, '255960', 18, AlignmentType.CENTER, true),
           new Table({ visuallyRightToLeft: true, width: { size: 100, type: WidthType.PERCENTAGE }, borders: { top: border, bottom: border, left: border, right: border, insideHorizontal: dashedBorder, insideVertical: border }, rows: [header, ...body] }),
-          new Paragraph({ text: '', spacing: { after: 240 } }),
-          createParagraph('المدير(ة)                               الأستاذ(ة)                               المفتش(ة)', true, '000000', 20),
+          new Paragraph({ text: '', spacing: { after: 120 } }),
+          createParagraph(`المدير(ة)                 الأستاذ(ة)                 صفحة ${pageIdx + 1} من ${totalPages}                 المفتش(ة)`, true, '000000', 17),
         ],
       };
     }
@@ -621,10 +716,11 @@ export const generateLogbookDocx = async (
         },
         rows: [
           new TableRow({
+            cantSplit: true,
             children: [
               // رسم المجهر والذرة والشتلات على اليمين (Science Header Right)
               new TableCell({
-                width: { size: 18, type: WidthType.PERCENTAGE },
+                width: { size: 16, type: WidthType.PERCENTAGE },
                 borders: { top: noneBorder, bottom: noneBorder, left: noneBorder, right: noneBorder },
                 verticalAlign: VerticalAlign.CENTER,
                 children: [
@@ -634,7 +730,7 @@ export const generateLogbookDocx = async (
                       new ImageRun({
                         type: "png",
                         data: scienceRightPngBytes,
-                        transformation: { width: 75, height: 65 },
+                        transformation: { width: 58, height: 50 },
                       }),
                     ],
                   }),
@@ -642,13 +738,12 @@ export const generateLogbookDocx = async (
               }),
               // العنوان المركزي والشارة الرسمية المزدوجة
               new TableCell({
-                width: { size: 64, type: WidthType.PERCENTAGE },
+                width: { size: 68, type: WidthType.PERCENTAGE },
                 borders: { top: noneBorder, bottom: noneBorder, left: noneBorder, right: noneBorder },
                 verticalAlign: VerticalAlign.CENTER,
                 children: [
-                  createParagraph("الجمهورية الجزائرية الديمقراطية الشعبية", true, "18181B", 18),
-                  createParagraph("وزارة التربية الوطنية", true, "0369A1", 16),
-                  createParagraph("◆", true, "0284C7", 13),
+                  createParagraph("الجمهورية الجزائرية الديمقراطية الشعبية", true, "18181B", 16),
+                  createParagraph("وزارة التربية الوطنية", true, "0369A1", 15),
                   new Table({
                     visuallyRightToLeft: true,
                     width: { size: 100, type: WidthType.PERCENTAGE },
@@ -658,11 +753,12 @@ export const generateLogbookDocx = async (
                     },
                     rows: [
                       new TableRow({
+                        cantSplit: true,
                         children: [
                           createCell([
-                            createParagraph("الدفتر اليومي للأستاذ", true, "0369A1", 24),
-                            createParagraph("التعليم المتوسط - علوم الطبيعة والحياة", true, "0284C7", 15),
-                          ], false, "E1F0FA", 1, 1, 20, AlignmentType.CENTER, 100)
+                            createParagraph("الدفتر اليومي للأستاذ", true, "0369A1", 21),
+                            createParagraph("التعليم المتوسط - علوم الطبيعة والحياة", true, "0284C7", 14),
+                          ], false, "E1F0FA", 1, 1, 18, AlignmentType.CENTER, 100, undefined, undefined, 35)
                         ]
                       })
                     ]
@@ -671,7 +767,7 @@ export const generateLogbookDocx = async (
               }),
               // رسم الكتب والـ DNA والأنبوب والشتلة على اليسار (Science Header Left)
               new TableCell({
-                width: { size: 18, type: WidthType.PERCENTAGE },
+                width: { size: 16, type: WidthType.PERCENTAGE },
                 borders: { top: noneBorder, bottom: noneBorder, left: noneBorder, right: noneBorder },
                 verticalAlign: VerticalAlign.CENTER,
                 children: [
@@ -681,7 +777,7 @@ export const generateLogbookDocx = async (
                       new ImageRun({
                         type: "png",
                         data: scienceLeftPngBytes,
-                        transformation: { width: 75, height: 65 },
+                        transformation: { width: 58, height: 50 },
                       }),
                     ],
                   }),
@@ -691,7 +787,7 @@ export const generateLogbookDocx = async (
           })
         ]
       }),
-      new Paragraph({ text: "", spacing: { after: 60 } })
+      new Paragraph({ text: "", spacing: { after: 30 } })
     );
 
     // 2. شريط معلومات الأستاذ والمؤسسة باللون السماوي الهادئ
@@ -708,6 +804,7 @@ export const generateLogbookDocx = async (
         },
         rows: [
           new TableRow({
+            cantSplit: true,
             children: [
               createCell(
                 `الأستاذ(ة): ${config.teacherName || '—'}   |   المتوسطة: ${config.schoolName || '—'}   |   مديرية التربية: ${config.directorate || '—'}   |   الموسم: ${config.schoolYear || '2026-2027'}   |   المستويات: ${assignedLevels.join('، ') || '1م'}`,
@@ -715,16 +812,18 @@ export const generateLogbookDocx = async (
                 "F0F9FF",
                 1,
                 1,
-                14,
+                13,
                 AlignmentType.CENTER,
                 100,
-                "0369A1"
+                "0369A1",
+                undefined,
+                35
               )
             ]
           })
         ]
       }),
-      new Paragraph({ text: "", spacing: { after: 90 } })
+      new Paragraph({ text: "", spacing: { after: 40 } })
     );
 
     // 3. الجدول الرئيسي بـ 5 أعمدة مع الرموز والأيقونات
@@ -734,12 +833,13 @@ export const generateLogbookDocx = async (
     tableRows.push(
       new TableRow({
         tableHeader: true,
+        cantSplit: true,
         children: [
-          createCell("📅 التاريخ واليوم", true, "E1F0FA", 1, 1, 18, AlignmentType.CENTER, 16, "0369A1"),
-          createCell("⏰ التوقيت", true, "E1F0FA", 1, 1, 18, AlignmentType.CENTER, 15, "0369A1"),
-          createCell("👥 القسم", true, "E1F0FA", 1, 1, 18, AlignmentType.CENTER, 13, "0369A1"),
-          createCell("📖 المحتوى الدرس", true, "E1F0FA", 1, 1, 18, AlignmentType.CENTER, 41, "0369A1"),
-          createCell("📝 الملاحظات", true, "E1F0FA", 1, 1, 18, AlignmentType.CENTER, 15, "0369A1"),
+          createCell("📅 التاريخ واليوم", true, "E1F0FA", 1, 1, 16, AlignmentType.CENTER, 16, "0369A1", undefined, 45),
+          createCell("⏰ التوقيت", true, "E1F0FA", 1, 1, 16, AlignmentType.CENTER, 15, "0369A1", undefined, 45),
+          createCell("👥 القسم", true, "E1F0FA", 1, 1, 16, AlignmentType.CENTER, 13, "0369A1", undefined, 45),
+          createCell("📖 المحتوى الدرس", true, "E1F0FA", 1, 1, 16, AlignmentType.CENTER, 41, "0369A1", undefined, 45),
+          createCell("📝 الملاحظات", true, "E1F0FA", 1, 1, 16, AlignmentType.CENTER, 15, "0369A1", undefined, 45),
         ]
       })
     );
@@ -763,61 +863,56 @@ export const generateLogbookDocx = async (
             .join('\n')
         : `${log.dayName || ''}\n${log.dateStr || ''}`.trim();
 
-      // سطر فاصل عند بداية أسبوع دراسي جديد
-      if (rowIdx > 0 && pageRows[rowIdx - 1]?.dateStr && log.dateStr) {
-        const prevWeek = pageRows[rowIdx - 1].dateStr.slice(0, 10);
-        const currWeek = log.dateStr.slice(0, 10);
-        // فحص تقريبي لتغير الأسبوع إذا اختلفت التواريخ بأكثر من يومين
-        const prevD = new Date(prevWeek).getTime();
-        const currD = new Date(currWeek).getTime();
-        if (currD - prevD > 2 * 24 * 3600 * 1000) {
-          tableRows.push(
-            new TableRow({
-              cantSplit: true,
-              children: [
-                createCell(
-                  `بداية أسبوع دراسي جديد`,
-                  true,
-                  "F0F9FF",
-                  5,
-                  1,
-                  15,
-                  AlignmentType.RIGHT,
-                  100,
-                  "0369A1"
-                )
-              ]
-            })
-          );
-        }
+      // سطر فاصل متوافق مع التقسيم الأسبوعي الرسمي عند تغيّر الأسبوع داخل الصفحة
+      if (rowIdx > 0 && getDocxSchoolWeekKey(pageRows[rowIdx - 1]?.dateStr) !== getDocxSchoolWeekKey(log.dateStr)) {
+        tableRows.push(
+          new TableRow({
+            cantSplit: true,
+            children: [
+              createCell(
+                `بداية أسبوع دراسي جديد`,
+                true,
+                "F0F9FF",
+                5,
+                1,
+                14,
+                AlignmentType.RIGHT,
+                100,
+                "0369A1",
+                undefined,
+                35
+              )
+            ]
+          })
+        );
       }
 
       tableRows.push(
         new TableRow({
           cantSplit: true,
           children: [
-            createCell(dateText, true, rowBg, 1, 1, 16, AlignmentType.CENTER, 16, "0369A1"),
-            createCell(timeWithArrow, false, rowBg, 1, 1, 15, AlignmentType.CENTER, 15),
-            createCell(log.section || '', true, "0284C7", 1, 1, 16, AlignmentType.CENTER, 13, "FFFFFF"),
-            createCell(content, false, rowBg, 1, 1, 16, AlignmentType.RIGHT, 41),
-            createCell(log.note || '', false, rowBg, 1, 1, 15, AlignmentType.RIGHT, 15),
+            createCell(dateText, true, rowBg, 1, 1, 15, AlignmentType.CENTER, 16, "0369A1", undefined, 45),
+            createCell(timeWithArrow, false, rowBg, 1, 1, 14, AlignmentType.CENTER, 15, undefined, undefined, 45),
+            createCell(log.section || '', true, "0284C7", 1, 1, 15, AlignmentType.CENTER, 13, "FFFFFF", undefined, 45),
+            createCell(content, false, rowBg, 1, 1, 15, AlignmentType.RIGHT, 41, undefined, undefined, 45, { semantic: true }),
+            createCell(log.note || '', false, rowBg, 1, 1, 14, AlignmentType.RIGHT, 15, undefined, undefined, 45, { semantic: true, defaultRole: 'noteOrange' }),
           ]
         })
       );
     });
 
-    // صفوف فارغة منقطة مكملة حتى 10 صفوف لكل صفحة كأوراق الدفتر المدرسي
-    const emptyCount = Math.max(0, 10 - pageRows.length);
+    // صفوف فارغة منقطة بقدر المساحة المتبقية الفعلية فقط لمنع انزلاق الصفحة إلى صفحة ثانية
+    const emptyCount = Math.max(0, pageObj.emptyFillerRows);
     for (let e = 0; e < emptyCount; e++) {
       tableRows.push(
         new TableRow({
           cantSplit: true,
           children: [
-            createCell("", false, "FFFFFF", 1, 1, 16, AlignmentType.CENTER, 16),
-            createCell("", false, "FFFFFF", 1, 1, 16, AlignmentType.CENTER, 15),
-            createCell("", false, "FFFFFF", 1, 1, 16, AlignmentType.CENTER, 13),
-            createCell("", false, "FFFFFF", 1, 1, 16, AlignmentType.CENTER, 41),
-            createCell("", false, "FFFFFF", 1, 1, 16, AlignmentType.CENTER, 15),
+            createCell("", false, "FFFFFF", 1, 1, 14, AlignmentType.CENTER, 16, undefined, undefined, 40),
+            createCell("", false, "FFFFFF", 1, 1, 14, AlignmentType.CENTER, 15, undefined, undefined, 40),
+            createCell("", false, "FFFFFF", 1, 1, 14, AlignmentType.CENTER, 13, undefined, undefined, 40),
+            createCell("", false, "FFFFFF", 1, 1, 14, AlignmentType.CENTER, 41, undefined, undefined, 40),
+            createCell("", false, "FFFFFF", 1, 1, 14, AlignmentType.CENTER, 15, undefined, undefined, 40),
           ]
         })
       );
@@ -833,7 +928,7 @@ export const generateLogbookDocx = async (
         },
         rows: tableRows
       }),
-      new Paragraph({ text: "", spacing: { after: 80 } })
+      new Paragraph({ text: "", spacing: { after: 40 } })
     );
 
     // 4. الزخرفة السفلية النباتية والمقسّم الجمالي
@@ -844,6 +939,7 @@ export const generateLogbookDocx = async (
         borders: { top: noneBorder, bottom: noneBorder, left: noneBorder, right: noneBorder, insideHorizontal: noneBorder, insideVertical: noneBorder },
         rows: [
           new TableRow({
+            cantSplit: true,
             children: [
               new TableCell({
                 width: { size: 15, type: WidthType.PERCENTAGE },
@@ -855,7 +951,7 @@ export const generateLogbookDocx = async (
                       new ImageRun({
                         type: "png",
                         data: cornerLeavesPngBytes,
-                        transformation: { width: 32, height: 32 },
+                        transformation: { width: 22, height: 22 },
                       }),
                     ],
                   }),
@@ -866,7 +962,7 @@ export const generateLogbookDocx = async (
                 borders: { top: noneBorder, bottom: noneBorder, left: noneBorder, right: noneBorder },
                 verticalAlign: VerticalAlign.CENTER,
                 children: [
-                  createParagraph("―――――― ◆ ――――――", true, "0284C7", 14, AlignmentType.CENTER),
+                  createParagraph("―――――― ◆ ――――――", true, "0284C7", 12, AlignmentType.CENTER),
                 ],
               }),
               new TableCell({
@@ -879,7 +975,7 @@ export const generateLogbookDocx = async (
                       new ImageRun({
                         type: "png",
                         data: cornerLeavesPngBytes,
-                        transformation: { width: 32, height: 32 },
+                        transformation: { width: 22, height: 22 },
                       }),
                     ],
                   }),
@@ -889,7 +985,7 @@ export const generateLogbookDocx = async (
           }),
         ],
       }),
-      new Paragraph({ text: "", spacing: { after: 60 } })
+      new Paragraph({ text: "", spacing: { after: 30 } })
     );
 
     // 5. جدول التواقيع الأربعة الرسمية مدمجاً بها الختم الرقمي للأستاذ
@@ -906,30 +1002,31 @@ export const generateLogbookDocx = async (
         },
         rows: [
           new TableRow({
+            cantSplit: true,
             children: [
-              createCell("توقيع الأستاذ(ة)\n\n....................", true, "F8FAFC", 1, 1, 15, AlignmentType.CENTER, 25),
+              createCell("توقيع الأستاذ(ة)\n\n....................", true, "F8FAFC", 1, 1, 14, AlignmentType.CENTER, 25, undefined, undefined, 40),
               createCell([
-                createParagraph("ختم الأستاذ(ة)", true, "18181B", 15),
+                createParagraph("ختم الأستاذ(ة)", true, "18181B", 14),
                 new Paragraph({
                   alignment: AlignmentType.CENTER,
                   children: [
                     new ImageRun({
                       type: "png",
                       data: stampPngBytes,
-                      transformation: { width: 45, height: 45 },
+                      transformation: { width: 38, height: 38 },
                     }),
                   ],
                 }),
-              ], false, "F8FAFC", 1, 1, 15, AlignmentType.CENTER, 25),
-              createCell("تأشيرة السيد المدير\n\n....................", true, "F8FAFC", 1, 1, 15, AlignmentType.CENTER, 25),
-              createCell("تأشيرة السيد المفتش\n\n....................", true, "F8FAFC", 1, 1, 15, AlignmentType.CENTER, 25),
+              ], false, "F8FAFC", 1, 1, 14, AlignmentType.CENTER, 25, undefined, undefined, 40),
+              createCell("تأشيرة السيد المدير\n\n....................", true, "F8FAFC", 1, 1, 14, AlignmentType.CENTER, 25, undefined, undefined, 40),
+              createCell("تأشيرة السيد المفتش\n\n....................", true, "F8FAFC", 1, 1, 14, AlignmentType.CENTER, 25, undefined, undefined, 40),
             ]
           })
         ]
       }),
-      new Paragraph({ text: "", spacing: { after: 60 } }),
+      new Paragraph({ text: "", spacing: { after: 30 } }),
       // 6. شارة ترقيم الصفحة الوطنية
-      createParagraph(`صفحة ${pageIdx + 1} من ${totalPages} — 🇩🇿`, true, "0369A1", 16)
+      createParagraph(`صفحة ${pageIdx + 1} من ${totalPages} — 🇩🇿`, true, "0369A1", 15)
     );
 
     return {
@@ -948,11 +1045,13 @@ export const generateLogbookDocx = async (
   });
 
   // تجميع المستند بالكامل بجميع أقسامه
+  const hwStyle = loadHandwritingSettings();
+  const wordFont = getEffectiveExportFontFamily("docx", hwStyle, "logbook");
   const doc = new Document({
     styles: {
       default: {
         document: {
-          run: { rightToLeft: true, font: "Tajawal" },
+          run: { rightToLeft: true, font: { ascii: wordFont, hAnsi: wordFont, cs: wordFont, hint: "cs" } },
           paragraph: { alignment: AlignmentType.RIGHT }
         }
       }
@@ -994,13 +1093,27 @@ export const generateLogbookDocx = async (
 
 
 const preparePageForExport = (source: HTMLElement): { page: HTMLElement; cleanup: () => void } => {
+  const hwStyle = loadHandwritingSettings();
+  const hwActive = isHandwritingActiveFor("logbook", hwStyle);
+  const exportFont = getEffectiveExportFontFamily("pdf", hwStyle, "logbook");
+  applyHandwritingCssVars(hwStyle);
+
   const page = source.cloneNode(true) as HTMLElement;
   page.classList.add("export-clean-page");
+  if (hwActive) page.classList.add("hw-notebook-scope");
   page.style.boxShadow = "none";
   page.style.borderRadius = "0";
   page.style.margin = "0";
   page.style.transform = "none";
   page.style.backgroundColor = "#ffffff";
+  page.style.fontFamily = exportFont;
+  page.style.setProperty("--hw-font", exportFont);
+  page.style.setProperty("--hw-blue", hwStyle.palette.titleBlue);
+  page.style.setProperty("--hw-red", hwStyle.palette.subRed);
+  page.style.setProperty("--hw-green", hwStyle.palette.defGreen);
+  page.style.setProperty("--hw-black", hwStyle.palette.bodyBlack);
+  page.style.setProperty("--hw-purple", hwStyle.palette.termPurple);
+  page.style.setProperty("--hw-orange", hwStyle.palette.noteOrange);
   page.style.setProperty("-webkit-print-color-adjust", "exact");
   page.style.setProperty("print-color-adjust", "exact");
 
@@ -1017,6 +1130,7 @@ const preparePageForExport = (source: HTMLElement): { page: HTMLElement; cleanup
   host.style.height = source.getBoundingClientRect().height + "px";
   host.style.overflow = "hidden";
   host.style.background = "#ffffff";
+  host.style.fontFamily = exportFont;
   host.style.zIndex = "-1";
   host.setAttribute("aria-hidden", "true");
   host.appendChild(page);

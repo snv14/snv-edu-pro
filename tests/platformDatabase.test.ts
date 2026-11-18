@@ -17,7 +17,12 @@ import {
   platformFamily,
 } from '../src/data/platform';
 import { AI_SOURCE_PRIORITY, sourcePriorityOf } from '../src/services/aiSourcePriority';
-import { LOGBOOK_DATABASE, LOGBOOK_PROGRAMS, logbookProgramOf } from '../src/data/logbook';
+import {
+  LOGBOOK_DATABASE,
+  LOGBOOK_PROGRESSIONS,
+  LOGBOOK_PROGRESSION_SOURCES,
+  logbookProgressionOf,
+} from '../src/data/logbook';
 import { getOfficialSourcesManifest } from '../src/services/knowledgeOfficialSources';
 
 test('ترتيب العائلات هو المرجعية المطلوبة: المنهاج ← الوثيقة المرافقة ← دليل الأستاذ ← المذكرات', () => {
@@ -97,25 +102,36 @@ test('الفجوات مُصرَّح بها آلياً: دليل الأستاذ �
   assert.ok(!gaps.some(gap => gap.startsWith('الوثيقة المرافقة')), 'لا فجوة في الوثيقة المرافقة');
 });
 
-test('قاعدة الدفتر معزولة: تملك برامجها ومدخلاتها ولا تنسخ التدرجات', async () => {
-  assert.deepEqual(Object.keys(LOGBOOK_PROGRAMS).sort(), ['1am', '2am', '3am', '4am']);
-  for (const level of ['1am', '2am', '3am', '4am']) {
-    const program = logbookProgramOf(level);
-    assert.ok(Array.isArray(program) && program.length > 0, `برنامج ${level} غير فارغ`);
-  }
-  assert.equal(logbookProgramOf('5am'), null, 'مستوى غير معروف');
-  assert.ok(Array.isArray(LOGBOOK_DATABASE.owned.seededEntries));
+test('قاعدة الدفتر معزولة: تملك تدرجاتها البيداغوجية الأربعة ولا تنسخ التدرج السنوي أو المذكرات', () => {
+  assert.deepEqual(Object.keys(LOGBOOK_PROGRESSIONS).sort(), ['1am', '2am', '3am', '4am']);
+  assert.deepEqual(Object.keys(LOGBOOK_PROGRESSION_SOURCES).sort(), ['1am', '2am', '3am', '4am']);
 
-  // ما تشاركه يُشار إليه بمسار ولا يُنسخ — والمساران موجودان فعلاً
-  assert.ok(existsSync(LOGBOOK_DATABASE.sharedFrom.annualDistributions), 'مسار التدرجات السنوية موجود');
-  assert.ok(existsSync(LOGBOOK_DATABASE.sharedFrom.curriculumMemos), 'مسار قاعدة المذكرات موجود');
+  for (const level of ['1am', '2am', '3am', '4am'] as const) {
+    const lookup = logbookProgressionOf(level);
+    assert.equal(lookup.available, true, `تدرج ${level} متوفر`);
+    assert.ok(lookup.units.length > 0, `وحدات ${level} غير فارغة`);
+    assert.ok(lookup.source && existsSync(`public${lookup.source.pdfPath}`), `ملف PDF لـ ${level} موجود`);
+  }
+
+  const missing = logbookProgressionOf('5am');
+  assert.equal(missing.available, false, 'مستوى غير متوفر لا يختلق دروساً');
+  assert.equal(missing.units.length, 0);
+  assert.match(missing.unavailableReason || '', /غير متوفر/);
+
+  assert.equal((LOGBOOK_DATABASE.owned as Record<string, unknown>).progressions, LOGBOOK_PROGRESSIONS);
+  assert.equal((LOGBOOK_DATABASE as Record<string, unknown>).sharedFrom, undefined, 'لا ارتباط قسرياً مع التدرج السنوي');
 });
 
-test('التنظيم الفيزيائي: العائلات في مجلداتها ولا نسخ متبقية في src/data/ الجذر', () => {
-  // ملفات الدفتر انتقلت إلى مجلدها
+test('التنظيم الفيزيائي: العائلات في مجلداتها وحذف ملفات الدفتر القديمة مع وجود النسخة الاحتياطية', () => {
+  // ملفات التدرج الجديدة للدفتر في مكانها
+  for (const name of ['schema', 'index', 'progression1am', 'progression2am', 'progression3am', 'progression4am']) {
+    assert.ok(existsSync(`src/data/logbook/${name}.ts`), `logbook/${name}.ts موجود`);
+  }
+  // ملفات الدفتر القديمة حُذفت بعد أخذ نسخة احتياطية كاملة
+  assert.ok(existsSync('data/backups/logbook-legacy-backup-2026-11-17.json'), 'النسخة الاحتياطية للدفتر القديم موجودة');
   for (const name of ['dailyLogbookProgram1am', 'dailyLogbookProgram2am', 'dailyLogbookProgram3am',
     'dailyLogbookProgram4am', 'dailyLogData']) {
-    assert.ok(existsSync(`src/data/logbook/${name}.ts`), `logbook/${name}.ts موجود`);
+    assert.ok(!existsSync(`src/data/logbook/${name}.ts`), `logbook/${name}.ts القديم محذوف`);
     assert.ok(!existsSync(`src/data/${name}.ts`), `src/data/${name}.ts لم يعد في الجذر`);
   }
   // التدرجات السنوية صارت ضمن عائلة المنهاج

@@ -1,35 +1,30 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import {
-  GraduationCap,
-  BookOpen,
-  CalendarDays,
   BookOpenCheck,
-  UserCog,
+  ChevronLeft,
+  ClipboardCheck,
+  Clock,
   Database,
+  Dna,
+  Globe2,
+  HelpCircle,
+  Home,
   Info,
   Mail,
-  HelpCircle,
-  Sparkles,
-  ChevronLeft,
-  ChevronDown,
+  MessagesSquare,
+  Microscope,
+  Settings,
   Sprout,
   TreePine,
-  Mountain,
-  Dna,
-  FileText,
-  ShieldCheck,
-  MessagesSquare,
-  ClipboardCheck,
 } from 'lucide-react';
 import { MemoConfig } from '../types';
-import designerPortraitImg from '../assets/images/designer_portrait_1790463396414.jpg';
-import { getDesignerPhoto } from '../utils/designerPhoto';
 
 interface PlatformNavigationDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   activeSection: string;
   onNavigate: (section: string) => void;
+  onOpenTimetable?: () => void;
   onOpenInfoModal: (tab: 'about' | 'contact' | 'guide') => void;
   onOpenTool: (tool: 'assistant' | 'correction') => void;
   config: MemoConfig;
@@ -40,54 +35,37 @@ export const PlatformNavigationDrawer: React.FC<PlatformNavigationDrawerProps> =
   onClose,
   activeSection,
   onNavigate,
+  onOpenTimetable,
   onOpenInfoModal,
   onOpenTool,
   config,
 }) => {
-  const [designerPhoto, setDesignerPhoto] = useState<string>(() => getDesignerPhoto());
-
-  useEffect(() => {
-    const handleUpdated = (e: any) => {
-      setDesignerPhoto(e.detail || getDesignerPhoto());
-    };
-    window.addEventListener('designer-photo-updated', handleUpdated);
-    return () => window.removeEventListener('designer-photo-updated', handleUpdated);
-  }, []);
-
   if (!isOpen) return null;
 
   const levels = [
     {
       id: '1am',
       title: 'السنة الأولى متوسط (1AM)',
-      midan: 'الإنسان والصحة + الإنسان والمحيط',
-      color: '#0284c7',
-      icon: <Sprout className="w-4 h-4 text-sky-600" />,
-      bg: 'hover:bg-sky-50',
+      icon: <Sprout className="w-4 h-4 text-emerald-600" />,
+      bg: 'hover:bg-emerald-50',
     },
     {
       id: '2am',
       title: 'السنة الثانية متوسط (2AM)',
-      midan: 'الإنسان والمحيط (الوسط الحي)',
-      color: '#7c3aed',
-      icon: <TreePine className="w-4 h-4 text-purple-600" />,
-      bg: 'hover:bg-purple-50',
+      icon: <TreePine className="w-4 h-4 text-teal-600" />,
+      bg: 'hover:bg-teal-50',
     },
     {
       id: '3am',
       title: 'السنة الثالثة متوسط (3AM)',
-      midan: 'دينامية الأرض والجيولوجيا',
-      color: '#ea580c',
-      icon: <Mountain className="w-4 h-4 text-orange-600" />,
-      bg: 'hover:bg-orange-50',
+      icon: <Globe2 className="w-4 h-4 text-sky-600" />,
+      bg: 'hover:bg-sky-50',
     },
     {
       id: '4am',
-      title: 'السنة الرابعة متوسط (4AM - BEM)',
-      midan: 'الإنسان والصحة والمناعة والوراثة',
-      color: '#c2185b',
-      icon: <Dna className="w-4 h-4 text-[#c2185b]" />,
-      bg: 'hover:bg-pink-50',
+      title: 'السنة الرابعة متوسط (4AM · BEM)',
+      icon: <Dna className="w-4 h-4 text-cyan-700" />,
+      bg: 'hover:bg-cyan-50',
     },
   ];
 
@@ -103,247 +81,224 @@ export const PlatformNavigationDrawer: React.FC<PlatformNavigationDrawerProps> =
       onClick={onClose}
     >
       <div
-        className="w-full max-w-xs sm:max-w-sm bg-white/95 backdrop-blur-xl h-full shadow-2xl flex flex-col justify-between overflow-y-auto border-l border-white/60"
+        className="w-full max-w-xs sm:max-w-sm bg-white h-full shadow-2xl flex flex-col justify-between overflow-y-auto border-l border-slate-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Brand Top Header */}
-        <div className="p-5 border-b border-white/10 bg-gradient-to-l from-[#0b3b36] via-[#0f766e] to-[#164e63] text-white">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-white/10 text-emerald-400 flex items-center justify-center font-bold">
-                <BookOpen className="w-5 h-5" />
+        <div className="p-4 border-b border-white/10 bg-gradient-to-l from-[#0b3b36] via-[#0f766e] to-[#0369a1] text-white">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-9 h-9 rounded-xl bg-white/15 text-emerald-200 flex items-center justify-center shrink-0">
+                <Microscope className="w-5 h-5" />
               </div>
-              <div>
-                <h3 className="font-black text-[15px] leading-tight">المنصة البيداغوجية الوطنية</h3>
-                <p className="text-[11.5px] text-gray-300">علوم الطبيعة والحياة • متوسط</p>
+              <div className="min-w-0">
+                <h3 className="font-extrabold text-sm leading-tight truncate">المنصة البيداغوجية</h3>
+                <p className="text-[11px] text-emerald-100/90 truncate">علوم الطبيعة والحياة · التعليم المتوسط</p>
               </div>
             </div>
             <button
               type="button"
               onClick={onClose}
               aria-label="إغلاق القائمة"
-              className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-xs font-bold transition cursor-pointer"
+              className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-xs font-bold transition cursor-pointer shrink-0"
             >
               ✕
             </button>
           </div>
 
-          <div className="mt-3.5 pt-3 border-t border-white/10 flex items-center justify-between text-[11.5px] text-gray-300">
-            <span>الموسم: <strong>{config.schoolYear}</strong></span>
-            <span className="truncate max-w-[150px]">{config.teacherName || ''}</span>
-          </div>
+          {(config.schoolYear || config.teacherName) && (
+            <div className="mt-2.5 pt-2 border-t border-white/15 flex items-center justify-between text-[11px] text-emerald-100/90 gap-2">
+              {config.schoolYear && <span>الموسم: <strong>{config.schoolYear}</strong></span>}
+              {config.teacherName && <span className="truncate">{config.teacherName}</span>}
+            </div>
+          )}
         </div>
 
-        {/* Navigation Sections */}
-        <div className="p-4 space-y-5 flex-1 bg-gradient-to-b from-white to-slate-50/90">
-          {/* Main Navigation */}
+        {/* Organized Navigation Groups */}
+        <div className="p-3.5 space-y-4 flex-1 bg-slate-50/40 overflow-y-auto">
+          {/* 1. الرئيسية والسنوات الدراسية */}
           <div className="space-y-1">
-            <div className="text-[11px] font-black text-gray-400 uppercase tracking-wider px-2 mb-1.5">
-              التنقل العام
+            <div className="text-[11px] font-extrabold text-slate-500 px-2 mb-1">
+              الواجهة والسنوات الدراسية
             </div>
 
             <button
               type="button"
               onClick={() => handleSelectSection('home')}
-              className={`w-full flex items-center justify-between p-2.5 rounded-xl text-[13px] font-bold transition cursor-pointer ${
+              className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
                 activeSection === 'home'
-                  ? 'bg-gray-900 text-white shadow-xs'
-                  : 'text-gray-700 hover:bg-gray-100'
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : 'text-slate-700 hover:bg-slate-100'
               }`}
             >
               <div className="flex items-center gap-2.5">
-                <BookOpen className="w-4 h-4" />
-                <span>الصفحة الرئيسية (المستويات)</span>
+                <Home className="w-4 h-4" />
+                <span>الصفحة الرئيسية والمخبر</span>
               </div>
-              <ChevronLeft className="w-4 h-4 text-gray-400" />
+              <ChevronLeft className="w-4 h-4 opacity-60" />
             </button>
-
-            <button
-              type="button"
-              onClick={() => handleSelectSection('logbook')}
-              className={`w-full flex items-center justify-between p-2.5 rounded-xl text-[13px] font-bold transition cursor-pointer ${
-                activeSection === 'logbook'
-                  ? 'bg-emerald-800 text-white shadow-xs'
-                  : 'text-gray-700 hover:bg-emerald-50 hover:text-emerald-900'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <BookOpenCheck className="w-4 h-4 text-emerald-600" />
-                <span>الدفتر اليومي ودفتر النصوص</span>
-              </div>
-              <ChevronLeft className="w-4 h-4 text-gray-400" />
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleSelectSection('settings')}
-              className={`w-full flex items-center justify-between p-2.5 rounded-xl text-[13px] font-bold transition cursor-pointer ${
-                activeSection === 'settings'
-                  ? 'bg-gray-900 text-white shadow-xs'
-                  : 'text-gray-700 hover:bg-gray-100'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <UserCog className="w-4 h-4 text-gray-600" />
-                <span>إعدادات الحساب والمؤسسة</span>
-              </div>
-              <ChevronLeft className="w-4 h-4 text-gray-400" />
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleSelectSection('database')}
-              className={'w-full flex items-center justify-between p-2.5 rounded-xl text-[13px] font-bold transition cursor-pointer ' + (
-                activeSection === 'database'
-                  ? 'bg-emerald-700 text-white shadow-xs'
-                  : 'text-gray-700 hover:bg-emerald-50 hover:text-emerald-900'
-              )}
-            >
-              <div className="flex items-center gap-2.5">
-                <Database className="w-4 h-4 text-emerald-700" />
-                <span>إدارة قاعدة البيانات</span>
-              </div>
-              <ChevronLeft className="w-4 h-4 text-gray-400" />
-            </button>
-          </div>
-
-          {/* Conversation and correction tools */}
-          <div className="space-y-1 pt-2 border-t border-gray-100">
-            <div className="text-[11px] font-black text-gray-400 uppercase tracking-wider px-2 mb-1.5">
-              المحادثة والتصحيح
-            </div>
-
-            <button
-              type="button"
-              onClick={() => { onOpenTool('assistant'); onClose(); }}
-              className="w-full flex items-center justify-between p-2.5 rounded-xl text-[13px] font-bold text-gray-700 hover:bg-teal-50 hover:text-teal-900 transition cursor-pointer"
-            >
-              <div className="flex items-center gap-2.5">
-                <MessagesSquare className="w-4 h-4 text-teal-700" />
-                <span>المحادثة التربوية</span>
-              </div>
-              <ChevronLeft className="w-4 h-4 text-gray-400" />
-            </button>
-
-            <button
-              type="button"
-              onClick={() => { onOpenTool('correction'); onClose(); }}
-              className="w-full flex items-center justify-between p-2.5 rounded-xl text-[13px] font-bold text-gray-700 hover:bg-emerald-50 hover:text-emerald-900 transition cursor-pointer"
-            >
-              <div className="flex items-center gap-2.5">
-                <ClipboardCheck className="w-4 h-4 text-emerald-700" />
-                <span>مذكرة التصحيح</span>
-              </div>
-              <ChevronLeft className="w-4 h-4 text-gray-400" />
-            </button>
-          </div>
-
-          {/* Educational Levels */}
-          <details className="space-y-1 pt-2 border-t border-gray-100">
-            <summary className="cursor-pointer text-[11px] font-black text-gray-500 uppercase tracking-wider px-2 mb-1.5 flex items-center justify-between">
-              <span>المذكرات وتدرج التعلمات</span>
-              <span className="flex items-center gap-1"><GraduationCap className="w-3.5 h-3.5 text-gray-400" /><ChevronDown className="w-3.5 h-3.5" aria-hidden="true" /></span>
-            </summary>
 
             {levels.map((lvl) => (
               <button
                 key={lvl.id}
                 type="button"
                 onClick={() => handleSelectSection(lvl.id)}
-                className={`w-full flex items-center justify-between p-2.5 rounded-xl text-[12.5px] font-bold transition cursor-pointer ${lvl.bg} ${
+                className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${lvl.bg} ${
                   activeSection === lvl.id
-                    ? 'bg-gray-100 border border-gray-300 font-black'
-                    : 'text-gray-800'
+                    ? 'bg-white border border-teal-300 text-teal-900 shadow-2xs font-extrabold'
+                    : 'text-slate-800'
                 }`}
               >
                 <div className="flex items-center gap-2.5 text-right">
                   {lvl.icon}
-                  <div>
-                    <div className="text-gray-900">{lvl.title}</div>
-                    <div className="text-[10.5px] text-gray-500 font-normal">{lvl.midan}</div>
-                  </div>
+                  <span>{lvl.title}</span>
                 </div>
-                <ChevronLeft className="w-4 h-4 text-gray-400" />
+                <ChevronLeft className="w-4 h-4 text-slate-400" />
               </button>
             ))}
-          </details>
+          </div>
 
-          {/* AI Assistant & Platform Hub */}
-          <details className="space-y-1.5 pt-2 border-t border-gray-100">
-            <summary className="cursor-pointer text-[11px] font-black text-gray-500 uppercase tracking-wider px-2 mb-1.5 flex items-center justify-between">
-              <span>أدوات وخدمات المنصة</span><ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />
-            </summary>
+          {/* 2. التنظيم المدرسي والموارد */}
+          <div className="space-y-1 pt-2 border-t border-slate-200/80">
+            <div className="text-[11px] font-extrabold text-slate-500 px-2 mb-1">
+              التنظيم المدرسي والموارد
+            </div>
 
-            {/* About Platform Button */}
             <button
               type="button"
-              onClick={() => {
-                onClose();
-                onOpenInfoModal('about');
-              }}
-              className="w-full flex items-center justify-between p-2.5 rounded-xl text-[12.5px] font-bold text-gray-700 hover:bg-gray-100 transition cursor-pointer"
+              onClick={() => handleSelectSection('logbook')}
+              className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                activeSection === 'logbook'
+                  ? 'bg-emerald-700 text-white shadow-xs'
+                  : 'text-slate-700 hover:bg-emerald-50 hover:text-emerald-900'
+              }`}
             >
               <div className="flex items-center gap-2.5">
-                <Info className="w-4 h-4 text-blue-600" />
-                <span>حول المنصة البيداغوجية</span>
+                <BookOpenCheck className="w-4 h-4" />
+                <span>الدفتر الرقمي ودفتر النصوص</span>
               </div>
-              <ChevronLeft className="w-4 h-4 text-gray-400" />
+              <ChevronLeft className="w-4 h-4 opacity-60" />
             </button>
 
-            {/* User Guide Button */}
+            {onOpenTimetable && (
+              <button
+                type="button"
+                onClick={() => {
+                  onOpenTimetable();
+                  onClose();
+                }}
+                className="w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-sky-50 hover:text-sky-900 transition cursor-pointer"
+              >
+                <div className="flex items-center gap-2.5">
+                  <Clock className="w-4 h-4 text-sky-700" />
+                  <span>استعمال الزمن</span>
+                </div>
+                <ChevronLeft className="w-4 h-4 text-slate-400" />
+              </button>
+            )}
+
             <button
               type="button"
-              onClick={() => {
-                onClose();
-                onOpenInfoModal('guide');
-              }}
-              className="w-full flex items-center justify-between p-2.5 rounded-xl text-[12.5px] font-bold text-gray-700 hover:bg-gray-100 transition cursor-pointer"
+              onClick={() => handleSelectSection('database')}
+              className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                activeSection === 'database'
+                  ? 'bg-teal-700 text-white shadow-xs'
+                  : 'text-slate-700 hover:bg-teal-50 hover:text-teal-900'
+              }`}
             >
               <div className="flex items-center gap-2.5">
-                <HelpCircle className="w-4 h-4 text-amber-600" />
-                <span>دليل الاستخدام</span>
+                <Database className="w-4 h-4" />
+                <span>الموارد التعليمية وقاعدة البيانات</span>
               </div>
-              <ChevronLeft className="w-4 h-4 text-gray-400" />
+              <ChevronLeft className="w-4 h-4 opacity-60" />
             </button>
+          </div>
 
-            {/* Contact Us Button */}
+          {/* 3. التقويم والمساعد الذكي */}
+          <div className="space-y-1 pt-2 border-t border-slate-200/80">
+            <div className="text-[11px] font-extrabold text-slate-500 px-2 mb-1">
+              التقويم والمساعد الذكي
+            </div>
+
             <button
               type="button"
-              onClick={() => {
-                onClose();
-                onOpenInfoModal('contact');
-              }}
-              className="w-full flex items-center justify-between p-2.5 rounded-xl text-[12.5px] font-bold text-gray-700 hover:bg-gray-100 transition cursor-pointer"
+              onClick={() => { onOpenTool('correction'); onClose(); }}
+              className="w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-emerald-50 hover:text-emerald-900 transition cursor-pointer"
             >
               <div className="flex items-center gap-2.5">
-                <Mail className="w-4 h-4 text-emerald-600" />
-                <span>اتصل بنا والملاحظات</span>
+                <ClipboardCheck className="w-4 h-4 text-emerald-700" />
+                <span>الاختبارات ومذكرة التصحيح</span>
               </div>
-              <ChevronLeft className="w-4 h-4 text-gray-400" />
+              <ChevronLeft className="w-4 h-4 text-slate-400" />
             </button>
-          </details>
-        </div>
 
-        {/* Footer info & Designer */}
-        <div className="p-3.5 border-t border-slate-200 bg-slate-50/90 space-y-2.5">
-          <div className="flex items-center gap-3 bg-white p-3 rounded-2xl border border-emerald-200 shadow-xs">
-            <img 
-              src={designerPhoto} 
-              alt="مصمم المنصة الأستاذ بغداد الطيب" 
-              className="w-20 h-20 rounded-2xl object-cover border-2 border-emerald-600 shadow-md ring-2 ring-emerald-200 shrink-0" 
-              referrerPolicy="no-referrer"
-            />
-            <div className="text-right">
-              <span className="text-[11px] text-emerald-700 font-bold block leading-none mb-1">تصميم وتطوير المنصة</span>
-              <strong className="text-gray-900 text-[15px] block font-black leading-tight">الأستاذ بغداد الطيب</strong>
+            <button
+              type="button"
+              onClick={() => { onOpenTool('assistant'); onClose(); }}
+              className="w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-teal-50 hover:text-teal-900 transition cursor-pointer"
+            >
+              <div className="flex items-center gap-2.5">
+                <MessagesSquare className="w-4 h-4 text-teal-700" />
+                <span>المساعد الذكي</span>
+              </div>
+              <ChevronLeft className="w-4 h-4 text-slate-400" />
+            </button>
+          </div>
+
+          {/* 4. إدارة الأستاذ ومعلومات المنصة */}
+          <div className="space-y-1 pt-2 border-t border-slate-200/80">
+            <div className="text-[11px] font-extrabold text-slate-500 px-2 mb-1">
+              إدارة الأستاذ والدعم
+            </div>
+
+            <button
+              type="button"
+              onClick={() => handleSelectSection('settings')}
+              className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                activeSection === 'settings'
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : 'text-slate-700 hover:bg-slate-100'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Settings className="w-4 h-4" />
+                <span>إعدادات الحساب والخاتم</span>
+              </div>
+              <ChevronLeft className="w-4 h-4 opacity-60" />
+            </button>
+
+            <div className="grid grid-cols-3 gap-1.5 pt-1">
+              <button
+                type="button"
+                onClick={() => { onClose(); onOpenInfoModal('about'); }}
+                className="flex flex-col items-center justify-center gap-1 p-2 rounded-xl bg-white border border-slate-200/80 text-[11px] font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
+              >
+                <Info className="w-3.5 h-3.5 text-sky-700" />
+                <span>حول المنصة</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => { onClose(); onOpenInfoModal('guide'); }}
+                className="flex flex-col items-center justify-center gap-1 p-2 rounded-xl bg-white border border-slate-200/80 text-[11px] font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
+              >
+                <HelpCircle className="w-3.5 h-3.5 text-emerald-700" />
+                <span>الدليل</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => { onClose(); onOpenInfoModal('contact'); }}
+                className="flex flex-col items-center justify-center gap-1 p-2 rounded-xl bg-white border border-slate-200/80 text-[11px] font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
+              >
+                <Mail className="w-3.5 h-3.5 text-slate-600" />
+                <span>تواصل</span>
+              </button>
             </div>
           </div>
-          <div className="text-center text-[10.5px] text-gray-500 space-y-0.5">
-            <p className="font-bold text-gray-700">
-              المنصة الوطنية لأساتذة علوم الطبيعة والحياة
-            </p>
-            <p className="text-gray-400">مرحلة التعليم المتوسط — الجمهورية الجزائرية</p>
-          </div>
+        </div>
+
+        {/* Compact Footer */}
+        <div className="px-4 py-2.5 border-t border-slate-200 bg-white text-center text-[11px] text-slate-500">
+          تصميم وتطوير: <strong className="text-slate-800">الأستاذ بغداد الطيب</strong>
         </div>
       </div>
     </div>

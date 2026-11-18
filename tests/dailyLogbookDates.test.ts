@@ -54,7 +54,8 @@ test('activities are assigned in date order, not group-first order', () => {
   ] });
   assert.equal(rows[0].resourceIndex, 1);
   assert.equal(rows[1].resourceIndex, 2);
-  assert.match(rows[0].content, /التعارف/);
+  assert.match(rows[0].content, /التعرف على مصدر الأغذية/);
+  assert.match(rows[1].content, /تصنيف الأغذية حسب الأصل/);
 });
 
 test('week and month cover calendar days even when starting midweek', () => {
@@ -78,7 +79,7 @@ test('group crossing display start retains its assigned activity', () => {
 test('exams pause curriculum progression and third session is labelled correctly', async () => {
   const { buildPedagogicalStepsForLevel } = await import('../src/utils/dailyLogbookGenerator');
   const steps = buildPedagogicalStepsForLevel('1م', 3);
-  assert.match(steps[4].fullContent, /الحصة 3/);
+  assert.match(steps[2].fullContent, /الحصة 3 من 3/);
   const rows = generateLogbookEntries({ startDate: '2026-10-04', period: 'أسبوع', gridRows: grid,
     holidays: [{ startDate: '2026-10-05', label: 'فرض', type: 'test' }] });
   assert.equal(rows[1].lessonType, 'assessment');
@@ -110,55 +111,48 @@ test('mergeConsecutiveGroupEntries and splitMergedGroupEntries work symmetricall
   assert.equal(split[1].section, '1م1 (فوج 2)');
 });
 
-test('daily logbook steps strictly respect the official annual distribution chronological sequence for all 4 levels', async () => {
+test('daily logbook steps strictly respect the official pedagogical progression PDF sequence for all 4 levels without fabricated intros', async () => {
   const { buildPedagogicalStepsForLevel } = await import('../src/utils/dailyLogbookGenerator');
   const {
-    OFFICIAL_1AM_DISTRIBUTION,
-    OFFICIAL_2AM_DISTRIBUTION,
-    OFFICIAL_3AM_DISTRIBUTION,
-    OFFICIAL_4AM_DISTRIBUTION,
-  } = await import('../src/data/curriculum/officialAnnualDistributionData');
+    PROGRESSION_1AM_UNITS,
+    PROGRESSION_2AM_UNITS,
+    PROGRESSION_3AM_UNITS,
+    PROGRESSION_4AM_UNITS,
+  } = await import('../src/data/logbook');
 
   // Level 1AM
   const steps1am = buildPedagogicalStepsForLevel('1م', 1);
-  assert.match(steps1am[0].fullContent, /التعارف/);
-  assert.match(steps1am[1].fullContent, /تقويم تشخيصي/);
-  assert.equal(steps1am[2].fullContent, OFFICIAL_1AM_DISTRIBUTION[1].session1);
-  assert.equal(steps1am[3].fullContent, OFFICIAL_1AM_DISTRIBUTION[1].session2);
-  assert.equal(steps1am[4].fullContent, OFFICIAL_1AM_DISTRIBUTION[2].session1);
-  assert.equal(steps1am[6].fullContent, OFFICIAL_1AM_DISTRIBUTION[3].session1);
-  assert.match(steps1am[6].fullContent, /مصدر الأغذية/);
+  assert.doesNotMatch(steps1am[0].fullContent, /التعارف|استقبال التلاميذ/);
+  assert.equal(steps1am[0].progressionUnitId, PROGRESSION_1AM_UNITS[0].id);
+  assert.equal(steps1am[0].fullContent, PROGRESSION_1AM_UNITS[0].activities[0]);
+  assert.equal(steps1am[1].fullContent, PROGRESSION_1AM_UNITS[0].activities[1]);
+  assert.equal(steps1am[2].progressionUnitId, PROGRESSION_1AM_UNITS[1].id);
+  assert.equal(steps1am[2].fullContent, PROGRESSION_1AM_UNITS[1].activities[0]);
 
-  // Level 2AM — the official 2026-2027 sheet opens with «استقبال التلاميذ…» (not «تعارف»),
-  // and its week-1 merged cell is split: session1 = الافتتاح، session2 = التقويم التشخيصي.
+  // Level 2AM
   const steps2am = buildPedagogicalStepsForLevel('2م', 1);
-  assert.match(steps2am[0].fullContent, /استقبال التلاميذ/);
-  assert.match(steps2am[1].fullContent, /التقويم التشخيصي/);
-  assert.equal(steps2am[2].fullContent, OFFICIAL_2AM_DISTRIBUTION[1].session1); // W2s1
-  assert.match(steps2am[2].fullContent, /أعاين وسطا حيا قريبا/);
-  assert.equal(steps2am[3].fullContent, OFFICIAL_2AM_DISTRIBUTION[1].session2); // W2s2
-  assert.match(steps2am[3].fullContent, /أعاين وسطا حيا قريبا \(2\)/);
-  assert.equal(steps2am[4].fullContent, OFFICIAL_2AM_DISTRIBUTION[2].session1); // W3s1
-  assert.match(steps2am[4].fullContent, /أميز بين أوساط حية مختلفة/);
+  assert.doesNotMatch(steps2am[0].fullContent, /التعارف|استقبال التلاميذ/);
+  assert.equal(steps2am[0].progressionUnitId, PROGRESSION_2AM_UNITS[0].id);
+  assert.equal(steps2am[0].fullContent, PROGRESSION_2AM_UNITS[0].activities[0]);
+  assert.equal(steps2am[1].progressionUnitId, PROGRESSION_2AM_UNITS[1].id);
+  assert.equal(steps2am[1].fullContent, PROGRESSION_2AM_UNITS[1].activities[0]);
 
   // Level 3AM
   const steps3am = buildPedagogicalStepsForLevel('3م', 1);
-  assert.match(steps3am[0].fullContent, /التعارف/);
-  assert.equal(steps3am[2].fullContent, OFFICIAL_3AM_DISTRIBUTION[1].session1);
-  assert.match(steps3am[2].fullContent, /أصف آثار الزلزال/);
-  assert.equal(steps3am[3].fullContent, OFFICIAL_3AM_DISTRIBUTION[1].session2);
-  assert.match(steps3am[3].fullContent, /خصائص الزلازل/);
+  assert.doesNotMatch(steps3am[0].fullContent, /التعارف|استقبال التلاميذ/);
+  assert.equal(steps3am[0].progressionUnitId, PROGRESSION_3AM_UNITS[0].id);
+  assert.equal(steps3am[0].fullContent, PROGRESSION_3AM_UNITS[0].activities[0]);
+  assert.equal(steps3am[1].fullContent, PROGRESSION_3AM_UNITS[0].activities[1]);
 
   // Level 4AM
   const steps4am = buildPedagogicalStepsForLevel('4م', 1);
-  assert.match(steps4am[0].fullContent, /التعارف/);
-  assert.equal(steps4am[2].fullContent, OFFICIAL_4AM_DISTRIBUTION[1].session1);
-  assert.match(steps4am[2].fullContent, /التحولات التي تطرأ على إحدى مكونات الخبز/);
-  assert.equal(steps4am[3].fullContent, OFFICIAL_4AM_DISTRIBUTION[1].session2);
-  assert.match(steps4am[3].fullContent, /أنبوب|المعدة/);
+  assert.doesNotMatch(steps4am[0].fullContent, /التعارف|استقبال التلاميذ/);
+  assert.equal(steps4am[0].progressionUnitId, PROGRESSION_4AM_UNITS[0].id);
+  assert.equal(steps4am[0].fullContent, PROGRESSION_4AM_UNITS[0].activities[0]);
+  assert.equal(steps4am[1].fullContent, PROGRESSION_4AM_UNITS[0].activities[1]);
 });
 
-test('multi-level timetable progresses through the respective annual distributions concurrently', () => {
+test('multi-level timetable progresses through the respective pedagogical progressions concurrently without cross-year mixing', () => {
   const multiGrid: TimetableGridRow[] = [
     { id: '1', time: '08:00 - 09:00', cells: { الأحد: '2م1', الإثنين: '3م1', الثلاثاء: '4م1' } },
   ];
@@ -176,8 +170,11 @@ test('multi-level timetable progresses through the respective annual distributio
   assert.equal(row2am.level, '2م');
   assert.equal(row3am.level, '3م');
   assert.equal(row4am.level, '4م');
-  assert.match(row2am.content, /استقبال التلاميذ/);
-  assert.match(row3am.content, /التعارف/);
-  assert.match(row4am.content, /التعارف/);
+  assert.match(row2am.progressionUnitId || '', /^prog-2am-/);
+  assert.match(row3am.progressionUnitId || '', /^prog-3am-/);
+  assert.match(row4am.progressionUnitId || '', /^prog-4am-/);
+  assert.match(row2am.content, /إحصاء عناصر الوسط الحي/);
+  assert.match(row3am.content, /زلزال بومرداس/);
+  assert.match(row4am.content, /الهضم الآلي في الفم/);
 });
 

@@ -1,63 +1,91 @@
 /**
- * قاعدة بيانات الدفتر اليومي — **خاصة ومعزولة** عن القاعدة الموحدة للمنصة.
+ * قاعدة بيانات الدفتر الرقمي للأستاذ — خاصة ومعزولة تماماً عن بقية قواعد المنصة.
  *
- * المنصة كلها تقرأ من عائلات `src/data/platform/` الأربع (المنهاج ← الوثيقة المرافقة ←
- * دليل الأستاذ ← المذكرات). الدفتر اليومي وحده له قاعدة خاصة، لأن بياناته تشغيلية
- * (برامج الحصص الجاهزة ومدخلات seeded) وليست مرجعاً تربوياً يُقتبس.
+ * تعتمد حصرياً على ملفات التدرج البيداغوجي الرسمية الأربعة المرفقة:
+ *   • السنة الأولى متوسط  (1am / 1م) ← public/assets/aistudio/________1__1a954d9a.pdf
+ *   • السنة الثانية متوسط (2am / 2م) ← public/assets/aistudio/_______69e62c45.pdf
+ *   • السنة الثالثة متوسط (3am / 3م) ← public/assets/aistudio/_______3_3af5b876.pdf
+ *   • السنة الرابعة متوسط (4am / 4م) ← public/assets/aistudio/_______4_e93589f8.pdf
  *
- * ── حدود القاعدة ─────────────────────────────────────────────────────────────
- * خاص بالدفتر (هنا):
- *   • DAILY_LOGBOOK_PROGRAM_1AM…4AM — برامج الحصص لكل مستوى
- *   • INITIAL_DAILY_LOGS            — مدخلات بداية (بيانات تجريبية)
- *
- * مشترك مع القاعدة الموحدة (يُقرأ منها ولا يُنسخ):
- *   • التدرجات السنوية الرسمية  ← src/data/curriculum/officialAnnualDistributionData.ts
- *     (عائلة المنهاج، ترتيب 1). هي بيانات وزارية يستهلكها الدفتر لترتيب حصصه
- *     زمنياً، وتستهلكها قاعدة المعرفة كـ`progression`. نسخها هنا كان سيخلق
- *     مصدرَي حقيقة يتباعدان.
- *   • عناوين الدروس ومساراتها ← src/data/memos/curriculumDb.ts (عائلة المذكرات، ترتيب 4).
- *
- * ⚠️ الاعتماد على `curriculumDb` قرار **معلَّق**: عُزلت ملفات الدفتر الخاصة دون قطع
- *    هذا الاعتماد، لأنه يلزمه نسخ ما يحتاجه الدفتر من قاعدة المذكرات أو تعريف
- *    عقد قراءة ضيق. راجع DATA_REPORT_1AM.md.
+ * ملاحظات حوكمة البيانات:
+ *   - لا تستنسخ ولا تغيّر قاعدة المنصة الموحدة (`src/data/platform/`).
+ *   - لا تخلط بين السنوات ولا تختلق مدداً ساعية أو تواريخ غير منصوص عليها في ملفات التدرج.
+ *   - إن لم يتوفر ملف تدرج لسنة ما، تُرجع الدالة `logbookProgressionOf` حالة عدم التوفر بوضوح دون اختلاق محتوى.
  */
-export { DAILY_LOGBOOK_PROGRAM_1AM } from './dailyLogbookProgram1am';
-export type { DailyLogbookProgramItem } from './dailyLogbookProgram1am';
-export { DAILY_LOGBOOK_PROGRAM_2AM } from './dailyLogbookProgram2am';
-export { DAILY_LOGBOOK_PROGRAM_3AM } from './dailyLogbookProgram3am';
-export { DAILY_LOGBOOK_PROGRAM_4AM } from './dailyLogbookProgram4am';
-export { INITIAL_DAILY_LOGS } from './dailyLogData';
 
-import { DAILY_LOGBOOK_PROGRAM_1AM } from './dailyLogbookProgram1am';
-import { DAILY_LOGBOOK_PROGRAM_2AM } from './dailyLogbookProgram2am';
-import { DAILY_LOGBOOK_PROGRAM_3AM } from './dailyLogbookProgram3am';
-import { DAILY_LOGBOOK_PROGRAM_4AM } from './dailyLogbookProgram4am';
-import { INITIAL_DAILY_LOGS } from './dailyLogData';
+export * from './schema';
+export { PROGRESSION_1AM_PDF_PATH, PROGRESSION_1AM_SOURCE, PROGRESSION_1AM_UNITS } from './progression1am';
+export { PROGRESSION_2AM_PDF_PATH, PROGRESSION_2AM_SOURCE, PROGRESSION_2AM_UNITS } from './progression2am';
+export { PROGRESSION_3AM_PDF_PATH, PROGRESSION_3AM_SOURCE, PROGRESSION_3AM_UNITS } from './progression3am';
+export { PROGRESSION_4AM_PDF_PATH, PROGRESSION_4AM_SOURCE, PROGRESSION_4AM_UNITS } from './progression4am';
 
-export type LogbookLevel = '1am' | '2am' | '3am' | '4am';
+import { PROGRESSION_1AM_SOURCE, PROGRESSION_1AM_UNITS } from './progression1am';
+import { PROGRESSION_2AM_SOURCE, PROGRESSION_2AM_UNITS } from './progression2am';
+import { PROGRESSION_3AM_SOURCE, PROGRESSION_3AM_UNITS } from './progression3am';
+import { PROGRESSION_4AM_SOURCE, PROGRESSION_4AM_UNITS } from './progression4am';
+import {
+  arabicLevelToCode,
+  levelCodeToArabic,
+  type LogbookArabicLevel,
+  type LogbookLevelCode,
+  type PedagogicalSourceFileMeta,
+  type PedagogicalUnitRecord,
+  type ProgressionLookupResult,
+} from './schema';
 
-/** برامج الدفتر لكل مستوى — نقطة الدخول الوحيدة بدل أربعة استيرادات. */
-export const LOGBOOK_PROGRAMS: Record<LogbookLevel, typeof DAILY_LOGBOOK_PROGRAM_1AM> = {
-  '1am': DAILY_LOGBOOK_PROGRAM_1AM,
-  '2am': DAILY_LOGBOOK_PROGRAM_2AM,
-  '3am': DAILY_LOGBOOK_PROGRAM_3AM,
-  '4am': DAILY_LOGBOOK_PROGRAM_4AM,
+export const LOGBOOK_PROGRESSIONS: Record<LogbookLevelCode, PedagogicalUnitRecord[]> = {
+  '1am': PROGRESSION_1AM_UNITS,
+  '2am': PROGRESSION_2AM_UNITS,
+  '3am': PROGRESSION_3AM_UNITS,
+  '4am': PROGRESSION_4AM_UNITS,
 };
 
-/** قاعدة الدفتر الخاصة: ما يملكه وحده، وما يشاركه مع القاعدة الموحدة. */
+export const LOGBOOK_PROGRESSION_SOURCES: Record<LogbookLevelCode, PedagogicalSourceFileMeta> = {
+  '1am': PROGRESSION_1AM_SOURCE,
+  '2am': PROGRESSION_2AM_SOURCE,
+  '3am': PROGRESSION_3AM_SOURCE,
+  '4am': PROGRESSION_4AM_SOURCE,
+};
+
 export const LOGBOOK_DATABASE = {
-  /** خاص بالدفتر. */
+  /** قاعدة الدفتر الرقمي المملوكة والمنفصلة عن التدرج السنوي وبقية وحدات المنصة. */
   owned: {
-    programs: LOGBOOK_PROGRAMS,
-    seededEntries: INITIAL_DAILY_LOGS,
-  },
-  /** مشترك — يُقرأ من القاعدة الموحدة ولا يُنسخ هنا. */
-  sharedFrom: {
-    annualDistributions: 'src/data/curriculum/officialAnnualDistributionData.ts',
-    curriculumMemos: 'src/data/memos/curriculumDb.ts',
+    progressions: LOGBOOK_PROGRESSIONS,
+    sources: LOGBOOK_PROGRESSION_SOURCES,
   },
 } as const;
 
-export function logbookProgramOf(level: string) {
-  return LOGBOOK_PROGRAMS[level as LogbookLevel] ?? null;
+export function logbookProgressionOf(
+  level: LogbookLevelCode | LogbookArabicLevel | string
+): ProgressionLookupResult {
+  const code = arabicLevelToCode(level);
+  if (!code) {
+    return {
+      available: false,
+      level: '1am',
+      arabicLevel: '1م',
+      source: null,
+      units: [],
+      unavailableReason: 'ملف التدرج البيداغوجي غير متوفر لهذه السنة',
+    };
+  }
+  const units = LOGBOOK_PROGRESSIONS[code];
+  const source = LOGBOOK_PROGRESSION_SOURCES[code] ?? null;
+  if (!Array.isArray(units) || units.length === 0) {
+    return {
+      available: false,
+      level: code,
+      arabicLevel: levelCodeToArabic(code),
+      source,
+      units: [],
+      unavailableReason: 'ملف التدرج البيداغوجي غير متوفر لهذه السنة',
+    };
+  }
+  return {
+    available: true,
+    level: code,
+    arabicLevel: levelCodeToArabic(code),
+    source,
+    units,
+  };
 }

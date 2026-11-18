@@ -1,24 +1,24 @@
 import React, { useState, useMemo, useEffect, lazy, Suspense } from 'react';
 import {
-  Printer,
   FileDown,
+  FileText,
   Eye,
   RotateCcw,
   CheckCircle2,
   BookOpen,
   CalendarDays,
   BookOpenCheck,
-  UserCog,
   Database,
-  GraduationCap,
-  School,
-  Home,
   ArrowRight,
   Menu,
-  Info,
-  Mail,
-  HelpCircle,
+  Bell,
+  Settings,
+  Microscope,
+  PenTool,
 } from 'lucide-react';
+import { useHandwritingStyle } from './hooks/useHandwritingStyle';
+import { HandwritingStylePanel } from './components/HandwritingStylePanel';
+import { SelectionPenStrip } from './components/HandwrittenText';
 import { LessonMemo, MemoConfig } from './types';
 import { LEVELS } from './data/memos/lessonsData';
 import { SidebarControls } from './components/SidebarControls';
@@ -30,9 +30,10 @@ import { ActionMenu } from './components/ActionMenu';
 import { PlatformInfoModal } from './components/PlatformInfoModal';
 import { UserProfile } from './components/UserProfile';
 import { FirebaseDataSync } from './components/FirebaseDataSync';
+import { useAuth } from './components/Auth';
+import { getFirebaseConfigStatus } from './firebase';
 import { loadCurriculumDatabase } from './data/memos/curriculumDb';
-import designerPortraitImg from './assets/images/designer_portrait_1790463396414.jpg';
-import { getDesignerPhoto } from './utils/designerPhoto';
+import heroScienceLabImg from './assets/images/hero_science_lab.jpg';
 
 const AIAssistantChat = lazy(() => import('./components/AIAssistantChat').then(module => ({ default: module.AIAssistantDrawer })));
 const CorrectionMemoDrawer = lazy(() => import('./components/CorrectionMemoDrawer').then(module => ({ default: module.CorrectionMemoDrawer })));
@@ -65,16 +66,14 @@ export const App: React.FC = () => {
   const [isNavDrawerOpen, setIsNavDrawerOpen] = useState<boolean>(false);
   const [activeTool, setActiveTool] = useState<'assistant' | 'correction' | null>(null);
   const [infoModalTab, setInfoModalTab] = useState<'about' | 'contact' | 'guide' | null>(null);
+  const [logbookInitialTimetable, setLogbookInitialTimetable] = useState<boolean>(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState<boolean>(false);
+  const [dismissedNotifications, setDismissedNotifications] = useState<string[]>([]);
+  const [isHandwritingModalOpen, setIsHandwritingModalOpen] = useState<boolean>(false);
+  const { settings: hwStyle } = useHandwritingStyle();
 
-  const [designerPhoto, setDesignerPhoto] = useState<string>(() => getDesignerPhoto());
-
-  useEffect(() => {
-    const handleUpdated = (e: any) => {
-      setDesignerPhoto(e.detail || getDesignerPhoto());
-    };
-    window.addEventListener('designer-photo-updated', handleUpdated);
-    return () => window.removeEventListener('designer-photo-updated', handleUpdated);
-  }, []);
+  const { user } = useAuth();
+  const firebaseStatus = useMemo(() => getFirebaseConfigStatus(), []);
 
   // Is current section a school year?
   const isYearSection = activeSection === '1am' || activeSection === '2am' || activeSection === '3am' || activeSection === '4am';
@@ -407,48 +406,84 @@ export const App: React.FC = () => {
 
   const currentLevelLabel = midanTheme.levelLabel;
 
-  // Explicit visual map: each level and field/sequence has its own realistic photo.
+  // Explicit visual map: each level has its own local/scientific background.
   const curriculumBackground = useMemo(() => {
-    const t = [activeMidan, selectedMaqta, selectedMawrid, selectedTa3alom].join(' ').toLowerCase();
-    const has = (...words: string[]) => words.some(w => t.includes(w.toLowerCase()));
-    const img = {
-      nature: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=2400&q=90',
-      human: 'https://images.unsplash.com/photo-1532094349884-543bc11b234d?auto=format&fit=crop&w=2400&q=90',
-      ecology: 'https://images.unsplash.com/photo-1470770841072-f978cf4d019e?auto=format&fit=crop&w=2400&q=90',
-      biodiversity: 'https://images.unsplash.com/photo-1535083783855-76ae62b2914e?auto=format&fit=crop&w=2400&q=90',
-      reproduction: 'https://images.unsplash.com/photo-1464207687429-7505649dae38?auto=format&fit=crop&w=2400&q=90',
-      soil: 'https://images.unsplash.com/photo-1464226184884-fa280b87c399?auto=format&fit=crop&w=2400&q=90',
-      geology: 'https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?auto=format&fit=crop&w=2400&q=90',
-      internalEarth: 'https://images.unsplash.com/photo-1507413245164-6160d8298b31?auto=format&fit=crop&w=2400&q=90',
-      resources: 'https://images.unsplash.com/photo-1500534623283-312aade485b7?auto=format&fit=crop&w=2400&q=90',
-      erosion: 'https://images.unsplash.com/photo-1473448912268-2022ce9509d8?auto=format&fit=crop&w=2400&q=90',
-      genetics: 'https://images.unsplash.com/photo-1530210124550-912dc1381cb8?auto=format&fit=crop&w=2400&q=90',
-      immunity: 'https://images.unsplash.com/photo-1579154204601-01588f351e67?auto=format&fit=crop&w=2400&q=90',
-      nutrition: 'https://images.unsplash.com/photo-1498837167922-ddd27525d352?auto=format&fit=crop&w=2400&q=90',
-    };
     if (selectedLevel === '1am') {
-      // 1AM: هوية بصرية مبنية مباشرة على محاور السنة:
-      // التغذية عند الإنسان + التغذية عند النبات الأخضر + التحصل على الطاقة.
-      // رسم علمي متجهي يوضح العلاقة بين الشمس والنبات والغذاء والطاقة، بدل صورة فوتوغرافية عامة.
-      return 'https://upload.wikimedia.org/wikipedia/commons/b/bc/Photosynthesis_en.svg';
+      return '/backgrounds/2am-ecosystem.svg';
     }
     if (selectedLevel === '2am') {
-      // 2AM: هوية بصرية لعالم الوسط الحي، التنوع، التوزع والتكاثر.
       return '/backgrounds/2am-ecosystem.svg';
     }
     if (selectedLevel === '3am') {
-      // 3AM: الأرض، الديناميكية الداخلية والخارجية، الموارد والتربة.
       return '/backgrounds/3am-earth.svg';
     }
     if (selectedLevel === '4am') {
-      // 4AM: الوراثة، التنسيق الوظيفي، الجسم والتغذية.
       return '/backgrounds/4am-genetics.svg';
     }
-    return img.nature;
-  }, [selectedLevel, activeMidan, selectedMaqta, selectedMawrid, selectedTa3alom]);
+    return heroScienceLabImg;
+  }, [selectedLevel]);
+
+  const platformNotifications = useMemo(() => {
+    const items: Array<{ id: string; title: string; detail: string; actionLabel: string; onAction: () => void }> = [];
+
+    if (!config.teacherName?.trim() || !config.schoolName?.trim()) {
+      items.push({
+        id: 'profile-incomplete',
+        title: 'إكمال بيانات الأستاذ والمؤسسة',
+        detail: 'أدخل اسم الأستاذ والمتوسطة والولاية لتظهر تلقائياً في المذكرات والدفتر اليومي.',
+        actionLabel: 'فتح الإعدادات',
+        onAction: () => {
+          setIsNotificationsOpen(false);
+          setActiveSection('settings');
+        },
+      });
+    }
+
+    if (!config.teacherStamp) {
+      items.push({
+        id: 'stamp-missing',
+        title: 'تفعيل الخاتم الرسمي للأستاذ',
+        detail: 'يمكنك إنشاء أو رفع الختم الرسمي لاعتماده في مطبوعات التدرج والدفتر.',
+        actionLabel: 'إعداد الخاتم',
+        onAction: () => {
+          setIsNotificationsOpen(false);
+          setActiveSection('settings');
+        },
+      });
+    }
+
+    items.push({
+      id: 'curriculum-ready',
+      title: `قاعدة البيانات محدثة (${curriculumLessons.length} مذكرة)`,
+      detail: 'جميع مذكرات وتدرجات السنوات الأربع متاحة للتعديل والتصدير إلى Word وPDF.',
+      actionLabel: 'إدارة الموارد',
+      onAction: () => {
+        setIsNotificationsOpen(false);
+        setActiveSection('database');
+      },
+    });
+
+    items.push({
+      id: 'sync-status',
+      title: user ? 'المزامنة السحابية مفعلة' : 'الحفظ المحلي نشط في المتصفح',
+      detail: user
+        ? `تم تسجيل الدخول بحساب ${user.email || user.displayName || 'Google'}.`
+        : firebaseStatus.isValid
+          ? 'يمكنك تسجيل الدخول بحساب Google لمزامنة بياناتك عبر الأجهزة.'
+          : 'يتم حفظ التعديلات محلياً مع إمكانية التصدير والنسخ الاحتياطي في أي وقت.',
+      actionLabel: 'عرض الدفتر',
+      onAction: () => {
+        setIsNotificationsOpen(false);
+        setLogbookInitialTimetable(false);
+        setActiveSection('logbook');
+      },
+    });
+
+    return items.filter((item) => !dismissedNotifications.includes(item.id));
+  }, [config.teacherName, config.schoolName, config.teacherStamp, curriculumLessons.length, user, firebaseStatus.isValid, dismissedNotifications]);
 
   return (
-    <div className="min-h-screen flex flex-col font-sans app-shell" dir="rtl">
+    <div className="min-h-screen flex flex-col font-sans app-shell overflow-x-clip" dir="rtl">
       {/* Toast Notification */}
       {toastMessage && (
         <div
@@ -460,155 +495,184 @@ export const App: React.FC = () => {
         </div>
       )}
 
-      {/* Main Streamlined Header */}
+      {/* Main Streamlined Sticky Header */}
       <header className="app-header sticky top-0 z-30">
-        <div className="px-4 md:px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 max-w-[1600px] mx-auto w-full">
-          {/* Right Section: Menu Drawer Trigger + Identity / Navigation / Year Tabs */}
-          <div className="flex flex-wrap items-center gap-2.5">
-            {/* Global Navigation Drawer Toggle */}
+        <div className="px-3 sm:px-4 md:px-6 h-14 sm:h-16 flex items-center justify-between gap-2 sm:gap-4 max-w-[1440px] mx-auto w-full">
+          {/* Right Section: Drawer Trigger + Brand or Active Context */}
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <button
               type="button"
               id="btn-open-nav-drawer"
               onClick={() => setIsNavDrawerOpen(true)}
-              className="icon-button inline-flex items-center justify-center p-2.5 rounded-xl text-gray-700 transition cursor-pointer"
+              className="icon-button inline-flex items-center justify-center w-10 h-10 rounded-xl text-slate-700 transition cursor-pointer shrink-0"
               title="القائمة الشاملة للمنصة"
+              aria-label="القائمة الشاملة للمنصة"
             >
               <Menu className="w-5 h-5" />
             </button>
 
             {activeSection === 'home' ? (
-              /* Home Platform Brand - Clean and focused */
-              <div className="flex items-center gap-2.5 text-right">
-                <div className="brand-mark w-10 h-10 rounded-2xl flex items-center justify-center text-white font-extrabold shadow-sm">
-                  <BookOpen className="w-5 h-5" />
+              <button
+                type="button"
+                onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                className="flex items-center gap-2 sm:gap-2.5 text-right cursor-pointer min-w-0"
+              >
+                <div className="brand-mark w-9 h-9 rounded-xl flex items-center justify-center text-white shadow-xs shrink-0">
+                  <Microscope className="w-5 h-5" aria-hidden="true" />
                 </div>
-                <div>
-                  <h1 className="font-black text-[15px] text-gray-900 leading-tight">
-                    المنصة البيداغوجية الوطنية لأساتذة علوم الطبيعة والحياة
-                  </h1>
-                </div>
-              </div>
+                <span className="font-extrabold text-[13px] sm:text-[15px] text-slate-900 whitespace-nowrap truncate">
+                  المنصة البيداغوجية لعلوم الطبيعة والحياة
+                </span>
+              </button>
             ) : (
-              /* Year or Tool Active Header: Back Button + Level Badge + Direct Sub-tabs */
-              <div className="flex flex-wrap items-center gap-2">
-                {/* 1. Back to Home */}
+              <div className="flex items-center gap-2 min-w-0">
                 <button
                   id="header-btn-back-home"
                   type="button"
                   onClick={() => {
+                    setLogbookInitialTimetable(false);
                     setActiveSection('home');
-                    showToast('العودة إلى الصفحة ال��ئيسية');
+                    showToast('العودة إلى الصفحة الرئيسية');
                   }}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-900 text-white text-[12.5px] font-black hover:bg-gray-800 shadow-xs transition cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 shadow-xs transition cursor-pointer whitespace-nowrap shrink-0"
                 >
                   <ArrowRight className="w-4 h-4" />
                   <span>الرئيسية</span>
                 </button>
 
-                {/* 2. Current Year Indicator or Tool Title */}
                 {isYearSection ? (
                   <>
-                    <div className="flex items-center gap-2 bg-gray-50 px-3 py-1.5 rounded-xl border border-gray-200">
-                      <span className={`w-2.5 h-2.5 rounded-full ${midanTheme.pulseBg}`} />
-                      <span className="text-[13px] font-black text-gray-900">{currentLevelLabel}</span>
+                    <div className="hidden sm:flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 whitespace-nowrap shrink-0">
+                      <span className="text-[12.5px] font-extrabold text-slate-900">{currentLevelLabel}</span>
                     </div>
 
-                    {/* 3. Direct Subtabs (المذكرات البيداغوجية | تدرج التعلمات) */}
-                    <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl border border-gray-200">
+                    <div className="hidden md:flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
                       <button
                         type="button"
                         id="year-subtab-memos"
                         onClick={() => setYearSubTab('memos')}
-                        className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-[12px] font-black transition cursor-pointer ${
+                        className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-[12px] font-bold transition cursor-pointer whitespace-nowrap shrink-0 ${
                           yearSubTab === 'memos'
                             ? midanTheme.activeTabBg
-                            : 'text-gray-700 hover:text-gray-900 hover:bg-white/80'
+                            : 'text-slate-700 hover:text-slate-900 hover:bg-white/80'
                         }`}
                       >
-                        <BookOpen className="w-3.5 h-3.5" />
-                        <span>المذكرات البيداغوجية</span>
+                        <FileText className="w-3.5 h-3.5" />
+                        <span>المذكرات</span>
                       </button>
 
                       <button
                         type="button"
                         id="year-subtab-source"
                         onClick={() => setYearSubTab('source')}
-                        className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-[12px] font-black transition cursor-pointer ${
+                        className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-[12px] font-bold transition cursor-pointer whitespace-nowrap shrink-0 ${
                           yearSubTab === 'source'
                             ? midanTheme.activeTabBg
-                            : 'text-gray-700 hover:text-gray-900 hover:bg-white/80'
+                            : 'text-slate-700 hover:text-slate-900 hover:bg-white/80'
                         }`}
                       >
-                        <Database className="w-3.5 h-3.5" />
-                        <span>{selectedLevel === '1am' ? 'عرض المحتوى الكامل للمصدر' : selectedLevel === '2am' ? 'دليل الأستاذ والمخطط الرسمي' : selectedLevel === '3am' ? 'دليل الأستاذ والكتاب المدرسي' : 'المخطط السنوي الرسمي ودليل BEM'}</span>
+                        <BookOpen className="w-3.5 h-3.5" />
+                        <span>{selectedLevel === '1am' ? 'المحتوى المصدري' : selectedLevel === '2am' ? 'دليل الأستاذ والمخطط' : selectedLevel === '3am' ? 'دليل الأستاذ والكتاب' : 'المخطط الرسمي وBEM'}</span>
                       </button>
 
                       <button
                         type="button"
                         id="year-subtab-distribution"
                         onClick={() => setYearSubTab('distribution')}
-                        className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-[12px] font-black transition cursor-pointer ${
+                        className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-[12px] font-bold transition cursor-pointer whitespace-nowrap shrink-0 ${
                           yearSubTab === 'distribution'
                             ? midanTheme.activeTabBg
-                            : 'text-gray-700 hover:text-gray-900 hover:bg-white/80'
+                            : 'text-slate-700 hover:text-slate-900 hover:bg-white/80'
                         }`}
                       >
                         <CalendarDays className="w-3.5 h-3.5" />
-                        <span>تدرج التعلمات</span>
+                        <span>التدرج السنوي</span>
                       </button>
                     </div>
                   </>
                 ) : activeSection === 'logbook' ? (
-                  <div className="flex items-center gap-2 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200 text-emerald-900 font-black text-[13px]">
-                    <BookOpenCheck className="w-4 h-4 text-emerald-700" />
-                    <span>الدفتر اليومي ودفتر النصوص</span>
+                  <div className="flex items-center gap-2 bg-emerald-50 px-2.5 sm:px-3 py-1.5 rounded-xl border border-emerald-200 text-emerald-900 font-extrabold text-xs sm:text-[13px] whitespace-nowrap truncate">
+                    <BookOpenCheck className="w-4 h-4 text-emerald-700 shrink-0" />
+                    <span className="truncate">الدفتر الرقمي</span>
                   </div>
                 ) : activeSection === 'database' ? (
-                  <div className="flex items-center gap-2 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200 text-emerald-900 font-black text-[13px]">
-                    <Database className="w-4 h-4 text-emerald-700" />
-                    <span>إدارة قاعدة البيانات</span>
+                  <div className="flex items-center gap-2 bg-emerald-50 px-2.5 sm:px-3 py-1.5 rounded-xl border border-emerald-200 text-emerald-900 font-extrabold text-xs sm:text-[13px] whitespace-nowrap truncate">
+                    <Database className="w-4 h-4 text-emerald-700 shrink-0" />
+                    <span className="truncate">الموارد التعليمية</span>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-2 bg-gray-100 px-3 py-1.5 rounded-xl border border-gray-200 text-gray-900 font-black text-[13px]">
-                    <UserCog className="w-4 h-4 text-gray-700" />
-                    <span>إعدادات الحساب والخاتم</span>
+                  <div className="flex items-center gap-2 bg-slate-100 px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-200 text-slate-900 font-extrabold text-xs sm:text-[13px] whitespace-nowrap truncate">
+                    <Settings className="w-4 h-4 text-slate-700 shrink-0" />
+                    <span className="truncate">الإعدادات والخاتم</span>
                   </div>
                 )}
               </div>
             )}
           </div>
 
-          {/* Left Section: Action Buttons + AI Assistant */}
-          <div className="flex items-center gap-2">
-            {/* Designer Badge - Always Visible */}
-            <div className="flex items-center gap-2 sm:gap-2.5 bg-emerald-50/90 px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-2xl border border-emerald-300 shadow-xs transition-all hover:shadow-md hover:bg-emerald-100" title="تصميم وتطوير المنصة: الأستاذ بغداد الطيب">
-              <img 
-                src={designerPhoto} 
-                alt="مصمم المنصة الأستاذ بغداد الطيب" 
-                className="w-12 h-12 sm:w-13 sm:h-13 rounded-2xl border-2 border-emerald-600 object-cover shadow-sm ring-2 ring-emerald-300/70 shrink-0"
-                referrerPolicy="no-referrer"
-              />
-              <div className="hidden sm:flex flex-col text-right">
-                <span className="text-[10.5px] text-emerald-700 font-bold leading-none mb-0.5">تصميم وتطوير المنصة</span>
-                <span className="text-[13px] font-black text-emerald-950 leading-none">الأستاذ بغداد الطيب</span>
-              </div>
-            </div>
+          {/* Center Navigation Links (Home Desktop) */}
+          {activeSection === 'home' && (
+            <nav aria-label="التنقل السريع" className="hidden lg:flex items-center gap-6 text-[13px] font-bold text-slate-600">
+              <button
+                type="button"
+                onClick={() => {
+                  const el = document.getElementById('levels-strip');
+                  el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }}
+                className="hover:text-teal-700 hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                السنوات الدراسية
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setLogbookInitialTimetable(false);
+                  setActiveSection('logbook');
+                }}
+                className="hover:text-teal-700 hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                الدفتر الرقمي
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setLogbookInitialTimetable(true);
+                  setActiveSection('logbook');
+                }}
+                className="hover:text-teal-700 hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                استعمال الزمن
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTool('assistant')}
+                className="hover:text-teal-700 hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                المساعد الذكي
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveSection('database')}
+                className="hover:text-teal-700 hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                الموارد التعليمية
+              </button>
+            </nav>
+          )}
 
-
-
-            {activeSection === 'home' ? (
-              <UserProfile />
-            ) : isYearSection && yearSubTab === 'memos' ? (
+          {/* Left Section: Export Actions (when in memos) + Notifications + Settings + Account */}
+          <div className="flex items-center gap-2 shrink-0">
+            {isYearSection && yearSubTab === 'memos' && (
               <>
                 <button
                   id="btn-preview-memo"
                   type="button"
                   onClick={() => setIsPreviewOpen(true)}
-                  className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-white border border-gray-300 text-gray-800 text-[12px] font-black hover:bg-gray-50 shadow-2xs transition cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-white border border-slate-300 text-slate-800 text-[12px] font-bold hover:bg-slate-50 shadow-2xs transition cursor-pointer whitespace-nowrap"
                   title="معاينة المذكرة والطباعة"
                 >
-                  <Eye className="w-4 h-4 text-emerald-700" />
-                  <span>معاينة وطباعة</span>
+                  <Eye className="w-4 h-4 text-teal-700" />
+                  <span className="hidden sm:inline">معاينة وطباعة</span>
                 </button>
                 <ActionMenu label="التصدير والإعدادات" items={[
                   { id: 'btn-print-memo', label: 'تصدير PDF', title: 'تحميل ملف PDF حقيقي', onSelect: handlePrint, icon: <FileDown className="w-4 h-4" /> },
@@ -616,9 +680,157 @@ export const App: React.FC = () => {
                   { id: 'btn-reset-defaults', label: 'استعادة الإعدادات الافتراضية', onSelect: handleResetDefaults, icon: <RotateCcw className="w-4 h-4" /> },
                 ]} />
               </>
-            ) : null}
+            )}
+
+            {/* Notifications Button & Popover */}
+            <div className="relative">
+              <button
+                type="button"
+                id="header-btn-notifications"
+                onClick={() => setIsNotificationsOpen((prev) => !prev)}
+                aria-expanded={isNotificationsOpen}
+                aria-label="الإشعارات والتنبيهات"
+                title="الإشعارات والتنبيهات"
+                className="icon-button relative inline-flex items-center justify-center w-10 h-10 rounded-xl text-slate-700 transition cursor-pointer"
+              >
+                <Bell className="w-4 h-4" />
+                {platformNotifications.length > 0 && (
+                  <span className="absolute -top-1 -left-1 min-w-[18px] h-[18px] px-1 rounded-full bg-teal-700 text-white text-[10px] font-bold flex items-center justify-center tabular-nums">
+                    {platformNotifications.length}
+                  </span>
+                )}
+              </button>
+
+              {isNotificationsOpen && (
+                <div
+                  role="dialog"
+                  aria-label="إشعارات المنصة"
+                  className="absolute left-0 mt-2 w-80 sm:w-96 bg-white rounded-2xl border border-slate-200 shadow-xl p-3 z-50 space-y-2"
+                >
+                  <div className="flex items-center justify-between px-2 py-1 border-b border-slate-100">
+                    <span className="text-xs font-extrabold text-slate-900">التنبيهات وحالة المنصة</span>
+                    <button
+                      type="button"
+                      onClick={() => setIsNotificationsOpen(false)}
+                      className="text-xs font-bold text-slate-500 hover:text-slate-900 cursor-pointer"
+                    >
+                      إغلاق
+                    </button>
+                  </div>
+
+                  {platformNotifications.length === 0 ? (
+                    <div className="p-4 text-center text-xs text-slate-500">
+                      لا توجد تنبيهات جديدة حالياً.
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5 max-h-80 overflow-y-auto">
+                      {platformNotifications.map((item) => (
+                        <div
+                          key={item.id}
+                          className="p-2.5 rounded-xl bg-slate-50/80 hover:bg-slate-100/80 border border-slate-200/70 transition space-y-1.5"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="text-xs font-extrabold text-slate-900">{item.title}</span>
+                            <button
+                              type="button"
+                              onClick={() => setDismissedNotifications((prev) => [...prev, item.id])}
+                              className="text-[11px] text-slate-400 hover:text-slate-700 cursor-pointer"
+                              title="إخفاء التنبيه"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                          <p className="text-[11.5px] text-slate-600 leading-relaxed">{item.detail}</p>
+                          <button
+                            type="button"
+                            onClick={item.onAction}
+                            className="text-[11.5px] font-bold text-teal-700 hover:text-teal-900 cursor-pointer"
+                          >
+                            {item.actionLabel} ←
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Handwriting & Colored Pens Button */}
+            <button
+              type="button"
+              id="header-btn-handwriting"
+              onClick={() => {
+                setIsNotificationsOpen(false);
+                setIsHandwritingModalOpen(true);
+              }}
+              aria-label="الكتابة اليدوية والأقلام الملونة"
+              title="تخصيص الخط اليدوي وألوان الأقلام"
+              className={`icon-button inline-flex items-center justify-center gap-1.5 h-10 px-2.5 rounded-xl transition cursor-pointer ${
+                hwStyle.enabled ? 'text-blue-700 border-blue-200 bg-blue-50/70' : 'text-slate-700'
+              }`}
+            >
+              <PenTool className="w-4 h-4 shrink-0" />
+              <span className="hidden xl:inline text-xs font-extrabold whitespace-nowrap">خط اليد</span>
+            </button>
+
+            {/* Settings Button */}
+            <button
+              type="button"
+              id="header-btn-settings"
+              onClick={() => {
+                setIsNotificationsOpen(false);
+                setActiveSection('settings');
+              }}
+              aria-label="إعدادات الحساب والمؤسسة"
+              title="إعدادات الحساب والخاتم والمؤسسة"
+              className={`icon-button inline-flex items-center justify-center w-10 h-10 rounded-xl transition cursor-pointer ${
+                activeSection === 'settings' ? 'bg-teal-50 text-teal-800 border-teal-300' : 'text-slate-700'
+              }`}
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+
+            {/* Account / Cloud Sync */}
+            <UserProfile />
           </div>
         </div>
+
+        {/* Mobile/Tablet Secondary Year Sub-tabs (prevents header horizontal crowding) */}
+        {isYearSection && (
+          <div className="md:hidden px-3 pb-2 flex items-center gap-1.5 overflow-x-auto border-t border-slate-100 pt-1.5">
+            <button
+              type="button"
+              onClick={() => setYearSubTab('memos')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer whitespace-nowrap shrink-0 ${
+                yearSubTab === 'memos' ? midanTheme.activeTabBg : 'bg-slate-100 text-slate-700'
+              }`}
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>المذكرات</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setYearSubTab('source')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer whitespace-nowrap shrink-0 ${
+                yearSubTab === 'source' ? midanTheme.activeTabBg : 'bg-slate-100 text-slate-700'
+              }`}
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+              <span>المصدر والدليل</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setYearSubTab('distribution')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer whitespace-nowrap shrink-0 ${
+                yearSubTab === 'distribution' ? midanTheme.activeTabBg : 'bg-slate-100 text-slate-700'
+              }`}
+            >
+              <CalendarDays className="w-3.5 h-3.5" />
+              <span>التدرج السنوي</span>
+            </button>
+          </div>
+        )}
       </header>
 
       {/* Main Dynamic Workspace Views */}
@@ -628,17 +840,25 @@ export const App: React.FC = () => {
             setActiveSection(lvl);
             setYearSubTab(subTab);
           }}
-          onOpenLogbook={() => setActiveSection('logbook')}
-          onOpenSettings={() => setActiveSection('settings')}
+          onOpenLogbook={() => {
+            setLogbookInitialTimetable(false);
+            setActiveSection('logbook');
+          }}
+          onOpenTimetable={() => {
+            setLogbookInitialTimetable(true);
+            setActiveSection('logbook');
+          }}
+          onOpenDatabase={() => setActiveSection('database')}
+          onOpenTool={(tool) => setActiveTool(tool)}
           onOpenInfoModal={(tab) => setInfoModalTab(tab)}
           config={config}
-          curriculumBackground={curriculumBackground}
+          curriculumLessons={curriculumLessons}
         />
       )}
 
       {isYearSection && yearSubTab === 'memos' && (
         <div
-          className="flex-1 flex flex-col lg:flex-row relative overflow-hidden"
+          className="flex-1 flex flex-col lg:flex-row relative overflow-x-clip"
           style={{
             backgroundImage: `url(${curriculumBackground})`,
             backgroundSize: 'cover',
@@ -703,6 +923,7 @@ export const App: React.FC = () => {
             ta3alomList={ta3alomList}
             maqatiList={maqatiForLevel}
             showToast={showToast}
+            onOpen1amArchive={() => setYearSubTab('source')}
           />
 
           {/* Paper Canvas */}
@@ -736,8 +957,13 @@ export const App: React.FC = () => {
                 </label>
               )}
 
-              <div className="hidden sm:block text-gray-500 font-medium">
-                انقر على أي مربع في المذكرة للتعديل المباشر أو استخدم القائمة الجانبية
+              <div className="flex flex-wrap items-center gap-2">
+                <SelectionPenStrip
+                  settings={hwStyle}
+                  onNotify={showToast}
+                  onOpenCustomizer={() => setIsHandwritingModalOpen(true)}
+                  compact
+                />
               </div>
             </div>
 
@@ -765,7 +991,20 @@ export const App: React.FC = () => {
         <div className="flex-1 min-h-0 overflow-hidden">
           {selectedLevel === '1am' ? (
             <Suspense fallback={<SectionLoading />}>
-              <SourceMemo1AMViewer lessons={curriculumLessons} />
+              <SourceMemo1AMViewer
+                lessons={curriculumLessons}
+                onOpenMemoUnit={(lesson) => {
+                  setSelectedMaqta(lesson.maqta);
+                  setSelectedMawrid(lesson.mawrid);
+                  setSelectedTa3alom(lesson.ta3alom);
+                  setYearSubTab('memos');
+                  showToast(`تم فتح مذكرة ${lesson.memoNumber || ''}: ${lesson.ta3alom}`);
+                }}
+                onRecallToLogbook={() => {
+                  setActiveSection('logbook');
+                  showToast('تم الانتقال إلى الدفتر اليومي لاستدعاء موارد الحصة');
+                }}
+              />
             </Suspense>
           ) : selectedLevel === '2am' ? (
             <Suspense fallback={<SectionLoading />}>
@@ -850,6 +1089,7 @@ export const App: React.FC = () => {
             config={config}
             setConfig={setConfig}
             showToast={showToast}
+            initialOpenTimetable={logbookInitialTimetable}
           />
         </Suspense>
       )}
@@ -894,8 +1134,13 @@ export const App: React.FC = () => {
         onClose={() => setIsNavDrawerOpen(false)}
         activeSection={activeSection}
         onNavigate={(sec) => {
+          setLogbookInitialTimetable(false);
           setActiveSection(sec as MainSectionType);
           setYearSubTab('memos');
+        }}
+        onOpenTimetable={() => {
+          setLogbookInitialTimetable(true);
+          setActiveSection('logbook');
         }}
         onOpenInfoModal={(tab) => setInfoModalTab(tab)}
         onOpenTool={(tool) => setActiveTool(tool)}
@@ -919,6 +1164,11 @@ export const App: React.FC = () => {
         onPrint={handlePrint}
         onExportWord={handleExportWord}
         onDirectPrint={handleDirectPrint}
+      />
+      <HandwritingStylePanel
+        isOpen={isHandwritingModalOpen}
+        onClose={() => setIsHandwritingModalOpen(false)}
+        showToast={showToast}
       />
       <FirebaseDataSync />
     </div>

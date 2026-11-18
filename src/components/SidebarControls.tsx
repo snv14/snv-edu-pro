@@ -1,7 +1,13 @@
-import React, { useState } from 'react';
-import { GraduationCap, Layers, Columns, BookmarkCheck, Copy, Check } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { GraduationCap, Layers, Columns, BookmarkCheck, Copy, Check, FolderOpen, FlaskConical, Image as ImageIcon, ExternalLink } from 'lucide-react';
 import { LessonMemo, MemoConfig } from '../types';
 import { LEVELS, MAQATI_BY_LEVEL } from '../data/memos/lessonsData';
+import {
+  getExperimentsForLesson,
+  getMediaForLesson,
+  getTablesForLesson,
+  getWorksheetsForLesson,
+} from '../data/archive1am';
 
 interface SidebarControlsProps {
   selectedLevel: '1am' | '2am' | '3am' | '4am';
@@ -25,6 +31,7 @@ interface SidebarControlsProps {
   ta3alomList: string[];
   showToast: (msg: string) => void;
   maqatiList?: string[];
+  onOpen1amArchive?: () => void;
 }
 
 export const SidebarControls: React.FC<SidebarControlsProps> = ({
@@ -48,8 +55,21 @@ export const SidebarControls: React.FC<SidebarControlsProps> = ({
   ta3alomList,
   showToast,
   maqatiList: providedMaqatiList,
+  onOpen1amArchive,
 }) => {
   const [copiedIrsae, setCopiedIrsae] = useState(false);
+  const [previewImg, setPreviewImg] = useState<{ title: string; url: string } | null>(null);
+
+  const archive1amResources = useMemo(() => {
+    if (selectedLevel !== '1am' || !currentLesson?.sourceLearningUnitId) return null;
+    const id = currentLesson.sourceLearningUnitId;
+    return {
+      media: getMediaForLesson(id),
+      experiments: getExperimentsForLesson(id),
+      tables: getTablesForLesson(id),
+      worksheets: getWorksheetsForLesson(id),
+    };
+  }, [selectedLevel, currentLesson]);
 
   const handleCopyIrsae = () => {
     if (!currentLesson?.irsae) return;
@@ -62,73 +82,40 @@ export const SidebarControls: React.FC<SidebarControlsProps> = ({
   const maqatiList = providedMaqatiList || MAQATI_BY_LEVEL[selectedLevel] || [];
 
   return (
-    <aside id="sidebar-controls" className="w-full lg:w-[360px] bg-white border-l border-gray-200 lg:h-screen lg:sticky lg:top-0 overflow-y-auto shrink-0 z-10">
-      <div className="p-5 border-b border-gray-100 bg-[#fafafa]">
-        <div className="flex items-center gap-2 mb-1">
-          <div className="w-8 h-8 rounded-lg bg-[#c2185b] flex items-center justify-center text-white font-extrabold shadow-sm">
-            م
-          </div>
-          <h1 className="font-extrabold text-[17px] text-[#c2185b]">
-            المذكرة البيداغوجية الرقمية
-          </h1>
+    <aside id="sidebar-controls" className="w-full lg:w-[330px] bg-white border-l border-slate-200 lg:h-[calc(100vh-4rem)] lg:sticky lg:top-16 overflow-y-auto shrink-0 z-10">
+      <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <GraduationCap
+            className={`w-4 h-4 ${
+              selectedLevel === '1am'
+                ? 'text-sky-600'
+                : selectedLevel === '2am'
+                ? 'text-purple-600'
+                : selectedLevel === '3am'
+                ? 'text-teal-700'
+                : 'text-[#c2185b]'
+            }`}
+          />
+          <span className="font-extrabold text-[13px] text-slate-900">
+            إعدادات المذكرة والمحتوى
+          </span>
         </div>
-        <p className="text-[12px] text-gray-500">
-          مادة علوم الطبيعة والحياة - التعليم المتوسط
-        </p>
-      </div>
-
-      <div className="p-5 space-y-5">
-        {/* 1- المستوى الدراسي المحدد حسب الميدان */}
-        <div
-          className={`p-3.5 rounded-xl border ${
+        <span
+          className={`text-white text-[10.5px] font-bold px-2 py-0.5 rounded-md ${
             selectedLevel === '1am'
-              ? 'bg-sky-50/70 border-sky-200'
+              ? 'bg-sky-600'
               : selectedLevel === '2am'
-              ? 'bg-purple-50/70 border-purple-200'
+              ? 'bg-purple-600'
               : selectedLevel === '3am'
-              ? 'bg-teal-50/80 border-teal-300'
-              : 'bg-rose-50/70 border-rose-200'
+              ? 'bg-teal-700'
+              : 'bg-[#c2185b]'
           }`}
         >
-          <div className="flex items-center justify-between">
-            <span className="text-[12px] font-bold text-gray-600 flex items-center gap-1.5">
-              <GraduationCap
-                className={`w-4 h-4 ${
-                  selectedLevel === '1am'
-                    ? 'text-sky-600'
-                    : selectedLevel === '2am'
-                    ? 'text-purple-600'
-                    : selectedLevel === '3am'
-                    ? 'text-teal-700'
-                    : 'text-[#c2185b]'
-                }`}
-              />
-              المستوى الدراسي:
-            </span>
-            <span
-              className={`text-white text-[11px] font-black px-2.5 py-0.5 rounded-full shadow-2xs ${
-                selectedLevel === '1am'
-                  ? 'bg-sky-600'
-                  : selectedLevel === '2am'
-                  ? 'bg-purple-600'
-                  : selectedLevel === '3am'
-                  ? 'bg-teal-700 border border-amber-300/40'
-                  : 'bg-[#c2185b]'
-              }`}
-            >
-              {selectedLevel.toUpperCase()}
-            </span>
-          </div>
-          <p className="text-[14px] font-black text-gray-900 mt-1">
-            {selectedLevel === '4am'
-              ? 'السنة الرابعة متوسط (BEM)'
-              : selectedLevel === '3am'
-              ? 'السنة الثالثة متوسط'
-              : selectedLevel === '2am'
-              ? 'السنة الثانية متوسط'
-              : 'السنة الأولى متوسط'}
-          </p>
-        </div>
+          {selectedLevel.toUpperCase()}
+        </span>
+      </div>
+
+      <div className="p-4 space-y-3.5">
 
         {/* نموذج تخطيط المذكرة (مفصل أو مدمج بدون خانة نشاط المتعلم) */}
         <div>
@@ -211,7 +198,7 @@ export const SidebarControls: React.FC<SidebarControlsProps> = ({
               <span
                 className={`w-2.5 h-2.5 rounded-full ${
                   selectedLevel === '1am'
-                    ? (currentLesson?.midan === 'الإنسان والصحة' ? 'bg-sky-600' : 'bg-emerald-600')
+                    ? (currentLesson?.midan?.includes('الإنسان والصحة') ? 'bg-sky-600' : 'bg-emerald-600')
                     : selectedLevel === '2am'
                     ? 'bg-purple-600'
                     : selectedLevel === '3am'
@@ -375,10 +362,98 @@ export const SidebarControls: React.FC<SidebarControlsProps> = ({
         )}
 
 
+        {/* 8- استدعاء موارد الأرشيف (1م فقط) */}
+        {selectedLevel === '1am' && archive1amResources && (
+          <div className="border-t border-gray-200 pt-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[12.5px] font-black text-emerald-900 flex items-center gap-1.5">
+                <FolderOpen className="w-4 h-4 text-emerald-700" />
+                <span>موارد المذكرة #{currentLesson?.memoNumber} (ص {currentLesson?.sourcePage})</span>
+              </span>
+              {onOpen1amArchive && (
+                <button
+                  type="button"
+                  onClick={onOpen1amArchive}
+                  className="inline-flex items-center gap-1 text-[10.5px] font-black px-2 py-1 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100 transition cursor-pointer"
+                >
+                  <span>الأرشيف</span>
+                  <ExternalLink className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+
+            <div className="p-2.5 rounded-xl bg-emerald-50/50 border border-emerald-200 space-y-2 text-[11px]">
+              <div className="flex flex-wrap gap-1.5 font-bold">
+                <span className="px-2 py-0.5 rounded bg-white border border-indigo-200 text-indigo-800 inline-flex items-center gap-1">
+                  <FlaskConical className="w-3 h-3" />
+                  {archive1amResources.experiments.length} تجربة
+                </span>
+                <span className="px-2 py-0.5 rounded bg-white border border-cyan-200 text-cyan-800 inline-flex items-center gap-1">
+                  <ImageIcon className="w-3 h-3" />
+                  {archive1amResources.media.length} صور
+                </span>
+                <span className="px-2 py-0.5 rounded bg-white border border-amber-200 text-amber-800">
+                  {archive1amResources.tables.length} جداول
+                </span>
+                {archive1amResources.worksheets.length > 0 && (
+                  <span className="px-2 py-0.5 rounded bg-white border border-sky-200 text-sky-800">
+                    {archive1amResources.worksheets.length} أوراق عمل
+                  </span>
+                )}
+              </div>
+
+              {archive1amResources.media.length > 0 && (
+                <div className="grid grid-cols-3 gap-1.5 pt-1">
+                  {archive1amResources.media.slice(0, 6).map((med) => (
+                    <button
+                      key={med.id}
+                      type="button"
+                      onClick={() => setPreviewImg({ title: med.title, url: med.imageUrl })}
+                      className="rounded-lg border border-slate-200 bg-white p-1 hover:border-emerald-400 transition cursor-pointer"
+                      title={med.title}
+                    >
+                      <img
+                        src={med.imageUrl}
+                        alt={med.title}
+                        className="w-full h-11 object-contain rounded"
+                        loading="lazy"
+                      />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
       </div>
 
+      {previewImg && (
+        <div
+          className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
+          onClick={() => setPreviewImg(null)}
+        >
+          <div
+            className="bg-white rounded-2xl p-4 max-w-2xl w-full space-y-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-2 border-b pb-2">
+              <span className="font-black text-sm text-slate-900">{previewImg.title}</span>
+              <button
+                type="button"
+                onClick={() => setPreviewImg(null)}
+                className="px-2.5 py-1 rounded-lg bg-slate-100 text-xs font-bold cursor-pointer"
+              >
+                إغلاق
+              </button>
+            </div>
+            <img src={previewImg.url} alt={previewImg.title} className="max-h-[70vh] mx-auto object-contain rounded" />
+          </div>
+        </div>
+      )}
+
       <div className="p-4 border-t border-gray-200 text-[11px] text-gray-400 leading-4">
-        النموذج الرسمي المعتمد للمذكرات البيداغوجية لعلوم الطبيعة والحياة (1م و 3م) — قابل للتعديل المباشر والتصدير.
+        النموذج الرسمي المعتمد للمذكرات البيداغوجية لعلوم الطبيعة والحياة (1م إلى 4م) — قابل للتعديل المباشر والتصدير.
       </div>
     </aside>
   );

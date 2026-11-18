@@ -12,6 +12,9 @@ import {
   overallTotal,
   toNumber,
 } from '../services/correctionMemoModel';
+import { useHandwritingStyle } from '../hooks/useHandwritingStyle';
+import { getEffectiveExportFontFamily, isHandwritingActiveFor } from '../services/handwritingStyle';
+import { HandwrittenText } from './HandwrittenText';
 
 const SOURCE_COLOR: Record<MemoFieldSource, string> = {
   platform: '#0f766e',
@@ -98,10 +101,18 @@ export const CorrectionMemoSheet: React.FC<SheetProps> = ({ data, editable = tru
     });
   };
 
+  const { settings: hwStyle } = useHandwritingStyle();
+  const hwActive = isHandwritingActiveFor('memos', hwStyle);
+  const sheetFont = getEffectiveExportFontFamily('pdf', hwStyle, 'memos');
+
   const total = overallTotal(data);
 
   return (
-    <div dir="rtl" className="cm-sheet text-slate-900" style={{ fontFamily: 'Cairo, Tajawal, Arial, sans-serif' }}>
+    <div
+      dir="rtl"
+      className={`cm-sheet text-slate-900 ${hwActive ? 'hw-notebook-scope hw-ruled-paper' : ''}`}
+      style={{ fontFamily: sheetFont, color: hwActive ? hwStyle.palette.bodyBlack : undefined }}
+    >
       <div className="text-center leading-6">
         <div className="font-bold text-[13px]">الجمهورية الجزائرية الديمقراطية الشعبية</div>
         <div className="font-bold text-[13px]">وزارة التربية الوطنية</div>
@@ -119,11 +130,23 @@ export const CorrectionMemoSheet: React.FC<SheetProps> = ({ data, editable = tru
       </div>
 
       <div className="mt-3 text-center">
-        <div className="text-[16px] font-black">{data.title}</div>
-        <div className="text-[12.5px] font-bold">{data.examType} {data.term} في مادة علوم الطبيعة والحياة</div>
+        <div
+          className={`text-[16px] font-black ${hwActive ? 'hw-title-accent' : ''}`}
+          style={hwActive ? { color: hwStyle.palette.titleBlue, textDecorationColor: hwStyle.palette.subRed } : undefined}
+        >
+          {data.title}
+        </div>
+        <div className="text-[12.5px] font-bold" style={hwActive ? { color: hwStyle.palette.subRed } : undefined}>
+          {data.examType} {data.term} في مادة علوم الطبيعة والحياة
+        </div>
       </div>
 
-      <h3 className="mt-4 mb-1 text-[12.5px] font-black">الموارد المعرفية المستهدفة في الاختبار</h3>
+      <h3
+        className="mt-4 mb-1 text-[12.5px] font-black"
+        style={hwActive ? { color: hwStyle.palette.titleBlue } : undefined}
+      >
+        الموارد المعرفية المستهدفة في الاختبار
+      </h3>
       <table className="w-full border-collapse text-[12px]" style={{ tableLayout: 'fixed' }}>
         <thead>
           <tr className="bg-[#dbe4f2]">
@@ -154,7 +177,7 @@ export const CorrectionMemoSheet: React.FC<SheetProps> = ({ data, editable = tru
       </table>
 
       <div className="mt-4 flex items-center justify-between text-[12.5px] font-black">
-        <div className="flex items-baseline gap-1">
+        <div className="flex items-baseline gap-1" style={hwActive ? { color: hwStyle.palette.titleBlue } : undefined}>
           <span>الجزء الأول:</span>
           <span className="w-16 inline-block">
             <Cell value={data.part1DeclaredPoints} editable={editable} onChange={value => update(draft => { draft.part1DeclaredPoints = value; })} align="center" source="teacher" />
@@ -232,7 +255,7 @@ export const CorrectionMemoSheet: React.FC<SheetProps> = ({ data, editable = tru
       <div className="cm-page-break" />
 
       <div className="mt-3 flex items-center justify-between text-[12.5px] font-black">
-        <div className="flex items-baseline gap-1">
+        <div className="flex items-baseline gap-1" style={hwActive ? { color: hwStyle.palette.titleBlue } : undefined}>
           <span>الجزء الثاني: الوضعية الإدماجية (</span>
           <span className="w-14 inline-block">
             <Cell value={data.integration.declaredPoints} editable={editable} onChange={value => update(draft => { draft.integration.declaredPoints = value; })} align="center" source="teacher" />
@@ -309,8 +332,8 @@ export const CorrectionMemoSheet: React.FC<SheetProps> = ({ data, editable = tru
       </table>
 
       <div className="mt-4">
-        <h3 className="text-[12.5px] font-black mb-1">التصحيح البعدي وتحليل النتائج</h3>
-        <div className="text-[12px] font-bold mb-1">1) نتائج القسم:</div>
+        <h3 className="text-[12.5px] font-black mb-1" style={hwActive ? { color: hwStyle.palette.defGreen } : undefined}>التصحيح البعدي وتحليل النتائج</h3>
+        <div className="text-[12px] font-bold mb-1" style={hwActive ? { color: hwStyle.palette.subRed } : undefined}>1) نتائج القسم:</div>
         <table className="w-full border-collapse text-[12px]" style={{ tableLayout: 'fixed' }}>
           <thead>
             <tr className="bg-[#dbe4f2]">
@@ -380,12 +403,16 @@ export const CorrectionMemoSheet: React.FC<SheetProps> = ({ data, editable = tru
       </div>
 
       <div className="mt-4 border-t-2 border-slate-700 pt-2">
-        <div className="text-[12.5px] font-black mb-1">ملاحظات خاصة بالتصحيح</div>
+        <div className="text-[12.5px] font-black mb-1" style={hwActive ? { color: hwStyle.palette.noteOrange } : undefined}>ملاحظات خاصة بالتصحيح</div>
         {data.notes.map((note, index) => (
           <div key={index} className="flex items-baseline gap-1 text-[12px]">
-            <span className="font-bold">–</span>
+            <span className="font-bold" style={hwActive ? { color: hwStyle.palette.noteOrange } : undefined}>–</span>
             <span className="flex-1 border-b border-dotted border-slate-400">
-              <Cell value={note} editable={editable} onChange={value => update(draft => { draft.notes[index] = value; })} />
+              {editable ? (
+                <Cell value={note} editable={editable} onChange={value => update(draft => { draft.notes[index] = value; })} />
+              ) : (
+                <HandwrittenText text={note} settings={hwStyle} active={hwActive} defaultRole="noteOrange" />
+              )}
             </span>
           </div>
         ))}
