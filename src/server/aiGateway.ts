@@ -26,9 +26,9 @@ const providerOrder = (): ServerAIProvider[] => {
 };
 
 async function callGemini(prompt: string): Promise<string> {
-  const model = process.env.GEMINI_MODEL && !process.env.GEMINI_MODEL.includes('2.5') && !process.env.GEMINI_MODEL.includes('2.0') && !process.env.GEMINI_MODEL.includes('1.5')
-    ? process.env.GEMINI_MODEL
-    : 'gemini-3.8-flash';
+  // النموذج الافتراضي المعتمد؛ لا يُقبل GEMINI_MODEL إذا كان إصداراً قديماً غير مدعوم
+  const envModel = process.env.GEMINI_MODEL;
+  const model = envModel && !/(^|-)(1\.5|2\.0|2\.5)(-|$)/.test(envModel) ? envModel : 'gemini-flash-latest';
   const ai = new GoogleGenAI({
     apiKey: getGeminiApiKey(),
     httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }

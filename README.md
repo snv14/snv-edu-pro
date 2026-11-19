@@ -33,7 +33,7 @@ VITE_FIREBASE_STORAGE_BUCKET=
 VITE_FIREBASE_MESSAGING_SENDER_ID=
 VITE_FIREBASE_APP_ID=
 GEMINI_API_KEY=
-GEMINI_MODEL=gemini-3.8-flash
+GEMINI_MODEL=gemini-flash-latest
 ```
 
 `VITE_FIREBASE_DATABASE_ID` اختياري، ويُستخدم فقط عند استعمال قاعدة Firestore مسماة. أما `GEMINI_API_KEY` فهو متغير خادمي ولا يجب تسميته `VITE_GEMINI_API_KEY` إذا كان الهدف إبقاء المفتاح خارج حزمة المتصفح.

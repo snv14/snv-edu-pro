@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { type NextFunction, type Request as ExpressRequest, type Response as ExpressResponse } from 'express';
 import path from 'path';
 import dotenv from 'dotenv';
 import { GoogleGenAI, createPartFromUri } from '@google/genai';
@@ -7,16 +7,29 @@ import fs from 'node:fs';
 import { buildGeminiSystemPrompt } from '../services/geminiPrompts';
 import { generateTextWithGateway, getAIProviderStatus } from './aiGateway';
 import { sourcePriorityOf } from '../services/aiSourcePriority';
+import { createRateLimiter, publicError, securityHeaders } from './security';
 
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 export const apiApp = express();
 
+// حماية الخادم عند تشغيله بشكل مستقل (apiApp مباشرة): ترويسات أمان، ثقة الوسيط، وتحديد المعدل
+apiApp.disable('x-powered-by');
+if (process.env.TRUST_PROXY) apiApp.set('trust proxy', Number(process.env.TRUST_PROXY) || 1);
+apiApp.use(securityHeaders);
+
+// تحديد المعدّل قبل قراءة الجسم لمنع استنزاف مفاتيح الذكاء الاصطناعي وذاكرة الخادم
+const generalLimiter = createRateLimiter({ windowMs: 60_000, max: 240 });
+const aiLimiter = createRateLimiter({ windowMs: 60_000, max: Number(process.env.AI_RATE_LIMIT_PER_MINUTE) || 20 });
+apiApp.use('/api', generalLimiter);
+apiApp.use('/api/gemini', aiLimiter);
+
 const getValidGeminiModel = (): string => {
+  // النموذج الافتراضي المعتمد؛ يُقبل GEMINI_MODEL فقط إذا لم يكن إصداراً قديماً غير مدعوم
   const model = process.env.GEMINI_MODEL;
-  if (!model || model.includes('2.5') || model.includes('2.0') || model.includes('1.5')) {
-    return 'gemini-3.8-flash';
+  if (!model || /(^|-)(1\.5|2\.0|2\.5)(-|$)/.test(model)) {
+    return 'gemini-flash-latest';
   }
   return model;
 };
@@ -31,6 +44,14 @@ const getKnowledgeSnapshot = () => {
 };
 
 apiApp.use(express.json({ limit: '40mb' }));
+
+// أخطاء قراءة الجسم (JSON غير صالح أو أكبر من الحد) دون كشف تفاصيل داخلية
+apiApp.use((err: any, _req: ExpressRequest, res: ExpressResponse, next: NextFunction) => {
+  if (!err) return next();
+  if (err.type === 'entity.too.large') return res.status(413).json({ error: 'حجم الطلب كبير جداً.' });
+  if (err.type === 'entity.parse.failed' || err instanceof SyntaxError) return res.status(400).json({ error: 'صيغة الطلب غير صالحة.' });
+  return res.status(400).json({ error: 'طلب غير صالح.' });
+});
 
 // حالة مزودي الذكاء الاصطناعي المتاحين على الخادم.
 apiApp.get('/api/ai/providers', (_req, res) => res.json(getAIProviderStatus()));
@@ -105,7 +126,7 @@ apiApp.post('/api/gemini/generate', async (req, res) => {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('[AI Gateway Error]:', message);
-    return res.status(500).json({ error: message });
+    return res.status(500).json({ error: publicError(message) });
   }
 });
 
@@ -251,7 +272,7 @@ apiApp.post('/api/gemini/smart-assistant', async (req, res) => {
         });
       } catch (fallbackError: any) {
         return res.status(503).json({
-          error: `تعذر الاتصال بالمزود النصي الاحتياطي: ${fallbackError?.message || 'خطأ غير معروف'}. يرجى إضافة GEMINI_API_KEY على الخادم أو التحقق من مفاتيح المزودات البديلة.`,
+          error: `تعذر الاتصال بالمزود النصي الاحتياطي: ${publicError(fallbackError?.message, 'خطأ غير معروف')}. يرجى إضافة GEMINI_API_KEY على الخادم أو التحقق من مفاتيح المزودات البديلة.`,
         });
       }
     }
@@ -355,7 +376,7 @@ apiApp.post('/api/gemini/smart-assistant', async (req, res) => {
         code: 'GEMINI_AUTH_ERROR',
       });
     }
-    return res.status(500).json({ error: message });
+    return res.status(500).json({ error: publicError(message) });
   }
 });
 
@@ -479,7 +500,7 @@ apiApp.post('/api/gemini/analyze-correction-source', async (req, res) => {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('[Correction source analysis error]:', message);
-    return res.status(500).json({ error: message });
+    return res.status(500).json({ error: publicError(message) });
   }
 });
 
@@ -625,6 +646,6 @@ apiApp.post('/api/gemini/generate-pedagogical-note', async (req, res) => {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('[Gemini Pedagogical Note Server Error]:', message);
-    return res.status(500).json({ error: message });
+    return res.status(500).json({ error: publicError(message) });
   }
 });
