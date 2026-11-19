@@ -57,6 +57,8 @@ import { SelectionPenStrip } from './HandwrittenText';
 import { HandwritingStylePanel } from './HandwritingStylePanel';
 import { recallActivityBundle } from '../data/archive1am';
 import type { ActivityRecallBundle } from '../data/memos/archiveSchema';
+import { PageTemplateSwitcher } from './ActionMenu';
+import { usePageTemplate } from '../hooks/usePageTemplate';
 
 interface DailyLogbookProps {
   selectedLevel?: '1am' | '2am' | '3am' | '4am';
@@ -2197,7 +2199,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       <div
         id={isPreview ? "preview-page-intro" : "page-intro"}
         data-preview-export-page="true"
-        className={isPreview ? "print-page notebook-intro-page shadow-[0_25px_80px_rgba(0,0,0,0.5)] bg-white overflow-hidden mx-auto mb-6 flex flex-col justify-between" : "print-page notebook-intro-page shadow-[0_20px_60px_rgba(0,0,0,0.12)] bg-white overflow-hidden mx-auto mb-6 flex flex-col justify-between"}
+        className={isPreview ? "print-page notebook-intro-page page-sheet page-sheet--logbook-intro-preview overflow-hidden mx-auto mb-6 flex flex-col justify-between" : "print-page notebook-intro-page page-sheet page-sheet--logbook-intro overflow-hidden mx-auto mb-6 flex flex-col justify-between"}
         style={{ width: `${pageDimensions.w}mm`, height: `${pageDimensions.h}mm`, minHeight: `${pageDimensions.h}mm`, maxWidth: '100%' }}
         dir="rtl"
       >
@@ -2324,7 +2326,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
   const renderCoverFirstPage = () => (
     <div
       data-preview-export-page="true"
-      className="print-page cover-page shadow-[0_20px_60px_rgba(0,0,0,0.12)] rounded-[2px] border border-zinc-200 overflow-hidden mx-auto mb-6 flex flex-col justify-between"
+      className="print-page cover-page page-sheet page-sheet--logbook-cover overflow-hidden mx-auto mb-6 flex flex-col justify-between"
       style={{
         width: `${pageDimensions.w}mm`,
         height: `${pageDimensions.h}mm`,
@@ -2575,15 +2577,14 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       <div
         key="front-page"
         className={
-          isPreview 
-            ? "print-page bg-white shadow-[0_25px_80px_rgba(0,0,0,0.5),0_0_0_1px_rgba(0,0,0,0.1)] rounded-[2px] overflow-hidden shrink-0 flex flex-col" 
-            : "print-page bg-white shadow-[0_20px_60px_rgba(0,0,0,0.12)] rounded-[2px] border border-zinc-200 overflow-hidden mx-auto mb-8 flex flex-col"
+          isPreview
+            ? "print-page page-sheet page-sheet--logbook-front-preview overflow-hidden shrink-0 flex flex-col"
+            : "print-page page-sheet page-sheet--logbook-front overflow-hidden mx-auto mb-8 flex flex-col"
         }
         style={{
           width: `${pageDimensions.w}mm`,
           minHeight: `${pageDimensions.h}mm`,
           maxWidth: isPreview ? undefined : '100%',
-          backgroundColor: '#ffffff',
           // الصفحة الأولى بدون مربعات صغيرة؛ شبكة الكتابة تُستخدم فقط في الصفحات الداخلية.
         }}
       >
@@ -2717,6 +2718,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
   };
 
   const { settings: hwStyle } = useHandwritingStyle();
+  const { template: pageStyleTemplate } = usePageTemplate();
   const [isHwPanelOpen, setIsHwPanelOpen] = useState(false);
   const hwActive = isHandwritingActiveFor('logbook', hwStyle);
   const logbookFontFamily = getEffectiveExportFontFamily('pdf', hwStyle, 'logbook');
@@ -2724,7 +2726,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
   return (
     <div
       dir="rtl"
-      className={`min-h-screen bg-[#edf9f6] grid-paper-bg text-zinc-900 selection:bg-[#006233]/20 ${hwActive ? 'hw-notebook-scope' : ''}`}
+      className={`min-h-screen page-desk page-desk--logbook-shell ${pageStyleTemplate === 'classic' ? 'grid-paper-bg' : ''} text-zinc-900 selection:bg-[#006233]/20 ${hwActive ? 'hw-notebook-scope' : ''}`}
       style={{ fontFamily: logbookFontFamily }}
     >
       {isAddLessonModalOpen && (
@@ -2879,9 +2881,15 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
-          .logbook-content-page, [data-logbook-content-page="true"] {
+          html[data-page-template="classic"] .logbook-content-page,
+          html[data-page-template="classic"] [data-logbook-content-page="true"] {
             border: 2px solid #0284c7 !important;
             border-radius: 12px !important;
+          }
+          html:not([data-page-template="classic"]) .logbook-content-page,
+          html:not([data-page-template="classic"]) [data-logbook-content-page="true"] {
+            border: none !important;
+            border-radius: 0 !important;
           }
           .notebook-intro-page {
             display: flex !important;
@@ -2919,13 +2927,13 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
             height: auto !important;
           }
         }
-        .cover-page { background-color: #fffdf7; background-image: radial-gradient(circle at 15% 10%, rgba(6,78,59,.08), transparent 28%), radial-gradient(circle at 85% 20%, rgba(210,16,52,.06), transparent 25%); }
+        html[data-page-template="classic"] .cover-page { background-color: #fffdf7; background-image: radial-gradient(circle at 15% 10%, rgba(6,78,59,.08), transparent 28%), radial-gradient(circle at 85% 20%, rgba(210,16,52,.06), transparent 25%); }
         .logbook-table { border-collapse: collapse !important; }
         .logbook-table th, .logbook-table td { border: 1.5px solid #64748b !important; }
         .preview-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
         .preview-scroll::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
         .preview-scroll::-webkit-scrollbar-track { background: #111827; }
-        .grid-paper-bg {
+        html[data-page-template="classic"] .grid-paper-bg {
           background-color: #ffffff;
           background-image: linear-gradient(rgba(148,163,184,.22) 1px, transparent 1px),
                             linear-gradient(90deg, rgba(148,163,184,.22) 1px, transparent 1px);
@@ -3732,7 +3740,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
         </aside>
 
         {/* Main Printable Area */}
-        <main className={`bg-[#edf9f6] p-2 md:p-6 lg:p-8 ${isPreviewModalOpen ? 'print:hidden' : ''}`}>
+        <main className={`page-desk page-desk--logbook p-2 md:p-6 lg:p-8 ${isPreviewModalOpen ? 'print:hidden' : ''}`}>
           <div id="pages-start" className="no-print mb-4 flex flex-wrap items-center justify-between gap-2 text-[12px] text-zinc-600">
             <div className="flex items-center gap-2">
               <FileStack className="w-4 h-4 text-[#064e3b]" />
@@ -3741,11 +3749,14 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                 {paginatedPages.length > 0 ? formatPageNumberLabel(0, paginatedPages.length) : 'جاهز للتوليد'}
               </span>
             </div>
-            {assignedLevels.length > 0 && (
-              <span className="bg-white border border-zinc-300 px-2.5 py-1 rounded-full text-[11px] font-bold text-[#064e3b]">
-                الأقسام المسندة: {assignedLevels.join('، ')}
-              </span>
-            )}
+            <div className="flex flex-wrap items-center gap-2">
+              <PageTemplateSwitcher />
+              {assignedLevels.length > 0 && (
+                <span className="bg-white border border-zinc-300 px-2.5 py-1 rounded-full text-[11px] font-bold text-[#064e3b]">
+                  الأقسام المسندة: {assignedLevels.join('، ')}
+                </span>
+              )}
+            </div>
           </div>
 
           {orderedRows.length > 0 && (
@@ -4146,7 +4157,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       )}
 
       {isPreviewModalOpen && (
-        <div className={`fixed inset-0 z-[100] flex flex-col bg-[#1f2937] print-preview-root print-orientation-${orientation}`} dir="rtl">
+        <div className={`fixed inset-0 z-[100] flex flex-col page-desk page-desk--logbook-preview print-preview-root print-orientation-${orientation}`} dir="rtl">
           {/* Preview Modal Header */}
           <div className="preview-controls h-[56px] bg-[#111827] border-b border-zinc-700 flex items-center justify-between px-3 md:px-5 shrink-0">
             <div className="flex items-center gap-3">
@@ -4169,6 +4180,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
             </div>
 
             <div className="flex items-center gap-1.5 md:gap-2">
+              <PageTemplateSwitcher className="hidden md:inline-flex" />
               <button
                 type="button"
                 onClick={() => setIsHwPanelOpen(true)}
@@ -4259,23 +4271,25 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
           </div>
 
           {/* Preview Scrollable Stage */}
-          <div className="flex-1 overflow-auto preview-scroll p-4 md:p-8 bg-[#1f2937]">
+          <div className="flex-1 overflow-auto preview-scroll p-4 md:p-8 page-desk page-desk--logbook-preview">
             {paginatedPages.length === 0 ? (
               <div className="min-h-[60vh] flex flex-col items-center justify-center text-center">
-                <div className="w-20 h-20 rounded-full bg-[#111827] border border-zinc-700 grid place-items-center text-[32px] mb-4">
-                  📄
+                <div className="bg-[#1f2937] text-white rounded-2xl p-8 max-w-md mx-auto my-8 shadow-lg flex flex-col items-center">
+                  <div className="w-20 h-20 rounded-full bg-[#111827] border border-zinc-700 grid place-items-center text-[32px] mb-4">
+                    📄
+                  </div>
+                  <h3 className="text-white font-extrabold text-[18px]">لا يوجد دفتر للمعاينة</h3>
+                  <p className="text-zinc-300 text-[13px] mt-2 max-w-[320px] leading-6">
+                    يجب توليد الدفتر أولاً من لوحة التحكم. اضبط استعمال الزمن والمدة ثم اضغط توليد الدفتر الذكي.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setIsPreviewModalOpen(false)}
+                    className="mt-6 bg-white text-zinc-900 px-6 py-2 rounded-full text-[13px] font-bold cursor-pointer hover:bg-zinc-100"
+                  >
+                    العودة وضبط الجدول
+                  </button>
                 </div>
-                <h3 className="text-white font-extrabold text-[18px]">لا يوجد دفتر للمعاينة</h3>
-                <p className="text-zinc-400 text-[13px] mt-2 max-w-[320px] leading-6">
-                  يجب توليد الدفتر أولاً من لوحة التحكم. اضبط استعمال الزمن والمدة ثم اضغط توليد الدفتر الذكي.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setIsPreviewModalOpen(false)}
-                  className="mt-6 bg-white text-zinc-900 px-6 py-2 rounded-full text-[13px] font-bold cursor-pointer hover:bg-zinc-100"
-                >
-                  العودة وضبط الجدول
-                </button>
               </div>
             ) : (
               <div

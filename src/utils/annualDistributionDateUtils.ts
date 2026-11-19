@@ -300,9 +300,9 @@ export function syncCalendarToAllLevels(
 
     const levels: ('1am' | '2am' | '3am' | '4am')[] = ['1am', '2am', '3am', '4am'];
     for (const lvl of levels) {
-      // The 2026–2027 second-year reference is monthly, not calendar-generated.
+      // The 2026–2027 first-year and second-year references are monthly, not calendar-generated.
       // Leave even older saved rows intact until the migration can back them up.
-      if (lvl === '2am') continue;
+      if (lvl === '1am' || lvl === '2am') continue;
       const prevData = existing[lvl] || {};
       const baseRows = (Array.isArray(prevData.items) && prevData.items.length > 0)
         ? prevData.items

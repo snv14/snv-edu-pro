@@ -56,6 +56,7 @@ export const generateDistributionPdf = async (
     page.style.margin = "0";
     page.style.padding = "10mm";
     page.style.boxShadow = "none";
+    page.style.border = "none";
     page.style.borderRadius = "0";
     page.style.background = "#ffffff";
     page.style.backdropFilter = "none";

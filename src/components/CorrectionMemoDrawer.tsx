@@ -13,6 +13,7 @@ import { importCorrectionFile, isSupportedCorrectionFile, readFileAsDataUrl } fr
 import { applyCorrectionSuggestions, suggestAnswersForExercises, CorrectionSuggestionsResult } from '../services/correctionMemoAi';
 import { exportCorrectionMemoDataToDocx, exportCorrectionMemoToPdf, printCorrectionMemo } from '../utils/correctionMemoExport';
 import { CorrectionMemoSheet, SourceLegend } from './CorrectionMemoSheet';
+import { PageTemplateSwitcher } from './ActionMenu';
 
 export interface CorrectionMeta {
   field: string;
@@ -201,7 +202,7 @@ export const CorrectionMemoDrawer: React.FC<{
   return (
     <div className="fixed inset-0 z-[60] bg-black/45 flex justify-end no-print-shell" onClick={onClose}>
       <aside
-        className="w-full max-w-6xl h-full bg-[#eef4f3] shadow-2xl overflow-y-auto cm-print-root"
+        className="w-full max-w-6xl h-full page-desk page-desk--correction shadow-2xl overflow-y-auto cm-print-root"
         dir="rtl"
         onClick={event => event.stopPropagation()}
         aria-label="مذكرة التصحيح"
@@ -276,6 +277,7 @@ export const CorrectionMemoDrawer: React.FC<{
             <button type="button" onClick={() => setShowPreview(value => !value)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-[11.5px] font-black">
               {showPreview ? 'إخفاء المعاينة' : 'إظهار المعاينة'}
             </button>
+            <PageTemplateSwitcher />
             <span className="flex-1" />
             <SourceLegend />
           </div>
@@ -414,7 +416,7 @@ export const CorrectionMemoDrawer: React.FC<{
 
         {showPreview && (
           <div className="p-3">
-            <div ref={sheetRef} className="bg-white shadow-xl rounded-xl mx-auto" style={{ maxWidth: '210mm', padding: '12mm' }}>
+            <div ref={sheetRef} className="page-sheet page-sheet--correction mx-auto" style={{ maxWidth: '210mm', padding: '12mm' }}>
               <CorrectionMemoSheet data={data} editable onChange={mutate} />
             </div>
           </div>

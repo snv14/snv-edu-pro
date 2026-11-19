@@ -39,8 +39,23 @@ export const HandwrittenText: React.FC<HandwrittenTextProps> = ({
   );
 
   const Tag = as;
+  const handlePaste = (e: React.ClipboardEvent<HTMLElement>) => {
+    e.preventDefault();
+    const plain = e.clipboardData?.getData('text/plain') || '';
+    if (typeof document.execCommand === 'function') {
+      document.execCommand('insertText', false, plain);
+    } else {
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0) {
+        const range = sel.getRangeAt(0);
+        range.deleteContents();
+        range.insertNode(document.createTextNode(plain));
+        range.collapse(false);
+      }
+    }
+  };
   const editableProps = editable
-    ? { contentEditable: 'plaintext-only' as const, suppressContentEditableWarning: true }
+    ? { contentEditable: 'plaintext-only' as const, suppressContentEditableWarning: true, onPaste: handlePaste }
     : {};
 
   return (

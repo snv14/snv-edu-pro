@@ -56,7 +56,20 @@ export async function exportCorrectionMemoToPdf(element: HTMLElement, title: str
   applyHandwritingCssVars(hwStyle);
   if (document.fonts?.ready) await document.fonts.ready;
 
-  const canvas = await safeHtml2Canvas(element, { scale: 2, useCORS: true, backgroundColor: '#fff', onclone: sanitizeOklchForHtml2Canvas });
+  const canvas = await safeHtml2Canvas(element, {
+    scale: 2,
+    useCORS: true,
+    backgroundColor: '#fff',
+    onclone: (clonedDoc, clonedEl) => {
+      sanitizeOklchForHtml2Canvas(clonedDoc);
+      if (clonedEl instanceof HTMLElement) {
+        clonedEl.style.boxShadow = 'none';
+        clonedEl.style.border = 'none';
+        clonedEl.style.borderRadius = '0';
+        clonedEl.style.backgroundColor = '#ffffff';
+      }
+    },
+  });
   const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
   const pageW = 210, pageH = 297;
   const pxPerMm = canvas.width / pageW;

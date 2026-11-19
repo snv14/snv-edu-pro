@@ -28,9 +28,28 @@ export const TealLogSheetTemplate: React.FC<DailyLogSheetProps> = ({
   };
   const focus = (event: React.FocusEvent<HTMLElement>) => { event.currentTarget.dataset.originalText = event.currentTarget.innerText.trim(); };
   const rule = 'border-l border-b border-[#86bec3] px-1 py-1 align-top';
+  const handlePlainTextPaste = (e: React.ClipboardEvent<HTMLElement>) => {
+    const target = e.target as HTMLElement | null;
+    if (!target || !target.isContentEditable) return;
+    e.preventDefault();
+    const plain = e.clipboardData?.getData('text/plain') || '';
+    if (typeof document.execCommand === 'function') {
+      document.execCommand('insertText', false, plain);
+    } else {
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0) {
+        const range = sel.getRangeAt(0);
+        range.deleteContents();
+        range.insertNode(document.createTextNode(plain));
+        range.collapse(false);
+      }
+    }
+  };
+
   return (
     <div id={`${idPrefix}-${pageIndex}`} data-preview-export-page="true" data-logbook-content-page="true"
-      className={`print-page logbook-content-page teal-logbook-page ${hwActive ? 'hw-notebook-scope' : ''} relative mx-auto mb-6 overflow-hidden shadow-lg bg-white text-zinc-900`}
+      onPaste={handlePlainTextPaste}
+      className={`print-page logbook-content-page teal-logbook-page page-sheet page-sheet--logbook-teal ${hwActive ? 'hw-notebook-scope' : ''} relative mx-auto mb-6 overflow-hidden text-zinc-900`}
       style={{ width: `${pageDimensions.w}mm`, height: `${pageDimensions.h}mm`, minHeight: `${pageDimensions.h}mm`, maxWidth: '100%', direction: 'rtl', fontFamily: pageFontFamily }}>
       <svg aria-hidden="true" viewBox="0 0 1200 850" preserveAspectRatio="none" style={{position:'absolute', inset:0, width:'100%', height:'100%', pointerEvents:'none'}}>
         <defs><pattern id={`teal-stripes-${idPrefix}-${pageIndex}`} patternUnits="userSpaceOnUse" width="110" height="110" patternTransform="rotate(45)">

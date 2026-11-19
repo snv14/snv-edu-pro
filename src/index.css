@@ -292,11 +292,18 @@ html[data-hw-enabled="true"] .hw-notebook-scope .memo-diagram-canvas svg tspan {
     font-family: var(--hw-font, 'Playpen Sans Arabic', 'Tajawal', 'Cairo', system-ui, sans-serif) !important;
   }
 
-  .print-preview-root .logbook-content-page,
-  .print-page.logbook-content-page,
-  [data-logbook-content-page="true"] {
+  html[data-page-template="classic"] .print-preview-root .logbook-content-page,
+  html[data-page-template="classic"] .print-page.logbook-content-page,
+  html[data-page-template="classic"] [data-logbook-content-page="true"] {
     border: 2px solid #0284c7 !important;
     border-radius: 12px !important;
+  }
+
+  html:not([data-page-template="classic"]) .print-preview-root .logbook-content-page,
+  html:not([data-page-template="classic"]) .print-page.logbook-content-page,
+  html:not([data-page-template="classic"]) [data-logbook-content-page="true"] {
+    border: none !important;
+    border-radius: 0 !important;
   }
 
   .print-preview-root [data-preview-export-page="true"]:last-child,
@@ -507,7 +514,9 @@ html[data-hw-enabled="true"] .hw-notebook-scope .memo-diagram-canvas svg tspan {
 }
 .cm-sheet input:focus,
 .cm-sheet textarea:focus {
-  outline: none;
+  outline: 2px solid #0f766e;
+  outline-offset: -1px;
+  background-color: #f0fdfa;
 }
 .cm-page-break { height: 0; }
 
@@ -550,6 +559,7 @@ html[data-hw-enabled="true"] .hw-notebook-scope .memo-diagram-canvas svg tspan {
   .cm-sheet textarea {
     border: none !important;
     background: transparent !important;
+    outline: none !important;
     resize: none !important;
     height: auto !important;
     overflow: visible !important;
@@ -575,4 +585,187 @@ html[data-hw-enabled="true"] .hw-notebook-scope .memo-diagram-canvas svg tspan {
   .cm-sheet tr { break-inside: avoid !important; page-break-inside: avoid !important; }
   .cm-sheet .break-inside-avoid { break-inside: avoid !important; page-break-inside: avoid !important; }
   .cm-page-break { break-after: page !important; page-break-after: always !important; height: 0 !important; }
+}
+
+/* =====================================================================
+   نظام أنماط الصفحة (word / classic / plain) للقوالب الأربعة
+   ===================================================================== */
+
+/* 1. الافتراضي: Word */
+.page-desk {
+  background-color: #e5e7eb;
+  background-image: none;
+}
+.page-desk--logbook-preview {
+  background-color: #d1d5db;
+  background-image: none;
+}
+.page-desk-frame {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+.page-sheet {
+  background-color: #ffffff;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: none;
+  border-radius: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.30), 0 6px 18px rgba(0, 0, 0, 0.14);
+}
+.page-sheet-outer-preview {
+  box-shadow: none;
+}
+
+/* وضوح تركيز التحرير على الورقة البيضاء */
+.page-sheet [contenteditable]:focus {
+  outline: 2px solid #0f766e;
+  outline-offset: 1px;
+  background-color: #f0fdfa;
+}
+
+/* 2. كلاسيكي: المظهر الأصلي بالضبط */
+html[data-page-template="classic"] .page-desk--memos {
+  background-color: transparent;
+}
+html[data-page-template="classic"] .page-desk--memo-preview {
+  background-color: #f3f4f6;
+}
+html[data-page-template="classic"] .page-desk--correction {
+  background-color: #eef4f3;
+}
+html[data-page-template="classic"] .page-desk--logbook-shell,
+html[data-page-template="classic"] .page-desk--logbook {
+  background-color: #edf9f6;
+}
+html[data-page-template="classic"] .page-desk--logbook-preview {
+  background-color: #1f2937;
+}
+html[data-page-template="classic"] .page-desk--distribution-shell,
+html[data-page-template="classic"] .page-desk--distribution {
+  background-color: transparent;
+}
+html[data-page-template="classic"] .page-desk--distribution-preview {
+  background-color: transparent;
+}
+html[data-page-template="classic"] .page-desk-frame {
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  border: 1px solid #e5e7eb;
+}
+html[data-page-template="classic"] .page-sheet-outer-preview {
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+}
+html[data-page-template="classic"] .page-sheet--memo {
+  background-color: rgba(255, 253, 248, 0.96);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  box-shadow: 0 14px 45px rgba(20, 110, 100, 0.10);
+  border-radius: 0.125rem;
+  border: 1px solid #d8eee9;
+}
+html[data-page-template="classic"] .page-sheet--memo-preview {
+  background-color: #ffffff;
+  box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  border-radius: 0.125rem;
+  border: 1px solid #d1d5db;
+}
+html[data-page-template="classic"] .page-sheet--correction {
+  background-color: #ffffff;
+  box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  border-radius: 0.75rem;
+  border: none;
+}
+html[data-page-template="classic"] .page-sheet--logbook {
+  background-color: #ffffff;
+  box-shadow: 0 14px 40px rgba(2, 132, 199, 0.12);
+  border-radius: 12px;
+  border: 2px solid #0284c7;
+}
+html[data-page-template="classic"] .page-sheet--logbook-teal {
+  background-color: #ffffff;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  border-radius: 0;
+  border: none;
+}
+html[data-page-template="classic"] .page-sheet--logbook-intro {
+  background-color: #ffffff;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.12);
+  border-radius: 0;
+  border: none;
+}
+html[data-page-template="classic"] .page-sheet--logbook-intro-preview {
+  background-color: #ffffff;
+  box-shadow: 0 25px 80px rgba(0, 0, 0, 0.5);
+  border-radius: 0;
+  border: none;
+}
+html[data-page-template="classic"] .page-sheet--logbook-cover {
+  background-color: #ffffff;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.12);
+  border-radius: 2px;
+  border: 1px solid #e4e4e7;
+}
+html[data-page-template="classic"] .page-sheet--logbook-front {
+  background-color: #ffffff;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.12);
+  border-radius: 2px;
+  border: 1px solid #e4e4e7;
+}
+html[data-page-template="classic"] .page-sheet--logbook-front-preview {
+  background-color: #ffffff;
+  box-shadow: 0 25px 80px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(0, 0, 0, 0.1);
+  border-radius: 2px;
+  border: none;
+}
+html[data-page-template="classic"] .page-sheet--distribution {
+  background-color: rgba(255, 253, 248, 0.95);
+  backdrop-filter: blur(1px);
+  -webkit-backdrop-filter: blur(1px);
+  box-shadow: 0 14px 40px rgba(20, 110, 100, 0.10);
+  border-radius: 0;
+  border: 1px solid #d8eee9;
+}
+
+/* 3. سادة (للطباعة الاقتصادية) */
+html[data-page-template="plain"] .page-desk,
+html[data-page-template="plain"] .page-desk--logbook-preview,
+html[data-page-template="plain"] .page-desk--memo-preview,
+html[data-page-template="plain"] .page-desk--correction,
+html[data-page-template="plain"] .page-desk--logbook-shell,
+html[data-page-template="plain"] .page-desk--logbook,
+html[data-page-template="plain"] .page-desk--distribution-shell,
+html[data-page-template="plain"] .page-desk--distribution,
+html[data-page-template="plain"] .page-desk--distribution-preview,
+html[data-page-template="plain"] .page-desk--memos {
+  background-color: #ffffff;
+  background-image: none;
+}
+html[data-page-template="plain"] .page-sheet {
+  background-color: #ffffff;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+@media print {
+  .page-desk,
+  .page-desk-frame {
+    background: #ffffff !important;
+    background-image: none !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+  .page-sheet {
+    box-shadow: none !important;
+    background-color: #ffffff !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+  .page-sheet [contenteditable]:focus {
+    outline: none !important;
+    background-color: transparent !important;
+  }
 }

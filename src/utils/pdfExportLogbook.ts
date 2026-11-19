@@ -65,14 +65,19 @@ const preparePageForExport = (
   page.style.setProperty("direction", "rtl");
   page.style.setProperty("overflow", "hidden");
 
-  // الحفاظ على الإطار الأزرق الدائري الرسمي لورقة الدفتر اليومي
+  // اتباع نمط الصفحة المختار: الإطار الأزرق الدائري في الكلاسيكي فقط، وبلا إطار في Word والسادة
+  const pageStyle = document.documentElement.dataset.pageTemplate || "word";
   if (source.classList.contains("teal-logbook-page")) {
     page.style.border = "none";
     page.style.borderRadius = "0";
-  } else if (source.classList.contains("logbook-content-page") || source.hasAttribute("data-logbook-content-page")) {
+  } else if (
+    pageStyle === "classic" &&
+    (source.classList.contains("logbook-content-page") || source.hasAttribute("data-logbook-content-page"))
+  ) {
     page.style.border = "2px solid #0284c7";
     page.style.borderRadius = "14px";
   } else {
+    page.style.border = "none";
     page.style.borderRadius = "0";
   }
 

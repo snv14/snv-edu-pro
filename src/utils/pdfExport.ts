@@ -48,7 +48,10 @@ const prepareExportPage = (
 
   const widthPx = Math.round(source.getBoundingClientRect().width) || 794;
   page.style.boxShadow = 'none';
+  page.style.border = 'none';
   page.style.borderRadius = '0';
+  page.style.backdropFilter = 'none';
+  page.style.setProperty('-webkit-backdrop-filter', 'none');
   page.style.margin = '0';
   page.style.width = widthPx + 'px';
   page.style.height = pageHeightPx + 'px';

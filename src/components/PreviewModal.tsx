@@ -132,12 +132,12 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
         </div>
 
         {/* Modal Body */}
-        <div className="p-4 md:p-8 overflow-y-auto bg-gray-100 flex-1">
-          <div className="shadow-lg mx-auto max-w-[900px]">
+        <div className="p-4 md:p-8 overflow-y-auto page-desk page-desk--memo-preview flex-1">
+          <div className="page-sheet-outer-preview mx-auto max-w-[900px]">
             
             <div
               ref={previewRef}
-              className={`${hwActive ? 'hw-notebook-scope' : ''} bg-white text-gray-900 shadow-xl rounded-sm mx-auto p-7 md:p-9 max-w-[960px] border border-gray-300 leading-relaxed text-[13.5px]`}
+              className={`${hwActive ? 'hw-notebook-scope' : ''} page-sheet page-sheet--memo-preview text-gray-900 mx-auto p-7 md:p-9 max-w-[960px] leading-relaxed text-[13.5px]`}
               style={{ fontFamily: previewFont }}
             >
               {/* Cloned content will be injected here */}

@@ -250,12 +250,21 @@ export const DailyLogSheetTemplate: React.FC<DailyLogSheetProps> = ({
       ? Math.max(0, emptyFillerRows)
       : Math.max(0, 6 - pageRows.length);
 
+  const handlePlainTextPaste = (e: React.ClipboardEvent<HTMLElement>) => {
+    const target = e.target as HTMLElement | null;
+    if (!target || !target.isContentEditable) return;
+    e.preventDefault();
+    const plain = e.clipboardData?.getData('text/plain') ?? '';
+    document.execCommand('insertText', false, plain);
+  };
+
   return (
     <div
       id={`${idPrefix}-${pageIndex}`}
       data-preview-export-page="true"
       data-logbook-content-page="true"
-      className={`print-page logbook-content-page ${hwActive ? 'hw-notebook-scope' : ''} relative shadow-[0_14px_40px_rgba(2,132,199,0.12)] rounded-[12px] border-2 border-[#0284c7] overflow-hidden mx-auto mb-6 bg-[#ffffff] text-zinc-900`}
+      onPaste={handlePlainTextPaste}
+      className={`print-page logbook-content-page page-sheet page-sheet--logbook ${hwActive ? 'hw-notebook-scope' : ''} relative overflow-hidden mx-auto mb-6 text-zinc-900`}
       style={{
         width: `${pageDimensions.w}mm`,
         height: `${pageDimensions.h}mm`,

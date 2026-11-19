@@ -3,7 +3,8 @@ import { generateDistributionDocx } from "../utils/docxExportDistribution";
 import { generateDistributionPdf } from "../utils/pdfExportDistribution";
 import { LessonMemo, MemoConfig } from '../types';
 import { TeacherOfficialStamp } from './TeacherOfficialStamp';
-import { ActionMenu } from './ActionMenu';
+import { ActionMenu, PageTemplateSwitcher } from './ActionMenu';
+import { usePageTemplate } from '../hooks/usePageTemplate';
 import { LESSONS_1AM } from '../data/memos/lessons1am';
 import { LESSONS_2AM } from '../data/memos/lessons2am';
 import { LESSONS_3AM } from '../data/memos/lessons3am';
@@ -17,7 +18,7 @@ import {
   OfficialAnnualDistributionRow 
 } from '../data/curriculum/officialAnnualDistributionData';
 import { CalendarAdjustmentModal } from './CalendarAdjustmentModal';
-import { annualDistributionVersion, migrateSecondYearDistribution } from '../utils/annualDistributionMigration';
+import { annualDistributionVersion, migrateFirstYearDistribution, migrateSecondYearDistribution } from '../utils/annualDistributionMigration';
 import { 
   SchoolCalendarSettings, 
   getDefaultCalendarSettings, 
@@ -44,6 +45,7 @@ interface Props {
 
 export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, setConfig, showToast, curriculumLessons, curriculumBackground }) => {
   const { settings: hwStyle } = useHandwritingStyle();
+  const { template: pageStyleTemplate } = usePageTemplate();
   const hwActive = isHandwritingActiveFor('general', hwStyle);
   const activeDistributionFont = getEffectiveExportFontFamily('pdf', hwStyle, 'general');
 
@@ -138,16 +140,21 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
     return recalculateDistributionRows(officialBaseRows, getDefaultCalendarSettings(config.schoolYear));
   });
 
+  const isReferenceLevel = level === '1am' || level === '2am';
+
   useEffect(() => {
-    if (level !== '2am') return;
+    if (!isReferenceLevel) return;
     try {
       const stored = JSON.parse(localStorage.getItem(ANNUAL_STORAGE_KEY) || '{}');
-      if (migrateSecondYearDistribution(stored, officialBaseRows)) {
+      const migrated = level === '1am'
+        ? migrateFirstYearDistribution(stored, officialBaseRows)
+        : migrateSecondYearDistribution(stored, officialBaseRows);
+      if (migrated) {
         localStorage.setItem(ANNUAL_STORAGE_KEY, JSON.stringify(stored));
         if ((window as any).syncToCloud) (window as any).syncToCloud('annualDist', stored);
       }
     } catch (error) { console.error('تعذر حفظ نسخة التدرج السابق:', error); }
-  }, [level, officialBaseRows]);
+  }, [level, isReferenceLevel, officialBaseRows]);
 
   // عند تغيير المستوى الدراسي، تحميل التدرج الخاص به ومحاذاته مع الرزنامة الحالية
   useEffect(() => {
@@ -187,7 +194,12 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
       if ((event as CustomEvent).detail?.type !== 'annualDist') return;
       try {
         const stored = JSON.parse(localStorage.getItem(ANNUAL_STORAGE_KEY) || '{}');
-        if (level === '2am' && migrateSecondYearDistribution(stored, officialBaseRows)) {
+        const migrated = level === '1am'
+          ? migrateFirstYearDistribution(stored, officialBaseRows)
+          : level === '2am'
+          ? migrateSecondYearDistribution(stored, officialBaseRows)
+          : false;
+        if (migrated) {
           localStorage.setItem(ANNUAL_STORAGE_KEY, JSON.stringify(stored));
           if ((window as any).syncToCloud) (window as any).syncToCloud('annualDist', stored);
         }
@@ -234,6 +246,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
   const persistRows = (rowsToSave: OfficialAnnualDistributionRow[], currentCal: SchoolCalendarSettings) => {
     try {
       const existing = JSON.parse(localStorage.getItem(ANNUAL_STORAGE_KEY) || '{}');
+      if (level === '1am') migrateFirstYearDistribution(existing, officialBaseRows);
       if (level === '2am') migrateSecondYearDistribution(existing, officialBaseRows);
       existing.globalCalendarSettings = currentCal;
       existing[level] = {
@@ -272,7 +285,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
     setCustomRows(recalculated);
     persistRows(recalculated, newSettings);
     syncCalendarToAllLevels(newSettings, getLevelBaseRows);
-    showToast(`تم تغيير الموسم الدراسي إلى ${newYear} وتحديث تواريخ التدرجات المحسوبة تلقائياً (ما عدا مرجع السنة الثانية) 📅`);
+    showToast(`تم تغيير الموسم الدراسي إلى ${newYear} وتحديث تواريخ التدرجات المحسوبة تلقائياً (ما عدا النماذج المرجعية المعتمدة) 📅`);
   };
 
   // تغيير فوري لتاريخ الدخول المدرسي مع إعادة حساب التدرج وتحديث السنة الدراسية
@@ -293,7 +306,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
     setCustomRows(recalculated);
     persistRows(recalculated, newSettings);
     syncCalendarToAllLevels(newSettings, getLevelBaseRows);
-    showToast(`تم اعتماد تاريخ الدخول ${newStartDate} وتحديث مواعيد التدرجات المحسوبة، باستثناء مرجع السنة الثانية 📅`);
+    showToast(`تم اعتماد تاريخ الدخول ${newStartDate} وتحديث مواعيد التدرجات المحسوبة، باستثناء النماذج المرجعية المعتمدة 📅`);
   };
 
   // تغيير صيغة عرض التاريخ في التدرج
@@ -355,12 +368,13 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
     const unique = (values: string[]) =>
       Array.from(new Set(values.map(v => String(v || '').trim()).filter(Boolean)));
 
-    if (level === '2am' && rows.some(row => row.referenceMonthlySchedule)) {
-      const curriculumRows = rows.filter(row => !row.isIntroductory);
-      const maqtaCount = unique(curriculumRows.flatMap(row => row.maqta.split(/\s+\/\s+/))).length;
-      const resourceCount = unique(curriculumRows.flatMap(row => row.mawrid.split(/\s+\/\s+/)).filter(text => /^المورد /.test(text))).length;
+    if (isReferenceLevel && rows.some(row => row.referenceMonthlySchedule)) {
+      const curriculumRows = rows.filter(row => !row.isIntroductory && !row.isRemediation);
+      const maqtaCount = unique(curriculumRows.flatMap(row => row.maqta.split(/\s+\/\s+/)).filter(Boolean)).length;
+      const resourceCount = unique(curriculumRows.flatMap(row => row.mawrid.split(/\s+\/\s+/)).filter(text => /^المورد(?:[\s:]|$)/.test(text))).length;
       const activities = curriculumRows.flatMap(row => [row.session1, row.session2])
-        .map(text => (text.match(/النشاط[^\n]*/)?.[0] || '').replace(/\s*\([12]\)$/, '').trim());
+        .map(text => (text.match(/النشاط[^\n]*/)?.[0] || '').replace(/\s*\([12]\)$/, '').trim())
+        .filter(Boolean);
       return { maqtaCount, resourceCount, ta3alomCount: '—', activityCount: unique(activities).length };
     }
     const maqtaCount = unique(rows.map((r: any) => r.maqta)).length;
@@ -398,6 +412,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
   const handleResetToOfficial = () => {
     try {
       const existing = JSON.parse(localStorage.getItem(ANNUAL_STORAGE_KEY) || '{}');
+      if (level === '1am') migrateFirstYearDistribution(existing, officialBaseRows);
       if (level === '2am') migrateSecondYearDistribution(existing, officialBaseRows);
       delete existing[level];
       localStorage.setItem(ANNUAL_STORAGE_KEY, JSON.stringify(existing));
@@ -468,7 +483,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
   const handleExportWord = async () => {
     try {
       showToast("جاري تصدير التدرج السنوي إلى Word...");
-      const blob = await generateDistributionDocx(pages, level === '2am' ? { ...config, schoolYear: '2026-2027' } : config, level, orientation);
+      const blob = await generateDistributionDocx(pages, isReferenceLevel ? { ...config, schoolYear: '2026-2027' } : config, level, orientation);
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -484,14 +499,23 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
     }
   };
 
+  const handlePlainTextPaste = (e: React.ClipboardEvent<HTMLElement>) => {
+    const target = e.target as HTMLElement | null;
+    if (!target || !target.isContentEditable) return;
+    e.preventDefault();
+    const plain = e.clipboardData?.getData('text/plain') ?? '';
+    document.execCommand('insertText', false, plain);
+  };
+
   const DocumentPages = () => (
     <div
       id="official-distribution-content"
       dir="rtl"
-      className={`relative bg-transparent flex flex-col items-center p-4 print:p-0 print:bg-white w-full ${hwActive ? 'hw-notebook-scope' : ''} ${orientation === 'landscape' ? 'print-orientation-landscape' : ''}`}
+      onPaste={handlePlainTextPaste}
+      className={`relative page-desk page-desk--distribution flex flex-col items-center p-4 print:p-0 print:bg-white w-full ${hwActive ? 'hw-notebook-scope' : ''} ${orientation === 'landscape' ? 'print-orientation-landscape' : ''}`}
       style={{ fontFamily: activeDistributionFont }}
     >
-      {curriculumBackground && (
+      {pageStyleTemplate === 'classic' && curriculumBackground && (
         <div
           className="absolute inset-0 pointer-events-none z-0 rounded-2xl overflow-hidden print:hidden"
           aria-hidden="true"
@@ -505,11 +529,12 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
       )}
       <style>{`
         .editable-cell:hover { background-color: rgba(0,0,0,0.02); }
-        .editable-cell:focus { outline: 1px dashed #c2185b; background-color: rgba(255,255,255,0.9); }
+        .editable-cell:focus { outline: 2px solid #0f766e; outline-offset: 1px; background-color: #f0fdfa; }
+        @media print { .editable-cell:focus { outline: none; background-color: transparent; } }
       `}</style>
 
       {pages.map((page, pageIndex) => (
-        <div key={pageIndex} className={`print-document annual-export-page relative z-10 bg-[#fffdf8]/95 backdrop-blur-[1px] p-[10mm] mb-8 shadow-[0_14px_40px_rgba(20,110,100,0.10)] border border-[#d8eee9] print:bg-white print:border-none print:shadow-none print:m-0 ${orientation === 'portrait' ? 'w-[210mm] min-h-[297mm]' : 'w-[297mm] min-h-[210mm]'}`} style={{ pageBreakAfter: pageIndex < pages.length - 1 ? 'always' : 'auto' }}>
+        <div key={pageIndex} className={`print-document annual-export-page page-sheet page-sheet--distribution relative z-10 p-[10mm] mb-8 print:bg-white print:border-none print:shadow-none print:m-0 ${orientation === 'portrait' ? 'w-[210mm] min-h-[297mm]' : 'w-[297mm] min-h-[210mm]'}`} style={{ pageBreakAfter: pageIndex < pages.length - 1 ? 'always' : 'auto' }}>
           
           {/* Header */}
           <div className="text-center mb-3">
@@ -533,13 +558,13 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
                 <div className="flex justify-between items-center border border-[#b8dcd6] bg-[#f7fcfa] p-2 font-bold text-[12px]">
                   <div>الأستاذ(ة): <span>{config.teacherName}</span></div>
                   <div 
-                    onClick={() => { if (level !== '2am') setIsCalendarModalOpen(true); }}
-                    className={`flex items-center gap-1.5 ${level !== '2am' ? 'cursor-pointer hover:text-emerald-700 transition' : ''}`}
-                    title={level === '2am' ? 'موسم النموذج المرفق' : 'انقر لتعديل السنة الدراسية وتواريخ الرزنامة'}
+                    onClick={() => { if (!isReferenceLevel) setIsCalendarModalOpen(true); }}
+                    className={`flex items-center gap-1.5 ${!isReferenceLevel ? 'cursor-pointer hover:text-emerald-700 transition' : ''}`}
+                    title={isReferenceLevel ? 'موسم النموذج المرفق' : 'انقر لتعديل السنة الدراسية وتواريخ الرزنامة'}
                   >
                     <span>السنة الدراسية:</span>
-                    <span className="font-black text-emerald-800 underline decoration-dotted">{level === '2am' ? '2026-2027' : (calendarSettings.schoolYear || config.schoolYear)}</span>
-                    {level !== '2am' && <Settings2 size={13} className="text-emerald-600 print:hidden" />}
+                    <span className="font-black text-emerald-800 underline decoration-dotted">{isReferenceLevel ? '2026-2027' : (calendarSettings.schoolYear || config.schoolYear)}</span>
+                    {!isReferenceLevel && <Settings2 size={13} className="text-emerald-600 print:hidden" />}
                   </div>
                   <div>متوسطة: <span>{config.schoolName}</span></div>
                 </div>
@@ -590,7 +615,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
                   return (
                     <tr key={row.id || i} className="bg-[#fef9c3] print:bg-[#f0f0f0] font-black text-amber-900">
                       <td 
-                        contentEditable 
+                        contentEditable="plaintext-only" 
                         suppressContentEditableWarning 
                         onBlur={(e) => handleCellBlur(row.id, 'month', e.currentTarget.textContent || '')}
                         className="border border-black p-1 editable-cell outline-none"
@@ -601,7 +626,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
                         <div className="flex flex-col items-center justify-center leading-tight">
                           {displayWeek && <span className="font-black text-[11px] text-amber-950">{displayWeek}</span>}
                           <span 
-                            contentEditable 
+                            contentEditable="plaintext-only" 
                             suppressContentEditableWarning 
                             onBlur={(e) => handleCellBlur(row.id, 'dates', (e.currentTarget.textContent || '').trim())}
                             className="editable-cell outline-none font-mono text-[10px] text-amber-900 font-bold px-1 rounded hover:bg-amber-200/60"
@@ -613,7 +638,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
                       </td>
                       <td 
                         colSpan={5} 
-                        contentEditable 
+                        contentEditable="plaintext-only" 
                         suppressContentEditableWarning 
                         onBlur={(e) => handleCellBlur(row.id, 'holidayLabel', e.currentTarget.textContent || '')}
                         className="border border-black p-1.5 text-center text-[12px] tracking-wider editable-cell outline-none bg-amber-100/80"
@@ -621,7 +646,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
                         {row.holidayLabel || row.session1 || 'عطلة'}
                       </td>
                       <td 
-                        contentEditable 
+                        contentEditable="plaintext-only" 
                         suppressContentEditableWarning 
                         onBlur={(e) => handleCellBlur(row.id, 'percent', e.currentTarget.textContent || '')}
                         className="border border-black p-1 font-black text-center align-middle editable-cell outline-none"
@@ -637,7 +662,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
                   return (
                     <tr key={row.id || i} className="bg-[#f0fdf4] print:bg-transparent font-black text-[#166534]">
                       <td 
-                        contentEditable 
+                        contentEditable="plaintext-only" 
                         suppressContentEditableWarning 
                         onBlur={(e) => handleCellBlur(row.id, 'month', e.currentTarget.textContent || '')}
                         className="border border-black p-1 editable-cell outline-none"
@@ -648,7 +673,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
                         <div className="flex flex-col items-center justify-center leading-tight">
                           {displayWeek && <span className="font-black text-[11px] text-emerald-950">{displayWeek}</span>}
                           <span 
-                            contentEditable 
+                            contentEditable="plaintext-only" 
                             suppressContentEditableWarning 
                             onBlur={(e) => handleCellBlur(row.id, 'dates', (e.currentTarget.textContent || '').trim())}
                             className="editable-cell outline-none font-mono text-[10px] text-emerald-950 font-bold px-1 rounded hover:bg-emerald-100"
@@ -660,7 +685,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
                       </td>
                       <td 
                         colSpan={5} 
-                        contentEditable 
+                        contentEditable="plaintext-only" 
                         suppressContentEditableWarning 
                         onBlur={(e) => handleCellBlur(row.id, 'session1', e.currentTarget.textContent || '')}
                         className="border border-black p-1.5 text-center text-[13px] tracking-widest editable-cell outline-none bg-[#dcfce7]"
@@ -668,7 +693,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
                         {row.session1 || row.mawrid || 'إختبارات الفصل'}
                       </td>
                       <td 
-                        contentEditable 
+                        contentEditable="plaintext-only" 
                         suppressContentEditableWarning 
                         onBlur={(e) => handleCellBlur(row.id, 'percent', e.currentTarget.textContent || '')}
                         className="border border-black p-1 font-black text-center align-middle editable-cell outline-none"
@@ -721,7 +746,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
                   <tr key={row.id || i} className="hover:bg-gray-50 print:bg-transparent">
                     <td className="border border-black p-1 font-black whitespace-nowrap align-middle">
                       <span 
-                        contentEditable 
+                        contentEditable="plaintext-only" 
                         suppressContentEditableWarning 
                         onBlur={(e) => handleCellBlur(row.id, 'month', e.currentTarget.textContent || '')}
                         className="editable-cell outline-none font-bold text-gray-900"
@@ -733,7 +758,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
                       <div className="flex flex-col items-center justify-center leading-tight">
                         {displayWeek && <span className="font-black text-[11px] text-gray-900">{displayWeek}</span>}
                         <span 
-                          contentEditable 
+                          contentEditable="plaintext-only" 
                           suppressContentEditableWarning 
                           onBlur={(e) => handleCellBlur(row.id, 'dates', (e.currentTarget.textContent || '').trim())}
                           className="editable-cell outline-none font-mono text-[10px] text-emerald-950 font-bold px-1 rounded hover:bg-emerald-50"
@@ -746,7 +771,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
                     {!samePrevious('midan') && (
                       <td
                         rowSpan={mergedSpan('midan', i)}
-                        contentEditable
+                        contentEditable="plaintext-only"
                         suppressContentEditableWarning
                         onBlur={(e) => handleCellBlur(row.id, 'midan', e.currentTarget.textContent || '')}
                         className="border border-black p-1 font-bold align-middle editable-cell outline-none bg-[#e5f7f3]/70 text-[#075e57] text-center"
@@ -759,7 +784,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
                     {!samePrevious('maqta') && (
                       <td
                         rowSpan={mergedSpan('maqta', i)}
-                        contentEditable
+                        contentEditable="plaintext-only"
                         suppressContentEditableWarning
                         onBlur={(e) => handleCellBlur(row.id, 'maqta', e.currentTarget.textContent || '')}
                         className="border border-black p-1 font-bold align-middle editable-cell outline-none bg-[#fff1d6]/70 text-[#8a5a00] text-center"
@@ -772,7 +797,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
                     {!samePrevious('mawrid') && (
                       <td
                         rowSpan={mergedSpan('mawrid', i)}
-                        contentEditable
+                        contentEditable="plaintext-only"
                         suppressContentEditableWarning
                         onBlur={(e) => handleCellBlur(row.id, 'mawrid', e.currentTarget.textContent || '')}
                         className="border border-black p-1 font-bold align-middle editable-cell outline-none text-gray-900 text-center"
@@ -783,7 +808,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
                       </td>
                     )}
                     <td 
-                      contentEditable 
+                      contentEditable="plaintext-only" 
                       suppressContentEditableWarning 
                       onBlur={(e) => handleCellBlur(row.id, 'session1', e.currentTarget.textContent || '')}
                       className="border border-black p-1.5 text-right font-medium align-middle editable-cell outline-none text-gray-900 leading-normal whitespace-pre-line"
@@ -791,7 +816,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
                       {(row.session1 || '').trim() || (row.taqwim ? `تقويم: ${row.taqwim}` : '—')}
                     </td>
                     <td 
-                      contentEditable 
+                      contentEditable="plaintext-only" 
                       suppressContentEditableWarning 
                       onBlur={(e) => handleCellBlur(row.id, 'session2', e.currentTarget.textContent || '')}
                       className={`border border-black p-1.5 text-right font-medium align-middle editable-cell outline-none leading-normal whitespace-pre-line ${row.isHoliday ? 'bg-amber-100/70 font-black text-amber-900 text-center' : 'text-gray-900'}`}
@@ -799,7 +824,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
                       {(row.session2 || '').trim() || (row.taqwim ? `تقويم: ${row.taqwim}` : '—')}
                     </td>
                     <td 
-                      contentEditable 
+                      contentEditable="plaintext-only" 
                       suppressContentEditableWarning 
                       onBlur={(e) => handleCellBlur(row.id, 'percent', e.currentTarget.textContent || '')}
                       className="border border-black p-1 font-black text-center align-middle editable-cell outline-none text-emerald-950 font-mono"
@@ -937,16 +962,16 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
         
         <div>
           <h2 className="text-xl font-bold text-[#c2185b]">
-            التدرج السنوي - {level === "4am" ? "4" : level === "3am" ? "3" : level === "2am" ? "2" : "1"} متوسط {level === '2am' ? '(وفق النموذج المرفق)' : '(الوثيقة الرسمية)'}
+            التدرج السنوي - {level === "4am" ? "4" : level === "3am" ? "3" : level === "2am" ? "2" : "1"} متوسط {isReferenceLevel ? '(وفق النموذج المرفق)' : '(الوثيقة الرسمية)'}
           </h2>
           <p className="text-sm text-gray-500 font-medium mt-1">
-            {level === '2am' ? 'منقول من النموذج المرفق للموسم 2026–2027. تُعرض أسابيع الشهر كما وردت في النموذج.' : 'التدرج مرتبط مباشرة بقاعدة المنهاج الوزارية، وتعديل التواريخ محسوب وفق الدخول المدرسي والعطل والاختبارات.'}
+            {isReferenceLevel ? 'منقول من النموذج المرفق للموسم 2026–2027. تُعرض أسابيع الشهر كما وردت في النموذج.' : 'التدرج مرتبط مباشرة بقاعدة المنهاج الوزارية، وتعديل التواريخ محسوب وفق الدخول المدرسي والعطل والاختبارات.'}
           </p>
         </div>
         
         {/* Quick Date Display & Controls */}
         <div className="flex flex-wrap items-center gap-2 border-r pr-4">
-          {level !== '2am' && <div
+          {!isReferenceLevel && <div
             onClick={() => setIsCalendarModalOpen(true)}
             className="flex flex-col gap-0.5 border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 rounded-xl px-3 py-1.5 cursor-pointer transition shadow-2xs group"
             title="انقر لفتح نافذة تعديل التواريخ والرزنامة حسب الدخول المدرسي والعطل واختبارات"
@@ -971,12 +996,13 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
               <option value="landscape">أفقي (Landscape)</option>
             </select>
           </div>
+          <PageTemplateSwitcher />
         </div>
         
         {/* Main Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
           {/* Highlighted Calendar Button */}
-          {level !== '2am' && <button
+          {!isReferenceLevel && <button
             type="button"
             onClick={() => setIsCalendarModalOpen(true)}
             className="flex items-center gap-2 px-3.5 py-2 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white rounded-xl font-black hover:from-emerald-700 hover:to-teal-800 shadow-sm transition cursor-pointer"
@@ -1011,7 +1037,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
       </div>
 
       {/* Interactive Quick Calendar & School Year Master Bar */}
-      {level !== '2am' && <div className="bg-gradient-to-r from-[#f0fdf9] via-[#f7fcfb] to-[#ecfdf5] border-2 border-emerald-300/80 rounded-2xl p-4 shadow-xs space-y-3.5 print:hidden">
+      {!isReferenceLevel && <div className="bg-gradient-to-r from-[#f0fdf9] via-[#f7fcfb] to-[#ecfdf5] border-2 border-emerald-300/80 rounded-2xl p-4 shadow-xs space-y-3.5 print:hidden">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-emerald-200/60 pb-3">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-xs">
@@ -1144,9 +1170,9 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
       </div>
 
       }
-      {level === '2am' && (
+      {isReferenceLevel && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-900 print:hidden">
-          هذا التدرج خاص بالموسم 2026–2027 كما في الصورتين؛ أرقام الأسابيع داخل كل شهر. لم يحدد المصدر تواريخ أسبوعية، لذا تُترك فارغة ويمكن تعديلها يدوياً. تواريخ العطل تخص الموسم المذكور فقط.
+          هذا التدرج خاص بالموسم 2026–2027 كما في الصورتين؛ أرقام الأسابيع داخل كل شهر. تواريخ العطل تخص الموسم المذكور فقط ويمكن تعديل الخلايا يدوياً.
         </div>
       )}
 
@@ -1158,7 +1184,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
       )}
 
       {/* Main Pages Table Container */}
-      <div className="overflow-x-auto rounded-xl shadow-sm border border-gray-200 print:border-none print:shadow-none print:overflow-visible">
+      <div className="overflow-x-auto page-desk-frame print:border-none print:shadow-none print:overflow-visible">
         <DocumentPages />
       </div>
 
@@ -1191,7 +1217,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
           </div>
           
           {/* Modal Body (Scrollable) */}
-          <div className="flex-1 overflow-y-auto p-8 flex justify-center custom-scrollbar">
+          <div className="flex-1 overflow-y-auto p-8 flex justify-center custom-scrollbar page-desk page-desk--distribution-preview">
             <div className="origin-top scale-[0.85] md:scale-100 transition-transform">
               <DocumentPages />
             </div>

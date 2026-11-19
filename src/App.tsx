@@ -17,6 +17,7 @@ import {
   PenTool,
 } from 'lucide-react';
 import { useHandwritingStyle } from './hooks/useHandwritingStyle';
+import { usePageTemplate } from './hooks/usePageTemplate';
 import { HandwritingStylePanel } from './components/HandwritingStylePanel';
 import { SelectionPenStrip } from './components/HandwrittenText';
 import { LessonMemo, MemoConfig } from './types';
@@ -26,7 +27,7 @@ import { MemoSheet } from './components/MemoSheet';
 import { PreviewModal } from './components/PreviewModal';
 import { LevelsHomePage } from './components/LevelsHomePage';
 import { PlatformNavigationDrawer } from './components/PlatformNavigationDrawer';
-import { ActionMenu } from './components/ActionMenu';
+import { ActionMenu, PageTemplateSwitcher } from './components/ActionMenu';
 import { PlatformInfoModal } from './components/PlatformInfoModal';
 import { UserProfile } from './components/UserProfile';
 import { FirebaseDataSync } from './components/FirebaseDataSync';
@@ -71,6 +72,7 @@ export const App: React.FC = () => {
   const [dismissedNotifications, setDismissedNotifications] = useState<string[]>([]);
   const [isHandwritingModalOpen, setIsHandwritingModalOpen] = useState<boolean>(false);
   const { settings: hwStyle } = useHandwritingStyle();
+  const { template: pageStyleTemplate } = usePageTemplate();
 
   const { user } = useAuth();
   const firebaseStatus = useMemo(() => getFirebaseConfigStatus(), []);
@@ -858,47 +860,53 @@ export const App: React.FC = () => {
 
       {isYearSection && yearSubTab === 'memos' && (
         <div
-          className="flex-1 flex flex-col lg:flex-row relative overflow-x-clip"
-          style={{
-            backgroundImage: `url(${curriculumBackground})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-            backgroundAttachment: 'scroll',
-            backgroundRepeat: 'no-repeat',
-            backgroundColor: selectedLevel === '3am' ? '#f0fdfa' : '#f8fafc',
-          }}
+          className="flex-1 flex flex-col lg:flex-row relative overflow-x-clip page-desk page-desk--memos"
+          style={
+            pageStyleTemplate === 'classic'
+              ? {
+                  backgroundImage: `url(${curriculumBackground})`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                  backgroundAttachment: 'scroll',
+                  backgroundRepeat: 'no-repeat',
+                  backgroundColor: selectedLevel === '3am' ? '#f0fdfa' : '#f8fafc',
+                }
+              : undefined
+          }
         >
-          {/* طبقة الخلفية التعليمية الهادئة والمريحة للقراءة */}
-          <div
-            key={curriculumBackground + bgClarity}
-            className="absolute inset-0 pointer-events-none z-0 transition-opacity duration-300 overflow-hidden"
-            aria-hidden="true"
-            style={{
-              backgroundImage: "url(" + curriculumBackground + ")",
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-              backgroundRepeat: 'no-repeat',
-              opacity: selectedLevel === '3am'
-                ? (bgClarity === 'vivid' ? 0.38 : bgClarity === 'medium' ? 0.22 : 0.12)
-                : 0.25,
-              mixBlendMode: 'multiply',
-            }}
-          >
-            {selectedLevel === '1am' && (
-              <>
-                <img
-                  src="https://www.svgrepo.com/download/16219/healthy-nutrition.svg"
-                  alt=""
-                  className="absolute left-[7%] top-[14%] w-28 md:w-40 lg:w-52 opacity-35"
-                />
-                <img
-                  src="https://www.svgrepo.com/download/159364/digestive-system.svg"
-                  alt=""
-                  className="absolute right-[7%] bottom-[10%] w-24 md:w-36 lg:w-48 opacity-25"
-                />
-              </>
-            )}
-          </div>
+          {/* طبقة الخلفية التعليمية الهادئة والمريحة للقراءة (تظهر في النمط الكلاسيكي فقط) */}
+          {pageStyleTemplate === 'classic' && (
+            <div
+              key={curriculumBackground + bgClarity}
+              className="absolute inset-0 pointer-events-none z-0 transition-opacity duration-300 overflow-hidden"
+              aria-hidden="true"
+              style={{
+                backgroundImage: "url(" + curriculumBackground + ")",
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                backgroundRepeat: 'no-repeat',
+                opacity: selectedLevel === '3am'
+                  ? (bgClarity === 'vivid' ? 0.38 : bgClarity === 'medium' ? 0.22 : 0.12)
+                  : 0.25,
+                mixBlendMode: 'multiply',
+              }}
+            >
+              {selectedLevel === '1am' && (
+                <>
+                  <img
+                    src="https://www.svgrepo.com/download/16219/healthy-nutrition.svg"
+                    alt=""
+                    className="absolute left-[7%] top-[14%] w-28 md:w-40 lg:w-52 opacity-35"
+                  />
+                  <img
+                    src="https://www.svgrepo.com/download/159364/digestive-system.svg"
+                    alt=""
+                    className="absolute right-[7%] bottom-[10%] w-24 md:w-36 lg:w-48 opacity-25"
+                  />
+                </>
+              )}
+            </div>
+          )}
           {/* Sidebar Controls for Memos */}
           <div className="relative z-10 w-full flex flex-col lg:flex-row">
           <SidebarControls
@@ -946,7 +954,7 @@ export const App: React.FC = () => {
               </div>
 
               {/* أداة التحكم السريعة في وضوح خلفية القسم */}
-              {selectedLevel === '3am' && (
+              {pageStyleTemplate === 'classic' && selectedLevel === '3am' && (
                 <label className="flex items-center gap-2 bg-white/95 px-3 py-1 rounded-full border border-teal-300 text-[11.5px] font-bold shadow-xs no-print text-teal-900">
                   <span>وضوح الخلفية:</span>
                   <select value={bgClarity} onChange={(event) => setBgClarity(event.target.value as 'vivid' | 'medium' | 'soft')} className="bg-transparent text-teal-900 cursor-pointer focus-visible:outline-2 focus-visible:outline-teal-700">
@@ -958,6 +966,7 @@ export const App: React.FC = () => {
               )}
 
               <div className="flex flex-wrap items-center gap-2">
+                <PageTemplateSwitcher />
                 <SelectionPenStrip
                   settings={hwStyle}
                   onNotify={showToast}
@@ -1024,43 +1033,49 @@ export const App: React.FC = () => {
 
       {isYearSection && yearSubTab === 'distribution' && (
         <div
-          className="flex-1 flex flex-col relative overflow-hidden"
-          style={{
-            backgroundImage: `linear-gradient(rgba(255,255,255,0.08), rgba(255,255,255,0.16)), url(${curriculumBackground})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-            backgroundAttachment: 'scroll',
-            backgroundRepeat: 'no-repeat',
-          }}
+          className="flex-1 flex flex-col relative overflow-hidden page-desk page-desk--distribution-shell"
+          style={
+            pageStyleTemplate === 'classic'
+              ? {
+                  backgroundImage: `linear-gradient(rgba(255,255,255,0.08), rgba(255,255,255,0.16)), url(${curriculumBackground})`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                  backgroundAttachment: 'scroll',
+                  backgroundRepeat: 'no-repeat',
+                }
+              : undefined
+          }
         >
-          <div
-            key={curriculumBackground}
-            className="absolute inset-0 pointer-events-none z-0 overflow-hidden"
-            aria-hidden="true"
-            style={{
-              backgroundImage: "url(" + curriculumBackground + ")",
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-              backgroundRepeat: 'no-repeat',
-              opacity: 0.20,
-              mixBlendMode: 'multiply',
-            }}
-          >
-            {selectedLevel === '1am' && (
-              <>
-                <img
-                  src="https://www.svgrepo.com/download/16219/healthy-nutrition.svg"
-                  alt=""
-                  className="absolute left-[6%] top-[12%] w-28 md:w-40 lg:w-52 opacity-35"
-                />
-                <img
-                  src="https://www.svgrepo.com/download/159364/digestive-system.svg"
-                  alt=""
-                  className="absolute right-[6%] bottom-[10%] w-24 md:w-36 lg:w-48 opacity-25"
-                />
-              </>
-            )}
-          </div>
+          {pageStyleTemplate === 'classic' && (
+            <div
+              key={curriculumBackground}
+              className="absolute inset-0 pointer-events-none z-0 overflow-hidden"
+              aria-hidden="true"
+              style={{
+                backgroundImage: "url(" + curriculumBackground + ")",
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                backgroundRepeat: 'no-repeat',
+                opacity: 0.20,
+                mixBlendMode: 'multiply',
+              }}
+            >
+              {selectedLevel === '1am' && (
+                <>
+                  <img
+                    src="https://www.svgrepo.com/download/16219/healthy-nutrition.svg"
+                    alt=""
+                    className="absolute left-[6%] top-[12%] w-28 md:w-40 lg:w-52 opacity-35"
+                  />
+                  <img
+                    src="https://www.svgrepo.com/download/159364/digestive-system.svg"
+                    alt=""
+                    className="absolute right-[6%] bottom-[10%] w-24 md:w-36 lg:w-48 opacity-25"
+                  />
+                </>
+              )}
+            </div>
+          )}
           <div className="relative z-10 w-full min-h-full">
             <Suspense fallback={<SectionLoading />}>
               <AnnualDistribution

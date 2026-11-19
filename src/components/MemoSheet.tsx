@@ -188,17 +188,36 @@ export const MemoSheet: React.FC<MemoSheetProps> = ({
   const cTerm = hwActive ? p.termPurple : '#111827';
   const cNote = hwActive ? p.noteOrange : '#374151';
 
+  const handlePlainTextPaste = (e: React.ClipboardEvent<HTMLElement>) => {
+    const target = e.target as HTMLElement | null;
+    if (!target || !target.isContentEditable) return;
+    e.preventDefault();
+    const plain = e.clipboardData?.getData('text/plain') || '';
+    if (typeof document.execCommand === 'function') {
+      document.execCommand('insertText', false, plain);
+    } else {
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0) {
+        const range = sel.getRangeAt(0);
+        range.deleteContents();
+        range.insertNode(document.createTextNode(plain));
+        range.collapse(false);
+      }
+    }
+  };
+
   return (
     <div
       id="memo-paper"
-      className={`print-document ${hwActive ? 'hw-notebook-scope' : ''} bg-[#fffdf8]/96 backdrop-blur-[2px] text-gray-900 shadow-[0_14px_45px_rgba(20,110,100,0.10)] rounded-sm mx-auto p-3 sm:p-6 md:p-9 w-full max-w-[960px] border border-[#d8eee9] leading-relaxed text-[13.5px] print:shadow-none print:border-none print:p-0 print:m-0 print:max-w-none print:w-full box-border`}
+      onPaste={handlePlainTextPaste}
+      className={`print-document page-sheet page-sheet--memo ${hwActive ? 'hw-notebook-scope' : ''} text-gray-900 mx-auto p-3 sm:p-6 md:p-9 w-full max-w-[960px] leading-relaxed text-[13.5px] print:shadow-none print:border-none print:p-0 print:m-0 print:max-w-none print:w-full box-border`}
       style={{
         minHeight: '1120px',
         fontFamily: activeFontFamily,
       }}
       dir="rtl"
     >
-      <style>{` .editable-cell { padding: 2px; border-radius: 4px; min-height: 1.5em; white-space: pre-wrap; word-break: break-word; outline: none; } .editable-cell:hover { background-color: rgba(0,0,0,0.03); } .editable-cell:focus { outline: 1px dashed ${theme.hex}; background-color: rgba(255,255,255,0.9); } `}</style>
+      <style>{` .editable-cell { padding: 2px; border-radius: 4px; min-height: 1.5em; white-space: pre-wrap; word-break: break-word; outline: none; } .editable-cell:hover { background-color: rgba(0,0,0,0.03); } .editable-cell:focus { outline: 2px solid ${theme.hex}; outline-offset: 1px; background-color: #f0fdfa; } @media print { .editable-cell:focus { outline: none; background-color: transparent; } } `}</style>
 
       {/* 1. الترويسة العليا للمذكرة */}
       <div

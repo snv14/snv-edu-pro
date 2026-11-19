@@ -1,5 +1,10 @@
 import React, { useEffect, useRef } from 'react';
 import { ChevronDown } from 'lucide-react';
+import {
+  PAGE_TEMPLATE_OPTIONS,
+  type PageTemplate,
+  usePageTemplate,
+} from '../hooks/usePageTemplate';
 
 export interface ActionMenuItem {
   id?: string;
@@ -8,6 +13,30 @@ export interface ActionMenuItem {
   icon?: React.ReactNode;
   title?: string;
 }
+
+export const PageTemplateSwitcher: React.FC<{ className?: string }> = ({ className = '' }) => {
+  const { template, setTemplate } = usePageTemplate();
+  return (
+    <label
+      className={`no-print print:hidden inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-2.5 py-1.5 text-[11.5px] font-bold text-slate-800 shadow-2xs ${className}`}
+    >
+      <span className="text-slate-600 whitespace-nowrap">نمط الصفحة:</span>
+      <select
+        aria-label="نمط الصفحة"
+        data-page-template-select="true"
+        value={template}
+        onChange={(e) => setTemplate(e.target.value as PageTemplate)}
+        className="bg-transparent font-extrabold text-slate-900 outline-none cursor-pointer focus-visible:outline-2 focus-visible:outline-teal-700"
+      >
+        {PAGE_TEMPLATE_OPTIONS.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+};
 
 /** Groups secondary actions without changing their handlers. Native details keeps keyboard access. */
 export const ActionMenu: React.FC<{ label: string; items: ActionMenuItem[] }> = ({ label, items }) => {
