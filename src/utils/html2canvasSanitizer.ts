@@ -353,6 +353,53 @@ const LETTER_SPACING_CSS = `
   }
 `;
 
+/**
+ * استبدال أدوات Tailwind v4 `rotate-*` بـ transform كلاسيكي.
+ *
+ * Tailwind v4 لم يعد يكتب `transform: rotate(45deg)` بل خاصية `rotate` المنفصلة
+ * (`rotate: 45deg`). وhtml2canvas v1 يقرأ `transform` فقط ولا يعرف `rotate`،
+ * فيرسم المعيّنات الصغيرة (◆) كمربعات غير مدوّرة تغطي النص فوقها — وهو ما
+ * ظهر على شكل مربّع أزرق فوق كلمة «التربية» في رأس صفحات الدفتر.
+ *
+ * الحل: تحويل `rotate` إلى `transform: rotate(...)` داخل نسخة التصدير فقط،
+ * بعد ضربها في `scale` إن وُجد حتى لا يتغيّر الحجم.
+ */
+export const convertTailwindRotateInClone = (clonedDoc: Document): void => {
+  try {
+    const win = clonedDoc.defaultView;
+    if (!win) return;
+
+    const targetList = win.document.querySelectorAll<HTMLElement>('[class*="rotate-"]');
+    targetList.forEach((el) => {
+      const cs = win.getComputedStyle(el);
+      const rotate = (cs as any).rotate as string | undefined;
+      if (!rotate || rotate === 'none') return;
+
+      const scale = (cs as any).scale as string | undefined;
+      const scalePart = scale && scale !== 'none' ? ` scale(${scale})` : '';
+      // rotate قد تأتي "45deg" أو "0 0 1 45deg" أو مصفوفة
+      const angleMatch = rotate.match(/(-?\d*\.?\d+)deg/);
+      if (!angleMatch) return;
+      const angle = parseFloat(angleMatch[1]);
+      // html2canvas v1 لا يدعم الدالة rotate() إطلاقاً (يقبل matrix/matrix3d
+      // فقط، وأي دالة أخرى يرفع عنها استثناءً ويتجاهل التحويل). لذلك نحسب
+      // مصفوفة الدوران بأنفسنا ونمرّرها بصيغة matrix(a b c d e f).
+      const rad = (angle * Math.PI) / 180;
+      const cos = Math.cos(rad);
+      const sin = Math.sin(rad);
+      const k = scalePart ? parseFloat(scale as string) || 1 : 1;
+      el.style.setProperty(
+        'transform',
+        `matrix(${(cos * k).toFixed(6)}, ${(sin * k).toFixed(6)}, ${(-sin * k).toFixed(6)}, ${(cos * k).toFixed(6)}, 0, 0)`,
+        'important'
+      );
+      el.style.setProperty('rotate', 'none', 'important');
+    });
+  } catch (err) {
+    console.warn('html2canvas rotate conversion warning:', err);
+  }
+};
+
 export const neutralizeLetterSpacingInClone = (clonedDoc: Document): void => {
   try {
     const styleId = 'html2canvas-letter-spacing-fix';
@@ -389,6 +436,8 @@ export const sanitizeOklchForHtml2Canvas = (clonedDoc: Document): void => {
   try {
     // إبطال تباعد الحروف قبل أي شيء آخر حتى لا يجزّئ html2canvas الكلمات العربية
     neutralizeLetterSpacingInClone(clonedDoc);
+    // تحويل rotate (Tailwind v4) إلى transform كلاسيكي حتى لا تظهر المعيّنات مربعات
+    convertTailwindRotateInClone(clonedDoc);
     // تصحيح قياس خط الأساس حتى لا تُرسم العناوين منخفضة فتتراكب
     stabilizeBaselineMeasurement(clonedDoc);
 
@@ -700,34 +749,83 @@ async function waitForClonedFontsReady(clonedDoc: Document): Promise<void> {
  */
 export const stabilizeBaselineMeasurement = (clonedDoc: Document): void => {
   try {
-    const styleId = 'html2canvas-baseline-fix';
-    if (!clonedDoc.getElementById(styleId)) {
-      const styleEl = clonedDoc.createElement('style');
-      styleEl.id = styleId;
-      styleEl.textContent = 'body { line-height: normal !important; }';
-      (clonedDoc.head || clonedDoc.documentElement).appendChild(styleEl);
-    }
+    // لا نلمس line-height الخاص بـ body إطلاقاً.
+    //
+    // كان هنا سابقاً `body { line-height: normal !important; }` بهدف تصحيح
+    // قياس خط الأساس، لكنه كان يغيّر ارتفاع أسطر كل النصوص الموروثة فيتغيّر
+    // التخطيط كله (الشارة والعنوان والقائمة) ويبتعد التصدير عن المعاينة.
+    // التصحيح الصحيح هو تعديل موضع العنوان وحده بمقدار محسوب (أدناه).
 
-    // عناوين كبيرة بوزن ثقيل تُكتب عادة بـ leading-none (line-height:1) في
-    // قوالب الدفتر. html2canvas يرسم هذه العناوين أعمق من موضعها الحقيقي
-    // فتتراكب مع الشارة أسفلها. نُعيدها إلى line-height:normal في نسخة
-    // التصدير فقط، وهي القيمة التي تطابق ما يظهر في المعاينة.
+    // إصلاح إزاحة نص العناوين الكبيرة.
+    //
+    // html2canvas يقيس خط الأساس بخدعة عنصر قياس (img + span) داخل body،
+    // والنتيجة تختلف عن خط الأساس الحقيقي الذي يحسبه المتصفح من مقاييس
+    // الخط (ascent/descent) ونصف التباعد (half-leading). النتيجة أن نص
+    // العناوين يُرسم أعمق من موضعه الحقيقي فيلامس/يتراكب مع العنصر أسفله
+    // (مثل شارة «التعليم المتوسط» تحت عنوان «الدفتر اليومي للأستاذ»).
+    //
+    // نحسب هنا الفرق Δ = baseline_html2canvas − baseline_الحقيقي لكل عنوان،
+    // ثم نرفع محتواه بمقدار Δ بـ position:relative (لا يؤثر على تخطيط
+    // الأشقاء) فتصبح الصفحة المصدَّرة مطابقة للمعاينة.
     const win2 = clonedDoc.defaultView;
     if (win2) {
+      const canvasCtx = clonedDoc.createElement('canvas').getContext('2d');
+
+      /** يكرّر خوارزمية html2canvas لحساب baseline */
+      const html2canvasBaseline = (fontFamily: string, fontSize: string): number => {
+        const container = clonedDoc.createElement('div');
+        const img = clonedDoc.createElement('img');
+        const span = clonedDoc.createElement('span');
+        container.style.visibility = 'hidden';
+        container.style.fontFamily = fontFamily;
+        container.style.fontSize = fontSize;
+        container.style.margin = '0';
+        container.style.padding = '0';
+        container.style.whiteSpace = 'nowrap';
+        clonedDoc.body.appendChild(container);
+        img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+        img.width = 1;
+        img.height = 1;
+        img.style.cssText = 'margin:0;padding:0;vertical-align:baseline';
+        span.style.cssText = 'margin:0;padding:0';
+        span.style.fontFamily = fontFamily;
+        span.style.fontSize = fontSize;
+        span.appendChild(clonedDoc.createTextNode('Hidden Text'));
+        container.appendChild(span);
+        container.appendChild(img);
+        const value = img.offsetTop - span.offsetTop + 2;
+        container.remove();
+        return value;
+      };
+
       clonedDoc.querySelectorAll<HTMLElement>('h1,h2,h3').forEach((el) => {
-        if (!el.textContent || !el.textContent.trim()) return;
+        const text = el.textContent;
+        if (!text || !text.trim()) return;
         const cs = win2.getComputedStyle(el);
-        const fs = parseFloat(cs.fontSize) || 0;
-        const lh = cs.lineHeight === 'normal' ? NaN : parseFloat(cs.lineHeight);
-        const weight = parseInt(cs.fontWeight, 10) || 400;
-        if (fs >= 18 && weight >= 800 && !Number.isNaN(lh) && lh < fs * 1.25) {
-          el.style.setProperty('line-height', 'normal', 'important');
-          // تعويض إزاحة رسم النص: html2canvas يرسم النص منخفضاً بمقدار
-          // يتناسب مع ضيق ارتفاع السطر. رفع العنصر بصرياً يعيد التطابق
-          // مع المعاينة دون التأثير على تخطيط بقية العناصر.
-          el.style.setProperty('position', 'relative', 'important');
-          el.style.setProperty('top', '-0.26em', 'important');
+        const fontSizePx = parseFloat(cs.fontSize) || 0;
+        if (fontSizePx < 13) return;
+
+        const h2cBaseline = html2canvasBaseline(cs.fontFamily, cs.fontSize);
+        if (!h2cBaseline) return;
+
+        // خط الأساس الحقيقي: half-leading + ascent
+        let trueBaseline = h2cBaseline;
+        if (canvasCtx) {
+          canvasCtx.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+          const m = canvasCtx.measureText(text);
+          const ascent = m.fontBoundingBoxAscent;
+          const descent = m.fontBoundingBoxDescent;
+          const lineHeightPx = cs.lineHeight === 'normal' ? ascent + descent : parseFloat(cs.lineHeight);
+          if (isFinite(ascent) && isFinite(descent) && ascent > 0) {
+            const halfLeading = (lineHeightPx - (ascent + descent)) / 2;
+            trueBaseline = halfLeading + ascent;
+          }
         }
+
+        const delta = h2cBaseline - trueBaseline;
+        if (Math.abs(delta) < 1) return;
+        el.style.setProperty('position', 'relative', 'important');
+        el.style.setProperty('top', `${(-delta).toFixed(2)}px`, 'important');
       });
     }
 
