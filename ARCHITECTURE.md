@@ -40,7 +40,7 @@
 | المتغير | الجهة | الغرض |
 |---|---|---|
 | `GEMINI_API_KEY` (أو `GOOGLE_API_KEY`) | خادم | مزود الذكاء الاصطناعي الرئيسي |
-| `GEMINI_MODEL` | خادم | النموذج (الافتراضي `gemini-3.8-flash`) |
+| `GEMINI_MODEL` | خادم | النموذج (الافتراضي `gemini-flash-latest`) |
 | `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `HF_TOKEN` (+ `*_MODEL`) | خادم | مزودات احتياطية نصية |
 | `AI_PROVIDER`, `AI_PROVIDER_FALLBACKS` | خادم | ترتيب المزودات |
 | `AI_RATE_LIMIT_PER_MINUTE` | خادم | حد طلبات الذكاء الاصطناعي لكل IP (20) |

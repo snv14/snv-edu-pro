@@ -45,9 +45,22 @@ export async function exportCorrectionMemoToPdf(element: HTMLElement, title: str
   pdf.save(safe(title) + '.pdf');
 }
 
+/** تعقيم HTML: إزالة الوسوم الخطرة والسمات الأحداث وروابط javascript لضمان طباعة خالية من XSS */
+const sanitizeForPrint = (html: string): string =>
+  html
+    .replace(/<(script|iframe|object|embed|form|link|meta|style|svg)[^>]*>[\s\S]*?<\/\1>/gi, '')
+    .replace(/<(script|iframe|object|embed|form|link|meta|br|img|input)[^>]*\/?>/gi, '')
+    .replace(/\s+on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(/(href|src)\s*=\s*(["'])\s*javascript:[^"']*\2/gi, '$1="#"');
+
 export function printCorrectionMemo(element: HTMLElement, title: string) {
   const win = window.open('', '_blank', 'noopener,noreferrer,width=900,height=1000');
   if (!win) return;
-  win.document.write(`<!doctype html><html dir="rtl"><head><title>${title}</title><style>@page{size:A4;margin:12mm}body{margin:0;background:#fff;font-family:Tajawal,Arial,sans-serif;color:#172033}.sheet{width:100%}</style></head><body><div class="sheet">${element.innerHTML}</div><script>window.onload=function(){window.print();}</script></body></html>`);
+  // العنوان يُدرج كنص فقط عبر DOM لتفادي حقن HTML/سكربتات من إدخال المستخدم
+  win.document.write(`<!doctype html><html dir="rtl"><head><title></title><style>@page{size:A4;margin:12mm}body{margin:0;background:#fff;font-family:Tajawal,Arial,sans-serif;color:#172033}.sheet{width:100%}</style></head><body><div class="sheet"></div><script>window.onload=function(){window.print();}<\/script></body></html>`);
+  const doc = win.document;
+  doc.title = String(title || 'مذكرة التصحيح');
+  const sheet = doc.querySelector('.sheet');
+  if (sheet) sheet.innerHTML = sanitizeForPrint(element.innerHTML);
   win.document.close();
 }
