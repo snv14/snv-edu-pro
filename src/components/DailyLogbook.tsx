@@ -59,6 +59,8 @@ import { recallActivityBundle } from '../data/archive1am';
 import type { ActivityRecallBundle } from '../data/memos/archiveSchema';
 import { PageTemplateSwitcher } from './ActionMenu';
 import { usePageTemplate } from '../hooks/usePageTemplate';
+import { DocxFontFallbackModal, useDocxFontFallbackDialog } from './DocxFontFallbackModal';
+import { DocxFontEmbedError } from '../utils/docxFontEmbed';
 
 interface DailyLogbookProps {
   selectedLevel?: '1am' | '2am' | '3am' | '4am';
@@ -857,6 +859,13 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
   const [subject, setSubject] = useState<string>('علوم الطبيعة والحياة');
   const [showSubjectInHeader, setShowSubjectInHeader] = useState<boolean>(true);
   const [showYearInHeader, setShowYearInHeader] = useState<boolean>(false);
+  const {
+    pendingError: pendingWordFontError,
+    askFallbackChoice: askWordFallbackChoice,
+    confirmFallback: confirmWordFallback,
+    exportPdfInstead: exportWordPdfInstead,
+    cancelFallback: cancelWordFallback,
+  } = useDocxFontFallbackDialog();
 
   // Timetable grid rows with persistent loading
   const [gridRows, setGridRows] = useState<TimetableGridRow[]>(() => {
@@ -1722,13 +1731,14 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
 
   // تصدير جدول استعمال الزمن كملف Word رسمي مستقل
   const handleExportTimetableWord = async () => {
-    try {
+    const runExport = async (allowFallback: boolean) => {
       showToast('جاري تصدير استعمال الزمن كملف Word...');
       const blob = await generateTimetableDocx(
         gridRows,
         config,
         assignedLevels,
-        assignedSectionsList
+        assignedSectionsList,
+        { allowFallback }
       );
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -1738,8 +1748,32 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       a.click();
       a.remove();
       setTimeout(() => window.URL.revokeObjectURL(url), 10000);
-      showToast('✅ تم تصدير جدول استعمال الزمن كملف Word بنجاح');
+      showToast(
+        allowFallback
+          ? '⚠️ تم تصدير استعمال الزمن بخط بديل لعدم تضمين الخط'
+          : '✅ تم تصدير جدول استعمال الزمن كملف Word بنجاح'
+      );
+    };
+
+    try {
+      await runExport(false);
     } catch (err) {
+      if (err instanceof DocxFontEmbedError) {
+        const choice = await askWordFallbackChoice(err);
+        if (choice === 'fallback') {
+          try {
+            await runExport(true);
+          } catch (fallbackErr) {
+            console.error(fallbackErr);
+            showToast('تعذر تصدير استعمال الزمن كملف Word');
+          }
+        } else if (choice === 'pdf') {
+          await handleExportTimetablePdf();
+        } else {
+          showToast('تم إلغاء تصدير Word');
+        }
+        return;
+      }
       console.error(err);
       showToast('تعذر تصدير استعمال الزمن كملف Word');
     }
@@ -1788,12 +1822,13 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
 
   // تفعيل تصدير Word للدفتر اليومي دون أي تعطل
   const handleExportWord = async () => {
-    try {
-      const activeRows = ensureRowsForExport();
-      if (activeRows.length === 0) {
-        showToast('يرجى التأكد من برمجة حصة واحدة على الأقل في استعمال الزمن لتصدير Word');
-        return;
-      }
+    const activeRows = ensureRowsForExport();
+    if (activeRows.length === 0) {
+      showToast('يرجى التأكد من برمجة حصة واحدة على الأقل في استعمال الزمن لتصدير Word');
+      return;
+    }
+
+    const runExport = async (allowFallback: boolean) => {
       showToast('جاري تصدير الدفتر كملف Word قابل للتعديل...');
       const exportRows = orderedRows.length > 0 ? orderedRows : activeRows;
       const exportPages = paginatedA4Pages.length > 0 ? paginatedA4Pages : undefined;
@@ -1805,7 +1840,8 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
         assignedLevels,
         orientation,
         exportPages,
-        pageTemplate
+        pageTemplate,
+        { allowFallback }
       );
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -1815,8 +1851,32 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       a.click();
       a.remove();
       setTimeout(() => window.URL.revokeObjectURL(url), 10000);
-      showToast('✅ تم تصدير الدفتر كملف Word قابل للتعديل بنجاح');
+      showToast(
+        allowFallback
+          ? '⚠️ تم تصدير الدفتر بخط بديل لعدم تضمين الخط'
+          : '✅ تم تصدير الدفتر كملف Word قابل للتعديل بنجاح'
+      );
+    };
+
+    try {
+      await runExport(false);
     } catch (error) {
+      if (error instanceof DocxFontEmbedError) {
+        const choice = await askWordFallbackChoice(error);
+        if (choice === 'fallback') {
+          try {
+            await runExport(true);
+          } catch (fallbackErr) {
+            console.error(fallbackErr);
+            showToast('تعذر تصدير Word');
+          }
+        } else if (choice === 'pdf') {
+          await handleExportPdf();
+        } else {
+          showToast('تم إلغاء تصدير Word');
+        }
+        return;
+      }
       console.error(error);
       showToast('تعذر تصدير Word');
     }
@@ -4620,6 +4680,12 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
           </div>
         </div>
       )}
+      <DocxFontFallbackModal
+        error={pendingWordFontError}
+        onConfirmFallback={confirmWordFallback}
+        onExportPdf={exportWordPdfInstead}
+        onCancel={cancelWordFallback}
+      />
     </div>
   );
 };

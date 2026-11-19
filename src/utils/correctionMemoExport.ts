@@ -1,4 +1,4 @@
-import { Document, Packer, Paragraph, TextRun, AlignmentType, PageOrientation, Table, TableRow, TableCell, WidthType, BorderStyle, ShadingType } from 'docx';
+import { Document, Packer, Paragraph, TextRun, AlignmentType, PageOrientation, Table, TableRow, TableCell, WidthType, BorderStyle, ShadingType, LineRuleType } from 'docx';
 import type { CorrectionMemoData } from '../services/correctionMemoModel';
 import { criterionTotal, exerciseTotal, formatPoints, integrationTotal, part1Total, overallTotal } from '../services/correctionMemoModel';
 import jsPDF from 'jspdf';
@@ -7,42 +7,75 @@ import { MemoConfig } from '../types';
 import {
   applyHandwritingCssVars,
   buildDocxTextRuns,
+  getDocxLineSpacing,
   getEffectiveExportFontFamily,
   isHandwritingActiveFor,
   loadHandwritingSettings,
+  scaleDocxFontSize,
   type HandwritingStyleSettings,
   type PenRole,
 } from '../services/handwritingStyle';
+import {
+  prepareDocxFonts,
+  type DocxFontAttrs,
+  type PrepareDocxFontsOptions,
+} from './docxFontEmbed';
 
 const safe = (s: string) => (s || 'مذكرة_تصحيح').replace(/[^\u0600-\u06FFa-zA-Z0-9_-]+/g, '_').slice(0, 80);
 const stripHash = (hex: string) => hex.replace(/^#/, '').toUpperCase();
 
+export type CorrectionMemoDocxOptions = Pick<
+  PrepareDocxFontsOptions,
+  'allowFallback' | 'fontLoader' | 'settings'
+>;
+
 export async function exportCorrectionMemoToDocx(args: {
-  title: string; text: string; config?: MemoConfig; level?: string;
+  title: string;
+  text: string;
+  config?: MemoConfig;
+  level?: string;
+  allowFallback?: boolean;
+  fontLoader?: PrepareDocxFontsOptions['fontLoader'];
 }) {
   const hwStyle = loadHandwritingSettings();
   const hwActive = isHandwritingActiveFor('memos', hwStyle);
-  const wordFont = getEffectiveExportFontFamily('docx', hwStyle, 'memos');
-  const fontAttrs = { ascii: wordFont, hAnsi: wordFont, cs: wordFont, hint: 'cs' };
+  const embeddedFonts = await prepareDocxFonts({
+    settings: hwStyle,
+    area: 'memos',
+    allowFallback: args.allowFallback,
+    fontLoader: args.fontLoader,
+  });
+  const wordFont = embeddedFonts.wordFont;
+  const fontAttrs = embeddedFonts.fontAttrs;
+  const lineSpacing = getDocxLineSpacing(hwStyle, 'memos');
   const titleColor = hwActive ? stripHash(hwStyle.palette.titleBlue) : '000000';
+  const sz = (n: number) => scaleDocxFontSize(n, hwStyle, 'memos');
 
   const lines = (args.text || '').split(/\r?\n/);
   const children = [
-    new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'الجمهورية الجزائرية الديمقراطية الشعبية', bold: true, font: fontAttrs, size: 28, rightToLeft: true })] }),
-    new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'وزارة التربية الوطنية', bold: true, font: fontAttrs, size: 24, rightToLeft: true })] }),
-    new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 240 }, children: [new TextRun({ text: args.title, bold: true, font: fontAttrs, color: titleColor, size: 32, rightToLeft: true })] }),
-    new Paragraph({ alignment: AlignmentType.RIGHT, bidirectional: true, children: [new TextRun({ text: `المستوى: ${args.level?.toUpperCase() || '—'}    المادة: علوم الطبيعة والحياة    المؤسسة: ${args.config?.schoolName || '—'}    الأستاذ(ة): ${args.config?.teacherName || '—'}`, font: fontAttrs, size: 22, rightToLeft: true })] }),
+    new Paragraph({ alignment: AlignmentType.CENTER, spacing: { line: lineSpacing, lineRule: LineRuleType.AUTO }, children: [new TextRun({ text: 'الجمهورية الجزائرية الديمقراطية الشعبية', bold: true, boldComplexScript: true, font: fontAttrs, size: sz(28), sizeComplexScript: sz(28), rightToLeft: true })] }),
+    new Paragraph({ alignment: AlignmentType.CENTER, spacing: { line: lineSpacing, lineRule: LineRuleType.AUTO }, children: [new TextRun({ text: 'وزارة التربية الوطنية', bold: true, boldComplexScript: true, font: fontAttrs, size: sz(24), sizeComplexScript: sz(24), rightToLeft: true })] }),
+    new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 240, line: lineSpacing, lineRule: LineRuleType.AUTO }, children: [new TextRun({ text: args.title, bold: true, boldComplexScript: true, font: fontAttrs, color: titleColor, size: sz(32), sizeComplexScript: sz(32), rightToLeft: true })] }),
+    new Paragraph({ alignment: AlignmentType.RIGHT, bidirectional: true, spacing: { line: lineSpacing, lineRule: LineRuleType.AUTO }, children: [new TextRun({ text: `المستوى: ${args.level?.toUpperCase() || '—'}    المادة: علوم الطبيعة والحياة    المؤسسة: ${args.config?.schoolName || '—'}    الأستاذ(ة): ${args.config?.teacherName || '—'}`, font: fontAttrs, size: sz(22), sizeComplexScript: sz(22), rightToLeft: true })] }),
     ...lines.map(line => new Paragraph({
       bidirectional: true,
       alignment: AlignmentType.RIGHT,
-      spacing: { after: 100 },
+      spacing: { after: 100, line: lineSpacing, lineRule: LineRuleType.AUTO },
       children: hwActive
-        ? buildDocxTextRuns(line || ' ', hwStyle, { size: 22, fontName: wordFont })
-        : [new TextRun({ text: line || ' ', font: fontAttrs, size: 22, rightToLeft: true })],
+        ? buildDocxTextRuns(line || ' ', hwStyle, { size: 22, fontName: wordFont, area: 'memos' })
+        : [new TextRun({ text: line || ' ', font: fontAttrs, size: sz(22), sizeComplexScript: sz(22), rightToLeft: true })],
     })),
   ];
   const doc = new Document({
-    styles: { default: { document: { run: { rightToLeft: true, font: fontAttrs } } } },
+    fonts: embeddedFonts.fonts,
+    styles: {
+      default: {
+        document: {
+          run: { rightToLeft: true, font: fontAttrs, size: sz(22), sizeComplexScript: sz(22) },
+          paragraph: { alignment: AlignmentType.RIGHT, spacing: { line: lineSpacing, lineRule: LineRuleType.AUTO } },
+        },
+      },
+    },
     sections: [{ properties: { page: { size: { width: 11906, height: 16838, orientation: PageOrientation.PORTRAIT }, margin: { top: 720, bottom: 720, left: 720, right: 720 } } }, children }]
   });
   const blob = await Packer.toBlob(doc);
@@ -104,6 +137,14 @@ const DOC_BORDER = {
   right: { style: BorderStyle.SINGLE, size: 4, color: '555555' },
 };
 
+interface CorrectionDocCtx {
+  hwStyle: HandwritingStyleSettings;
+  hwActive: boolean;
+  wordFont: string;
+  fontAttrs: DocxFontAttrs;
+  lineSpacing: number;
+}
+
 const docCell = (
   text: string,
   opts: {
@@ -116,12 +157,16 @@ const docCell = (
     hwStyle?: HandwritingStyleSettings;
     hwActive?: boolean;
     wordFont?: string;
+    fontAttrs?: DocxFontAttrs;
+    lineSpacing?: number;
   } = {}
 ) => {
   const hwStyle = opts.hwStyle ?? loadHandwritingSettings();
   const hwActive = opts.hwActive ?? isHandwritingActiveFor('memos', hwStyle);
-  const wordFont = opts.wordFont ?? getEffectiveExportFontFamily('docx', hwStyle, 'memos');
-  const fontAttrs = { ascii: wordFont, hAnsi: wordFont, cs: wordFont, hint: 'cs' };
+  const wordFont = opts.wordFont ?? 'Playpen Sans Arabic';
+  const fontAttrs = opts.fontAttrs ?? { ascii: wordFont, hAnsi: wordFont, cs: wordFont, hint: 'cs' };
+  const scaled20 = scaleDocxFontSize(20, hwStyle, 'memos');
+  const lineSpacing = opts.lineSpacing ?? getDocxLineSpacing(hwStyle, 'memos');
 
   return new TableCell({
     width: opts.width ? { size: opts.width, type: WidthType.PERCENTAGE } : undefined,
@@ -131,9 +176,10 @@ const docCell = (
     children: [new Paragraph({
       alignment: opts.align || AlignmentType.RIGHT,
       bidirectional: true,
+      spacing: { line: lineSpacing, lineRule: LineRuleType.AUTO },
       children: opts.semantic && hwActive
-        ? buildDocxTextRuns(text || ' ', hwStyle, { size: 20, bold: opts.bold, defaultRole: opts.defaultRole || 'bodyBlack', fontName: wordFont })
-        : [new TextRun({ text: text || ' ', bold: opts.bold, font: fontAttrs, size: 20, rightToLeft: true })],
+        ? buildDocxTextRuns(text || ' ', hwStyle, { size: 20, bold: opts.bold, defaultRole: opts.defaultRole || 'bodyBlack', fontName: wordFont, area: 'memos' })
+        : [new TextRun({ text: text || ' ', bold: opts.bold, boldComplexScript: opts.bold, font: fontAttrs, size: scaled20, sizeComplexScript: scaled20, rightToLeft: true })],
     })],
   });
 };
@@ -142,7 +188,7 @@ const docTable = (
   headers: string[],
   rows: string[][],
   widths?: number[],
-  ctx?: { hwStyle: HandwritingStyleSettings; hwActive: boolean; wordFont: string }
+  ctx?: CorrectionDocCtx
 ) =>
   new Table({
     visuallyRightToLeft: true,
@@ -163,49 +209,64 @@ const docHeading = (
   size = 22,
   spacing = 120,
   role: PenRole = 'titleBlue',
-  ctx?: { hwStyle: HandwritingStyleSettings; hwActive: boolean; wordFont: string }
+  ctx?: CorrectionDocCtx
 ) => {
   const hwStyle = ctx?.hwStyle ?? loadHandwritingSettings();
   const hwActive = ctx?.hwActive ?? isHandwritingActiveFor('memos', hwStyle);
-  const wordFont = ctx?.wordFont ?? getEffectiveExportFontFamily('docx', hwStyle, 'memos');
-  const fontAttrs = { ascii: wordFont, hAnsi: wordFont, cs: wordFont, hint: 'cs' };
+  const wordFont = ctx?.wordFont ?? 'Playpen Sans Arabic';
+  const fontAttrs = ctx?.fontAttrs ?? { ascii: wordFont, hAnsi: wordFont, cs: wordFont, hint: 'cs' };
   const color = hwActive ? stripHash(hwStyle.palette[role]) : '000000';
+  const scaled = scaleDocxFontSize(size, hwStyle, 'memos');
+  const lineSpacing = ctx?.lineSpacing ?? getDocxLineSpacing(hwStyle, 'memos');
   return new Paragraph({
     alignment: AlignmentType.RIGHT,
     bidirectional: true,
-    spacing: { before: spacing, after: 60 },
-    children: [new TextRun({ text, bold: true, color, font: fontAttrs, size, rightToLeft: true })],
+    spacing: { before: spacing, after: 60, line: lineSpacing, lineRule: LineRuleType.AUTO },
+    children: [new TextRun({ text, bold: true, boldComplexScript: true, color, font: fontAttrs, size: scaled, sizeComplexScript: scaled, rightToLeft: true })],
   });
 };
 
-const line = (label: string, value: string, fontAttrs: { ascii: string; hAnsi: string; cs: string; hint: string }) =>
-  new Paragraph({ alignment: AlignmentType.RIGHT, bidirectional: true, children: [new TextRun({ text: `${label}: ${value || '................'}`, font: fontAttrs, size: 20, rightToLeft: true })] });
+const line = (label: string, value: string, fontAttrs: DocxFontAttrs, size: number, lineSpacing: number) =>
+  new Paragraph({ alignment: AlignmentType.RIGHT, bidirectional: true, spacing: { line: lineSpacing, lineRule: LineRuleType.AUTO }, children: [new TextRun({ text: `${label}: ${value || '................'}`, font: fontAttrs, size, sizeComplexScript: size, rightToLeft: true })] });
 
-/** تصدير Word بجداول حقيقية مطابقة لشكل المذكرة، لا نص مسطح. */
-export async function exportCorrectionMemoDataToDocx(data: CorrectionMemoData) {
-  const hwStyle = loadHandwritingSettings();
+/**
+ * تصدير Word بجداول حقيقية مطابقة لشكل المذكرة، مع تضمين الخط المختار.
+ */
+export async function exportCorrectionMemoDataToDocx(
+  data: CorrectionMemoData,
+  exportOptions?: CorrectionMemoDocxOptions
+): Promise<Blob> {
+  const hwStyle = exportOptions?.settings ?? loadHandwritingSettings();
   const hwActive = isHandwritingActiveFor('memos', hwStyle);
-  const wordFont = getEffectiveExportFontFamily('docx', hwStyle, 'memos');
-  const fontAttrs = { ascii: wordFont, hAnsi: wordFont, cs: wordFont, hint: 'cs' };
-  const ctx = { hwStyle, hwActive, wordFont };
+  const embeddedFonts = await prepareDocxFonts({
+    settings: hwStyle,
+    area: 'memos',
+    allowFallback: exportOptions?.allowFallback,
+    fontLoader: exportOptions?.fontLoader,
+  });
+  const wordFont = embeddedFonts.wordFont;
+  const fontAttrs = embeddedFonts.fontAttrs;
+  const lineSpacing = getDocxLineSpacing(hwStyle, 'memos');
+  const ctx: CorrectionDocCtx = { hwStyle, hwActive, wordFont, fontAttrs, lineSpacing };
+  const sz = (n: number) => scaleDocxFontSize(n, hwStyle, 'memos');
 
   const titleColor = hwActive ? stripHash(hwStyle.palette.titleBlue) : '000000';
   const subColor = hwActive ? stripHash(hwStyle.palette.subRed) : '000000';
   const noteColor = hwActive ? stripHash(hwStyle.palette.noteOrange) : '000000';
 
   const children: any[] = [
-    new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'الجمهورية الجزائرية الديمقراطية الشعبية', bold: true, font: fontAttrs, size: 24, rightToLeft: true })] }),
-    new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 120 }, children: [new TextRun({ text: 'وزارة التربية الوطنية', bold: true, font: fontAttrs, size: 24, rightToLeft: true })] }),
-    line('مديرية التربية لولاية', data.directorate, fontAttrs),
-    line('المتوسطة', data.schoolName, fontAttrs),
-    line('المستوى', data.level, fontAttrs),
-    line('السنة الدراسية', data.schoolYear, fontAttrs),
-    line('المادة', 'علوم الطبيعة والحياة', fontAttrs),
-    line('الأستاذ(ة)', data.teacherName, fontAttrs),
-    line('المدة', data.duration, fontAttrs),
-    line('الفصل', data.term, fontAttrs),
-    new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 160, after: 40 }, children: [new TextRun({ text: data.title, bold: true, color: titleColor, font: fontAttrs, size: 30, rightToLeft: true })] }),
-    new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 160 }, children: [new TextRun({ text: `${data.examType} ${data.term} في مادة علوم الطبيعة والحياة`, bold: true, color: subColor, font: fontAttrs, size: 22, rightToLeft: true })] }),
+    new Paragraph({ alignment: AlignmentType.CENTER, spacing: { line: lineSpacing, lineRule: LineRuleType.AUTO }, children: [new TextRun({ text: 'الجمهورية الجزائرية الديمقراطية الشعبية', bold: true, boldComplexScript: true, font: fontAttrs, size: sz(24), sizeComplexScript: sz(24), rightToLeft: true })] }),
+    new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 120, line: lineSpacing, lineRule: LineRuleType.AUTO }, children: [new TextRun({ text: 'وزارة التربية الوطنية', bold: true, boldComplexScript: true, font: fontAttrs, size: sz(24), sizeComplexScript: sz(24), rightToLeft: true })] }),
+    line('مديرية التربية لولاية', data.directorate, fontAttrs, sz(20), lineSpacing),
+    line('المتوسطة', data.schoolName, fontAttrs, sz(20), lineSpacing),
+    line('المستوى', data.level, fontAttrs, sz(20), lineSpacing),
+    line('السنة الدراسية', data.schoolYear, fontAttrs, sz(20), lineSpacing),
+    line('المادة', 'علوم الطبيعة والحياة', fontAttrs, sz(20), lineSpacing),
+    line('الأستاذ(ة)', data.teacherName, fontAttrs, sz(20), lineSpacing),
+    line('المدة', data.duration, fontAttrs, sz(20), lineSpacing),
+    line('الفصل', data.term, fontAttrs, sz(20), lineSpacing),
+    new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 160, after: 40, line: lineSpacing, lineRule: LineRuleType.AUTO }, children: [new TextRun({ text: data.title, bold: true, boldComplexScript: true, color: titleColor, font: fontAttrs, size: sz(30), sizeComplexScript: sz(30), rightToLeft: true })] }),
+    new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 160, line: lineSpacing, lineRule: LineRuleType.AUTO }, children: [new TextRun({ text: `${data.examType} ${data.term} في مادة علوم الطبيعة والحياة`, bold: true, boldComplexScript: true, color: subColor, font: fontAttrs, size: sz(22), sizeComplexScript: sz(22), rightToLeft: true })] }),
   ];
 
   children.push(docHeading('الموارد المعرفية المستهدفة في الاختبار', 22, 120, 'titleBlue', ctx));
@@ -276,14 +337,23 @@ export async function exportCorrectionMemoDataToDocx(data: CorrectionMemoData) {
     children.push(new Paragraph({
       alignment: AlignmentType.RIGHT,
       bidirectional: true,
-      children: [new TextRun({ text: `– ${note || '................................................................'}`, color: noteColor, font: fontAttrs, size: 20, rightToLeft: true })],
+      spacing: { line: lineSpacing, lineRule: LineRuleType.AUTO },
+      children: [new TextRun({ text: `– ${note || '................................................................'}`, color: noteColor, font: fontAttrs, size: sz(20), sizeComplexScript: sz(20), rightToLeft: true })],
     }));
   });
 
-  children.push(new Paragraph({ spacing: { before: 240 }, alignment: AlignmentType.CENTER, children: [new TextRun({ text: `الأستاذ(ة) المصحح(ة): ${data.teacherName || '................'}    السيد(ة) المفتش(ة): ................    السيد(ة) المدير(ة): ................`, font: fontAttrs, size: 20, rightToLeft: true })] }));
+  children.push(new Paragraph({ spacing: { before: 240, line: lineSpacing, lineRule: LineRuleType.AUTO }, alignment: AlignmentType.CENTER, children: [new TextRun({ text: `الأستاذ(ة) المصحح(ة): ${data.teacherName || '................'}    السيد(ة) المفتش(ة): ................    السيد(ة) المدير(ة): ................`, font: fontAttrs, size: sz(20), sizeComplexScript: sz(20), rightToLeft: true })] }));
 
   const doc = new Document({
-    styles: { default: { document: { run: { rightToLeft: true, font: fontAttrs } } } },
+    fonts: embeddedFonts.fonts,
+    styles: {
+      default: {
+        document: {
+          run: { rightToLeft: true, font: fontAttrs, size: sz(20), sizeComplexScript: sz(20) },
+          paragraph: { alignment: AlignmentType.RIGHT, spacing: { line: lineSpacing, lineRule: LineRuleType.AUTO } },
+        },
+      },
+    },
     sections: [{
       properties: {
         page: {
@@ -296,10 +366,13 @@ export async function exportCorrectionMemoDataToDocx(data: CorrectionMemoData) {
   });
 
   const blob = await Packer.toBlob(doc);
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = safe(`${data.title}_${data.level || ''}`) + '.docx';
-  anchor.click();
-  setTimeout(() => URL.revokeObjectURL(url), 500);
+  if (typeof document !== 'undefined') {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = safe(`${data.title}_${data.level || ''}`) + '.docx';
+    anchor.click();
+    setTimeout(() => URL.revokeObjectURL(url), 500);
+  }
+  return blob;
 }

@@ -33,6 +33,8 @@ import {
 import { Printer, FileDown, Eye, X, RotateCcw, Sparkles, CalendarDays, Clock, Settings2, CalendarCheck, Check } from 'lucide-react';
 import { useHandwritingStyle } from '../hooks/useHandwritingStyle';
 import { getEffectiveExportFontFamily, isHandwritingActiveFor, HANDWRITING_FONTS } from '../services/handwritingStyle';
+import { DocxFontFallbackModal, useDocxFontFallbackDialog } from './DocxFontFallbackModal';
+import { DocxFontEmbedError } from '../utils/docxFontEmbed';
 
 interface Props {
   level: "1am" | "2am" | "3am" | "4am";
@@ -52,6 +54,13 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
   const [showPreview, setShowPreview] = useState(false);
   const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait');
+  const {
+    pendingError: pendingWordFontError,
+    askFallbackChoice: askWordFallbackChoice,
+    confirmFallback: confirmWordFallback,
+    exportPdfInstead: exportWordPdfInstead,
+    cancelFallback: cancelWordFallback,
+  } = useDocxFontFallbackDialog();
 
   // تنظيف أي تدرجات قديمة من التخزين المحلي لضمان استبدالها الكامل بالتدرج الوزاري الجديد
   useEffect(() => {
@@ -481,9 +490,15 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
   };
 
   const handleExportWord = async () => {
-    try {
+    const runExport = async (allowFallback: boolean) => {
       showToast("جاري تصدير التدرج السنوي إلى Word...");
-      const blob = await generateDistributionDocx(pages, isReferenceLevel ? { ...config, schoolYear: '2026-2027' } : config, level, orientation);
+      const blob = await generateDistributionDocx(
+        pages,
+        isReferenceLevel ? { ...config, schoolYear: '2026-2027' } : config,
+        level,
+        orientation,
+        { allowFallback }
+      );
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -492,8 +507,32 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
       a.click();
       document.body.removeChild(a);
       setTimeout(() => window.URL.revokeObjectURL(url), 10000);
-      showToast("✅ تم تصدير التدرج السنوي بنجاح (Word)");
+      showToast(
+        allowFallback
+          ? "⚠️ تم تصدير التدرج السنوي بخط بديل لعدم تضمين الخط"
+          : "✅ تم تصدير التدرج السنوي بنجاح (Word)"
+      );
+    };
+
+    try {
+      await runExport(false);
     } catch (error) {
+      if (error instanceof DocxFontEmbedError) {
+        const choice = await askWordFallbackChoice(error);
+        if (choice === 'fallback') {
+          try {
+            await runExport(true);
+          } catch (fallbackErr) {
+            console.error(fallbackErr);
+            showToast("❌ حدث خطأ أثناء تصدير Word. تحقق من البيانات وحاول ثانية");
+          }
+        } else if (choice === 'pdf') {
+          await handleExportPdf();
+        } else {
+          showToast("تم إلغاء تصدير Word");
+        }
+        return;
+      }
       console.error(error);
       showToast("❌ حدث خطأ أثناء تصدير Word. تحقق من البيانات وحاول ثانية");
     }
@@ -1224,6 +1263,12 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
           </div>
         </div>
       )}
+      <DocxFontFallbackModal
+        error={pendingWordFontError}
+        onConfirmFallback={confirmWordFallback}
+        onExportPdf={exportWordPdfInstead}
+        onCancel={cancelWordFallback}
+      />
     </div>
   );
 };

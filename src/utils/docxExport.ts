@@ -11,17 +11,25 @@ import {
   BorderStyle, 
   VerticalAlign,
   ShadingType,
-  PageOrientation
-, Footer, PageNumber , ImageRun } from "docx";
+  PageOrientation,
+  LineRuleType,
+  Footer, PageNumber , ImageRun } from "docx";
 import { LessonMemo, MemoConfig, Activity } from "../types";
 import {
   buildDocxTextRuns,
-  getEffectiveExportFontFamily,
+  getDocxLineSpacing,
   isHandwritingActiveFor,
   loadHandwritingSettings,
+  scaleDocxFontSize,
   type HandwritingStyleSettings,
   type PenRole,
 } from "../services/handwritingStyle";
+import {
+  buildDocxFontAttrs,
+  prepareDocxFonts,
+  type DocxFontAttrs,
+  type PrepareDocxFontsOptions,
+} from "./docxFontEmbed";
 
 
 const base64ToUint8Array = (base64: string): Uint8Array => {
@@ -135,6 +143,8 @@ interface DocxParaOpts {
   hwStyle?: HandwritingStyleSettings;
   hwActive?: boolean;
   wordFont?: string;
+  fontAttrs?: DocxFontAttrs;
+  lineSpacing?: number;
 }
 
 const stripHash = (hex: string) => hex.replace(/^#/, '').toUpperCase();
@@ -150,19 +160,23 @@ const createParagraph = (
   const safeText = text === undefined || text === null ? '' : String(text);
   const hwStyle = opts.hwStyle ?? loadHandwritingSettings();
   const hwActive = opts.hwActive ?? isHandwritingActiveFor('memos', hwStyle);
-  const wordFont = opts.wordFont ?? getEffectiveExportFontFamily('docx', hwStyle, 'memos');
-  const fontAttrs = { ascii: wordFont, hAnsi: wordFont, cs: wordFont, hint: 'cs' };
+  const wordFont = opts.wordFont ?? 'Playpen Sans Arabic';
+  const fontAttrs = opts.fontAttrs ?? buildDocxFontAttrs(wordFont);
+  const scaledSize = scaleDocxFontSize(size, hwStyle, 'memos');
+  const lineSpacing = opts.lineSpacing ?? getDocxLineSpacing(hwStyle, 'memos');
 
   if (opts.semantic && hwActive) {
     return new Paragraph({
       alignment,
       bidirectional: true,
+      spacing: { line: lineSpacing, lineRule: LineRuleType.AUTO },
       children: buildDocxTextRuns(safeText, hwStyle, {
         size,
         bold,
         defaultRole: opts.defaultRole || 'bodyBlack',
         fallbackColorHex: color,
         fontName: wordFont,
+        area: 'memos',
       }),
     });
   }
@@ -170,13 +184,16 @@ const createParagraph = (
   return new Paragraph({
     alignment: alignment,
     bidirectional: true,
+    spacing: { line: lineSpacing, lineRule: LineRuleType.AUTO },
     children: safeText.split('\n').map((line, i, arr) => [
       new TextRun({
         text: line,
         bold: bold,
+        boldComplexScript: bold,
         color: color,
         rightToLeft: true,
-        size: size,
+        size: scaledSize,
+        sizeComplexScript: scaledSize,
         font: fontAttrs
       }),
       ...(i < arr.length - 1 ? [new TextRun({ break: 1 })] : [])
@@ -237,13 +254,38 @@ const renderTables = (tables?: { headers: string[], rows: string[][] }[], opts: 
   }));
 };
 
-export const generateDocx = async (lesson: LessonMemo, config: MemoConfig, activeActivities: boolean[], isMergedFormat: boolean): Promise<Blob> => {
+export type GenerateMemoDocxOptions = Pick<
+  PrepareDocxFontsOptions,
+  'allowFallback' | 'fontLoader' | 'settings'
+>;
+
+export const generateDocx = async (
+  lesson: LessonMemo,
+  config: MemoConfig,
+  activeActivities: boolean[],
+  isMergedFormat: boolean,
+  exportOptions?: GenerateMemoDocxOptions
+): Promise<Blob> => {
   const theme = THEMES[config.level] || THEMES['4am'];
-  const hwStyle = loadHandwritingSettings();
+  const hwStyle = exportOptions?.settings ?? loadHandwritingSettings();
   const hwActive = isHandwritingActiveFor('memos', hwStyle);
-  const wordFont = getEffectiveExportFontFamily('docx', hwStyle, 'memos');
-  const wordFontAttrs = { ascii: wordFont, hAnsi: wordFont, cs: wordFont, hint: 'cs' };
-  const hwOpts: DocxParaOpts = { hwStyle, hwActive, wordFont };
+  const embeddedFonts = await prepareDocxFonts({
+    settings: hwStyle,
+    area: 'memos',
+    allowFallback: exportOptions?.allowFallback,
+    fontLoader: exportOptions?.fontLoader,
+  });
+  const wordFont = embeddedFonts.wordFont;
+  const wordFontAttrs = embeddedFonts.fontAttrs;
+  const lineSpacing = getDocxLineSpacing(hwStyle, 'memos');
+  const defaultBodySize = scaleDocxFontSize(22, hwStyle, 'memos');
+  const hwOpts: DocxParaOpts = {
+    hwStyle,
+    hwActive,
+    wordFont,
+    fontAttrs: wordFontAttrs,
+    lineSpacing,
+  };
   const blueHex = hwActive ? stripHash(hwStyle.palette.titleBlue) : theme.hex;
   const redHex = hwActive ? stripHash(hwStyle.palette.subRed) : theme.hex;
   const greenHex = hwActive ? stripHash(hwStyle.palette.defGreen) : "333333";
@@ -302,11 +344,20 @@ export const generateDocx = async (lesson: LessonMemo, config: MemoConfig, activ
       : [];
 
   const doc = new Document({
+    fonts: embeddedFonts.fonts,
     styles: {
       default: {
         document: {
-          run: { rightToLeft: true, font: wordFontAttrs },
-          paragraph: {  alignment: AlignmentType.RIGHT }
+          run: {
+            rightToLeft: true,
+            font: wordFontAttrs,
+            size: defaultBodySize,
+            sizeComplexScript: defaultBodySize,
+          },
+          paragraph: {
+            alignment: AlignmentType.RIGHT,
+            spacing: { line: lineSpacing, lineRule: LineRuleType.AUTO },
+          }
         }
       }
     },
@@ -318,10 +369,10 @@ export const generateDocx = async (lesson: LessonMemo, config: MemoConfig, activ
               alignment: AlignmentType.CENTER,
               children: [
                 teacherStampRun,
-                new TextRun({ text: "   الصفحة ", font: wordFontAttrs }),
-                new TextRun({ children: [PageNumber.CURRENT], font: wordFontAttrs }),
-                new TextRun({ text: " من ", font: wordFontAttrs }),
-                new TextRun({ children: [PageNumber.TOTAL_PAGES], font: wordFontAttrs })
+                new TextRun({ text: "   الصفحة ", font: wordFontAttrs, rightToLeft: true, size: scaleDocxFontSize(20, hwStyle, 'memos'), sizeComplexScript: scaleDocxFontSize(20, hwStyle, 'memos') }),
+                new TextRun({ children: [PageNumber.CURRENT], font: wordFontAttrs, size: scaleDocxFontSize(20, hwStyle, 'memos'), sizeComplexScript: scaleDocxFontSize(20, hwStyle, 'memos') }),
+                new TextRun({ text: " من ", font: wordFontAttrs, rightToLeft: true, size: scaleDocxFontSize(20, hwStyle, 'memos'), sizeComplexScript: scaleDocxFontSize(20, hwStyle, 'memos') }),
+                new TextRun({ children: [PageNumber.TOTAL_PAGES], font: wordFontAttrs, size: scaleDocxFontSize(20, hwStyle, 'memos'), sizeComplexScript: scaleDocxFontSize(20, hwStyle, 'memos') })
               ]
             })
           ]

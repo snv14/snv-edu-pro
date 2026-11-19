@@ -14,6 +14,8 @@ import { applyCorrectionSuggestions, suggestAnswersForExercises, CorrectionSugge
 import { exportCorrectionMemoDataToDocx, exportCorrectionMemoToPdf, printCorrectionMemo } from '../utils/correctionMemoExport';
 import { CorrectionMemoSheet, SourceLegend } from './CorrectionMemoSheet';
 import { PageTemplateSwitcher } from './ActionMenu';
+import { DocxFontFallbackModal, useDocxFontFallbackDialog } from './DocxFontFallbackModal';
+import { DocxFontEmbedError } from '../utils/docxFontEmbed';
 
 export interface CorrectionMeta {
   field: string;
@@ -80,6 +82,13 @@ export const CorrectionMemoDrawer: React.FC<{
   const sheetRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [savedAt, setSavedAt] = useState<string>('');
+  const {
+    pendingError: pendingWordFontError,
+    askFallbackChoice: askWordFallbackChoice,
+    confirmFallback: confirmWordFallback,
+    exportPdfInstead: exportWordPdfInstead,
+    cancelFallback: cancelWordFallback,
+  } = useDocxFontFallbackDialog();
 
   useEffect(() => {
     if (!isOpen) return;
@@ -195,6 +204,38 @@ export const CorrectionMemoDrawer: React.FC<{
     setError('');
   };
 
+  const handleExportWord = async () => {
+    setError('');
+    try {
+      await exportCorrectionMemoDataToDocx(data, { allowFallback: false });
+      setNotice('تم تصدير مذكرة التصحيح بصيغة Word مع تضمين الخط المختار.');
+    } catch (err) {
+      if (err instanceof DocxFontEmbedError) {
+        const choice = await askWordFallbackChoice(err);
+        if (choice === 'fallback') {
+          try {
+            await exportCorrectionMemoDataToDocx(data, { allowFallback: true });
+            setNotice('تم تصدير مذكرة التصحيح بخط بديل لعدم توفر تضمين الخط.');
+          } catch {
+            setError('تعذر تصدير مذكرة التصحيح إلى Word.');
+          }
+        } else if (choice === 'pdf') {
+          if (sheetRef.current) {
+            await exportCorrectionMemoToPdf(sheetRef.current, data.title);
+          } else {
+            setShowPreview(true);
+            setError('افتح المعاينة ثم اختر PDF لتصدير الوثيقة.');
+          }
+        } else {
+          setNotice('تم إلغاء تصدير Word.');
+        }
+        return;
+      }
+      console.error('Correction memo Word export error:', err);
+      setError('تعذر تصدير مذكرة التصحيح إلى Word.');
+    }
+  };
+
   if (!isOpen) return null;
 
   const part1Exercises = data.exercises.filter(exercise => exercise.part === 1);
@@ -271,7 +312,7 @@ export const CorrectionMemoDrawer: React.FC<{
             <button type="button" onClick={() => sheetRef.current && void exportCorrectionMemoToPdf(sheetRef.current, data.title)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-700 text-white text-[11.5px] font-black">
               <FileDown className="w-3.5 h-3.5" /> PDF
             </button>
-            <button type="button" onClick={() => void exportCorrectionMemoDataToDocx(data)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-700 text-white text-[11.5px] font-black">
+            <button type="button" onClick={() => void handleExportWord()} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-700 text-white text-[11.5px] font-black">
               <FileDown className="w-3.5 h-3.5" /> Word بجداول
             </button>
             <button type="button" onClick={() => setShowPreview(value => !value)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-[11.5px] font-black">
@@ -427,6 +468,12 @@ export const CorrectionMemoDrawer: React.FC<{
           <div>الأولوية: ما أكده الأستاذ ← الورقة الأصلية ← قاعدة المنصة ← مقترح AI. لا يُستبدل أي نص كتبته يدويًا. القالب الفارغ لا يُملأ بالتخمين.</div>
         </div>
       </aside>
+      <DocxFontFallbackModal
+        error={pendingWordFontError}
+        onConfirmFallback={confirmWordFallback}
+        onExportPdf={sheetRef.current ? exportWordPdfInstead : undefined}
+        onCancel={cancelWordFallback}
+      />
     </div>
   );
 };

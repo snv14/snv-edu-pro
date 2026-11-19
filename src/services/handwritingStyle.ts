@@ -348,16 +348,56 @@ export function isHandwritingActiveFor(
   return settings.scope === area;
 }
 
-export function getEffectiveExportFontFamily(
-  target: 'pdf' | 'docx',
+export type HandwritingExportArea = 'memos' | 'logbook' | 'general' | 'all';
+
+export function getEffectiveDocxFontMeta(
   settings: HandwritingStyleSettings = loadHandwritingSettings(),
-  area: 'memos' | 'logbook' | 'general' | 'all' = 'all'
-): string {
+  area: HandwritingExportArea = 'all'
+): { active: boolean; fontMeta: HandwritingFontMeta; scale: number } {
   const active =
     area === 'all' ? settings.enabled : isHandwritingActiveFor(area, settings);
   const fontMeta = active
     ? HANDWRITING_FONTS[settings.fontId] || HANDWRITING_FONTS.playpen
     : HANDWRITING_FONTS.cairo;
+  const scale = active ? settings.fontSizeScale : 1;
+  return { active, fontMeta, scale };
+}
+
+export function scaleDocxFontSize(
+  baseSizeHalfPts: number,
+  settings: HandwritingStyleSettings = loadHandwritingSettings(),
+  area: HandwritingExportArea = 'all'
+): number {
+  const { scale } = getEffectiveDocxFontMeta(settings, area);
+  return Math.max(10, Math.round(baseSizeHalfPts * scale));
+}
+
+export function getDocxLineSpacing(
+  settings: HandwritingStyleSettings = loadHandwritingSettings(),
+  area: HandwritingExportArea = 'all',
+  compactFactor = 1
+): number {
+  const { fontMeta } = getEffectiveDocxFontMeta(settings, area);
+  return Math.max(220, Math.round(fontMeta.lineHeight * compactFactor * 240));
+}
+
+export function getDocxWordSpacingTwips(
+  settings: HandwritingStyleSettings = loadHandwritingSettings(),
+  area: HandwritingExportArea = 'all'
+): number {
+  const { active, fontMeta } = getEffectiveDocxFontMeta(settings, area);
+  if (!active) return 0;
+  const em = Number.parseFloat(fontMeta.wordSpacing);
+  if (!Number.isFinite(em) || em <= 0) return 0;
+  return Math.round(em * 220);
+}
+
+export function getEffectiveExportFontFamily(
+  target: 'pdf' | 'docx',
+  settings: HandwritingStyleSettings = loadHandwritingSettings(),
+  area: HandwritingExportArea = 'all'
+): string {
+  const { fontMeta } = getEffectiveDocxFontMeta(settings, area);
   return target === 'pdf' ? fontMeta.cssFamily : fontMeta.wordFontName;
 }
 
@@ -756,7 +796,7 @@ export function formatSemanticHtml(
 
 /**
  * تحويل النص التعليمي إلى مصفوفة TextRun قابلة للتعديل في ملفات Word (.docx)
- * بنفس ألوان الأقلام الستة وبخط عربي متوافق مع RTL.
+ * بنفس ألوان الأقلام الستة وبخط عربي مضمّن متوافق مع RTL.
  */
 export function buildDocxTextRuns(
   rawText: string,
@@ -767,13 +807,13 @@ export function buildDocxTextRuns(
     defaultRole?: PenRole;
     fallbackColorHex?: string;
     fontName?: string;
+    area?: HandwritingExportArea;
   } = {}
 ): TextRun[] {
   const safeInput = String(rawText ?? '');
-  const size = options.size ?? 22;
-  const fontMeta = settings.enabled
-    ? HANDWRITING_FONTS[settings.fontId] || HANDWRITING_FONTS.playpen
-    : HANDWRITING_FONTS.cairo;
+  const area = options.area ?? 'all';
+  const { active, fontMeta } = getEffectiveDocxFontMeta(settings, area);
+  const size = scaleDocxFontSize(options.size ?? 22, settings, area);
   const wordFont = options.fontName || fontMeta.wordFontName;
   const fontAttrs = {
     ascii: wordFont,
@@ -787,7 +827,7 @@ export function buildDocxTextRuns(
 
   return lines.flatMap((line, lineIdx) => {
     const runs: TextRun[] = [];
-    if (!settings.enabled) {
+    if (!active) {
       const parts = line.split(/(<u>.*?<\/u>)/g);
       parts.forEach((part) => {
         const isU = part.startsWith('<u>') && part.endsWith('</u>');
@@ -797,10 +837,12 @@ export function buildDocxTextRuns(
           new TextRun({
             text,
             bold: options.bold,
+            boldComplexScript: options.bold,
             underline: isU ? { type: 'single', color: options.fallbackColorHex || '000000' } : undefined,
             color: options.fallbackColorHex || '000000',
             rightToLeft: true,
             size,
+            sizeComplexScript: size,
             font: fontAttrs,
           })
         );
@@ -810,10 +852,12 @@ export function buildDocxTextRuns(
       tokens.forEach((tok) => {
         if (!tok.text) return;
         const hex = stripHash(settings.palette[tok.role] || settings.palette.bodyBlack);
+        const isBold = Boolean(options.bold || tok.bold);
         runs.push(
           new TextRun({
             text: tok.text,
-            bold: options.bold || tok.bold,
+            bold: isBold,
+            boldComplexScript: isBold,
             underline: tok.underline
               ? {
                   type: 'single',
@@ -826,6 +870,7 @@ export function buildDocxTextRuns(
             color: hex,
             rightToLeft: true,
             size,
+            sizeComplexScript: size,
             font: fontAttrs,
           })
         );

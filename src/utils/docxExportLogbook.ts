@@ -15,7 +15,8 @@ import {
   Header,
   Footer,
   ImageRun,
-  PageNumber
+  PageNumber,
+  LineRuleType
 } from "docx";
 import { MemoConfig } from "../types";
 import { LogEntry, getBaseSection } from "../components/DailyLogbook";
@@ -31,12 +32,21 @@ import {
 import {
   applyHandwritingCssVars,
   buildDocxTextRuns,
+  getDocxLineSpacing,
   getEffectiveExportFontFamily,
   isHandwritingActiveFor,
   loadHandwritingSettings,
+  scaleDocxFontSize,
+  type HandwritingExportArea,
   type HandwritingStyleSettings,
   type PenRole,
 } from "../services/handwritingStyle";
+import {
+  buildDocxFontAttrs,
+  prepareDocxFonts,
+  type DocxFontAttrs,
+  type PrepareDocxFontsOptions,
+} from "./docxFontEmbed";
 
 interface LogbookParaOpts {
   semantic?: boolean;
@@ -44,9 +54,12 @@ interface LogbookParaOpts {
   hwStyle?: HandwritingStyleSettings;
   hwActive?: boolean;
   wordFont?: string;
+  fontAttrs?: DocxFontAttrs;
+  lineSpacing?: number;
+  area?: HandwritingExportArea;
 }
 
-const createParagraph = (
+const buildLogbookParagraph = (
   text: string,
   bold = false,
   color = "000000",
@@ -55,23 +68,27 @@ const createParagraph = (
   keepNext = false,
   opts: LogbookParaOpts = {}
 ) => {
+  const area = opts.area ?? "logbook";
   const hwStyle = opts.hwStyle ?? loadHandwritingSettings();
-  const hwActive = opts.hwActive ?? isHandwritingActiveFor("logbook", hwStyle);
-  const wordFont = opts.wordFont ?? getEffectiveExportFontFamily("docx", hwStyle, "logbook");
-  const fontAttrs = { ascii: wordFont, hAnsi: wordFont, cs: wordFont, hint: "cs" };
+  const hwActive = opts.hwActive ?? isHandwritingActiveFor(area === "all" ? "logbook" : area, hwStyle);
+  const wordFont = opts.wordFont ?? "Playpen Sans Arabic";
+  const fontAttrs = opts.fontAttrs ?? buildDocxFontAttrs(wordFont);
+  const scaledSize = scaleDocxFontSize(size, hwStyle, area);
+  const lineSpacing = opts.lineSpacing ?? getDocxLineSpacing(hwStyle, area);
 
   if (opts.semantic && hwActive) {
     return new Paragraph({
       alignment,
       keepNext,
       bidirectional: true,
-      spacing: { before: 0, after: 20, line: 240 },
+      spacing: { before: 0, after: 20, line: lineSpacing, lineRule: LineRuleType.AUTO },
       children: buildDocxTextRuns(text || "", hwStyle, {
         size,
         bold,
         defaultRole: opts.defaultRole || "bodyBlack",
         fallbackColorHex: color,
         fontName: wordFont,
+        area,
       }),
     });
   }
@@ -79,7 +96,8 @@ const createParagraph = (
   return new Paragraph({
     alignment: alignment,
     keepNext,
-    spacing: { before: 0, after: 20, line: 240 },
+    bidirectional: true,
+    spacing: { before: 0, after: 20, line: lineSpacing, lineRule: LineRuleType.AUTO },
     children: (text || "").split('\n').map((line, i, arr) => {
       const parts = line.split(/(<u>.*?<\/u>)/g);
       const runs = parts.map(part => {
@@ -87,19 +105,23 @@ const createParagraph = (
           return new TextRun({
             text: part.slice(3, -4),
             bold: bold,
+            boldComplexScript: bold,
             underline: { type: "single", color: color },
             color: color,
             rightToLeft: true,
-            size: size,
+            size: scaledSize,
+            sizeComplexScript: scaledSize,
             font: fontAttrs
           });
         }
         return new TextRun({
           text: part,
           bold: bold,
+          boldComplexScript: bold,
           color: color,
           rightToLeft: true,
-          size: size,
+          size: scaledSize,
+          sizeComplexScript: scaledSize,
           font: fontAttrs
         });
       });
@@ -108,7 +130,7 @@ const createParagraph = (
   });
 };
 
-const createCell = (
+const buildLogbookCell = (
   text: string | Paragraph[],
   bold = false,
   bgColor?: string,
@@ -136,7 +158,7 @@ const createCell = (
 
   const children = Array.isArray(text)
     ? text
-    : [createParagraph(text, bold, textColor, size, alignment, false, paraOpts)];
+    : [buildLogbookParagraph(text, bold, textColor, size, alignment, false, paraOpts)];
 
   return new TableCell({
     columnSpan,
@@ -406,6 +428,11 @@ const getDocxSchoolWeekKey = (dateStr: string): string => {
   return `${y}-${m}-${day}`;
 };
 
+export type GenerateLogbookDocxOptions = Pick<
+  PrepareDocxFontsOptions,
+  'allowFallback' | 'fontLoader' | 'settings'
+>;
+
 export const generateLogbookDocx = async (
   logs: LogEntry[],
   config: MemoConfig,
@@ -414,8 +441,63 @@ export const generateLogbookDocx = async (
   assignedLevels: string[] = [],
   orientation: 'portrait' | 'landscape' = 'portrait',
   paginatedPages?: Array<LogEntry[] | LogbookA4Page<LogEntry>>,
-  pageTemplate: 'standard' | 'teal' = 'standard'
+  pageTemplate: 'standard' | 'teal' = 'standard',
+  exportOptions?: GenerateLogbookDocxOptions
 ): Promise<Blob> => {
+  const hwStyle = exportOptions?.settings ?? loadHandwritingSettings();
+  const hwActive = isHandwritingActiveFor("logbook", hwStyle);
+  const embeddedFonts = await prepareDocxFonts({
+    settings: hwStyle,
+    area: "logbook",
+    allowFallback: exportOptions?.allowFallback,
+    fontLoader: exportOptions?.fontLoader,
+  });
+  const lineSpacing = getDocxLineSpacing(hwStyle, "logbook");
+  const defaultBodySize = scaleDocxFontSize(16, hwStyle, "logbook");
+  const baseParaOpts: LogbookParaOpts = {
+    hwStyle,
+    hwActive,
+    wordFont: embeddedFonts.wordFont,
+    fontAttrs: embeddedFonts.fontAttrs,
+    lineSpacing,
+    area: "logbook",
+  };
+  const createParagraph = (
+    text: string,
+    bold = false,
+    color = "000000",
+    size = 20,
+    alignment: any = AlignmentType.CENTER,
+    keepNext = false,
+    opts: LogbookParaOpts = {}
+  ) => buildLogbookParagraph(text, bold, color, size, alignment, keepNext, { ...baseParaOpts, ...opts });
+  const createCell = (
+    text: string | Paragraph[],
+    bold = false,
+    bgColor?: string,
+    columnSpan?: number,
+    rowSpan?: number,
+    size = 20,
+    alignment: any = AlignmentType.CENTER,
+    widthPercent?: number,
+    customTextColor?: string,
+    borders?: any,
+    cellMarginY = 60,
+    paraOpts: LogbookParaOpts = {}
+  ) => buildLogbookCell(
+    text,
+    bold,
+    bgColor,
+    columnSpan,
+    rowSpan,
+    size,
+    alignment,
+    widthPercent,
+    customTextColor,
+    borders,
+    cellMarginY,
+    { ...baseParaOpts, ...paraOpts }
+  );
   // 1. استخراج الختم الرسمي وكافة الرسومات البيداغوجية والزخارف كصور PNG عالية الدقة
   const [stampPngBytes, scienceLeftPngBytes, scienceRightPngBytes, cornerLeavesPngBytes] = await Promise.all([
     config.teacherStamp?.startsWith("data:image/")
@@ -1044,15 +1126,22 @@ export const generateLogbookDocx = async (
     };
   });
 
-  // تجميع المستند بالكامل بجميع أقسامه
-  const hwStyle = loadHandwritingSettings();
-  const wordFont = getEffectiveExportFontFamily("docx", hwStyle, "logbook");
+  // تجميع المستند بالكامل بجميع أقسامه مع تضمين الخط المختار
   const doc = new Document({
+    fonts: embeddedFonts.fonts,
     styles: {
       default: {
         document: {
-          run: { rightToLeft: true, font: { ascii: wordFont, hAnsi: wordFont, cs: wordFont, hint: "cs" } },
-          paragraph: { alignment: AlignmentType.RIGHT }
+          run: {
+            rightToLeft: true,
+            font: embeddedFonts.fontAttrs,
+            size: defaultBodySize,
+            sizeComplexScript: defaultBodySize,
+          },
+          paragraph: {
+            alignment: AlignmentType.RIGHT,
+            spacing: { line: lineSpacing, lineRule: LineRuleType.AUTO },
+          }
         }
       }
     },
@@ -1216,8 +1305,64 @@ export const generateTimetableDocx = async (
   gridRows: any[] = [],
   config: MemoConfig,
   assignedLevels: string[] = [],
-  assignedSections: string[] = []
+  assignedSections: string[] = [],
+  exportOptions?: GenerateLogbookDocxOptions
 ): Promise<Blob> => {
+  const hwStyle = exportOptions?.settings ?? loadHandwritingSettings();
+  const hwActive = isHandwritingActiveFor("logbook", hwStyle);
+  const embeddedFonts = await prepareDocxFonts({
+    settings: hwStyle,
+    area: "logbook",
+    allowFallback: exportOptions?.allowFallback,
+    fontLoader: exportOptions?.fontLoader,
+  });
+  const lineSpacing = getDocxLineSpacing(hwStyle, "logbook");
+  const defaultBodySize = scaleDocxFontSize(18, hwStyle, "logbook");
+  const baseParaOpts: LogbookParaOpts = {
+    hwStyle,
+    hwActive,
+    wordFont: embeddedFonts.wordFont,
+    fontAttrs: embeddedFonts.fontAttrs,
+    lineSpacing,
+    area: "logbook",
+  };
+  const createParagraph = (
+    text: string,
+    bold = false,
+    color = "000000",
+    size = 20,
+    alignment: any = AlignmentType.CENTER,
+    keepNext = false,
+    opts: LogbookParaOpts = {}
+  ) => buildLogbookParagraph(text, bold, color, size, alignment, keepNext, { ...baseParaOpts, ...opts });
+  const createCell = (
+    text: string | Paragraph[],
+    bold = false,
+    bgColor?: string,
+    columnSpan?: number,
+    rowSpan?: number,
+    size = 20,
+    alignment: any = AlignmentType.CENTER,
+    widthPercent?: number,
+    customTextColor?: string,
+    borders?: any,
+    cellMarginY = 60,
+    paraOpts: LogbookParaOpts = {}
+  ) => buildLogbookCell(
+    text,
+    bold,
+    bgColor,
+    columnSpan,
+    rowSpan,
+    size,
+    alignment,
+    widthPercent,
+    customTextColor,
+    borders,
+    cellMarginY,
+    { ...baseParaOpts, ...paraOpts }
+  );
+
   const children: any[] = [
     // Official Algerian Header
     new Table({
@@ -1319,6 +1464,23 @@ export const generateTimetableDocx = async (
   );
 
   const doc = new Document({
+    fonts: embeddedFonts.fonts,
+    styles: {
+      default: {
+        document: {
+          run: {
+            rightToLeft: true,
+            font: embeddedFonts.fontAttrs,
+            size: defaultBodySize,
+            sizeComplexScript: defaultBodySize,
+          },
+          paragraph: {
+            alignment: AlignmentType.RIGHT,
+            spacing: { line: lineSpacing, lineRule: LineRuleType.AUTO },
+          },
+        },
+      },
+    },
     sections: [{
       properties: {
         page: {

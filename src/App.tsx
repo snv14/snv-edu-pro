@@ -20,6 +20,11 @@ import { useHandwritingStyle } from './hooks/useHandwritingStyle';
 import { usePageTemplate } from './hooks/usePageTemplate';
 import { HandwritingStylePanel } from './components/HandwritingStylePanel';
 import { SelectionPenStrip } from './components/HandwrittenText';
+import {
+  DocxFontFallbackModal,
+  useDocxFontFallbackDialog,
+} from './components/DocxFontFallbackModal';
+import { DocxFontEmbedError } from './utils/docxFontEmbed';
 import { LessonMemo, MemoConfig } from './types';
 import { LEVELS } from './data/memos/lessonsData';
 import { SidebarControls } from './components/SidebarControls';
@@ -73,6 +78,13 @@ export const App: React.FC = () => {
   const [isHandwritingModalOpen, setIsHandwritingModalOpen] = useState<boolean>(false);
   const { settings: hwStyle } = useHandwritingStyle();
   const { template: pageStyleTemplate } = usePageTemplate();
+  const {
+    pendingError: pendingWordFontError,
+    askFallbackChoice: askWordFallbackChoice,
+    confirmFallback: confirmWordFallback,
+    exportPdfInstead: exportWordPdfInstead,
+    cancelFallback: cancelWordFallback,
+  } = useDocxFontFallbackDialog();
 
   const { user } = useAuth();
   const firebaseStatus = useMemo(() => getFirebaseConfigStatus(), []);
@@ -288,39 +300,61 @@ export const App: React.FC = () => {
       return;
     }
 
-    try {
+    const runExport = async (allowFallback: boolean) => {
       showToast('جاري التصدير إلى Word...');
       const { generateDocx } = await import('./utils/docxExport');
       const blob = await generateDocx(
         currentLesson,
         config,
         activeActivities,
-        config.memoFormat === 'merged_teacher'
+        config.memoFormat === 'merged_teacher',
+        { allowFallback }
       );
 
-      // إنشاء رابط التحميل
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      
-      // إنشاء اسم ملف آمن
+
       const safeTitle = (currentLesson?.ta3alom || 'مذكرة_بيداغوجية')
         .replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, '_')
         .replace(/_+/g, '_')
         .slice(0, 40);
-      
+
       link.download = `مذكرة_${config.level}_${config.teacherName}_${safeTitle}.docx`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      
-      // تنظيف
+
       setTimeout(() => {
         URL.revokeObjectURL(url);
       }, 10000);
-      
-      showToast('✅ تم تصدير المذكرة بنجاح');
+
+      showToast(
+        allowFallback
+          ? '⚠️ تم تصدير المذكرة بخط بديل لعدم تضمين الخط'
+          : '✅ تم تصدير المذكرة بنجاح'
+      );
+    };
+
+    try {
+      await runExport(false);
     } catch (error) {
+      if (error instanceof DocxFontEmbedError) {
+        const choice = await askWordFallbackChoice(error);
+        if (choice === 'fallback') {
+          try {
+            await runExport(true);
+          } catch (fallbackErr) {
+            console.error('Fallback Word export error:', fallbackErr);
+            showToast('❌ حدث خطأ في التصدير. حاول مرة أخرى');
+          }
+        } else if (choice === 'pdf') {
+          await handlePrint();
+        } else {
+          showToast('تم إلغاء تصدير Word');
+        }
+        return;
+      }
       console.error('Export error:', error);
       showToast('❌ حدث خطأ في التصدير. حاول مرة أخرى');
     }
@@ -1184,6 +1218,12 @@ export const App: React.FC = () => {
         isOpen={isHandwritingModalOpen}
         onClose={() => setIsHandwritingModalOpen(false)}
         showToast={showToast}
+      />
+      <DocxFontFallbackModal
+        error={pendingWordFontError}
+        onConfirmFallback={confirmWordFallback}
+        onExportPdf={exportWordPdfInstead}
+        onCancel={cancelWordFallback}
       />
       <FirebaseDataSync />
     </div>

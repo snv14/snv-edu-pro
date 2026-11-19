@@ -12,6 +12,7 @@ import {
   VerticalAlign,
   ShadingType,
   PageOrientation,
+  LineRuleType,
   Footer,
   PageNumber,
   ImageRun
@@ -20,11 +21,18 @@ import { MemoConfig } from "../types";
 import { GeneratedSession as CurriculumSession } from "./annualDistributionGenerator";
 import {
   buildDocxTextRuns,
-  getEffectiveExportFontFamily,
+  getDocxLineSpacing,
   isHandwritingActiveFor,
   loadHandwritingSettings,
+  scaleDocxFontSize,
   type HandwritingStyleSettings,
 } from "../services/handwritingStyle";
+import {
+  buildDocxFontAttrs,
+  prepareDocxFonts,
+  type DocxFontAttrs,
+  type PrepareDocxFontsOptions,
+} from "./docxFontEmbed";
 
 const base64ToUint8Array = (base64: string) => {
   const binaryString = typeof atob === 'function'
@@ -114,6 +122,14 @@ const buildTeacherStampSvg = (config: MemoConfig, size = 420) => {
 };
 
 
+interface DistHwContext {
+  hwStyle: HandwritingStyleSettings;
+  hwActive: boolean;
+  wordFont: string;
+  fontAttrs: DocxFontAttrs;
+  lineSpacing: number;
+}
+
 const createParagraph = (
   text: string,
   bold = false,
@@ -121,23 +137,27 @@ const createParagraph = (
   size = 20,
   alignment: any = AlignmentType.CENTER,
   semantic = false,
-  hwContext?: { hwStyle: HandwritingStyleSettings; hwActive: boolean; wordFont: string }
+  hwContext?: DistHwContext
 ) => {
   const hwStyle = hwContext?.hwStyle ?? loadHandwritingSettings();
   const hwActive = hwContext?.hwActive ?? isHandwritingActiveFor("general", hwStyle);
-  const wordFont = hwContext?.wordFont ?? getEffectiveExportFontFamily("docx", hwStyle, "general");
-  const fontAttrs = { ascii: wordFont, hAnsi: wordFont, cs: wordFont, hint: "cs" };
+  const wordFont = hwContext?.wordFont ?? "Playpen Sans Arabic";
+  const fontAttrs = hwContext?.fontAttrs ?? buildDocxFontAttrs(wordFont);
+  const scaledSize = scaleDocxFontSize(size, hwStyle, "general");
+  const lineSpacing = hwContext?.lineSpacing ?? getDocxLineSpacing(hwStyle, "general");
 
   if (semantic && hwActive) {
     return new Paragraph({
       alignment,
       bidirectional: true,
+      spacing: { line: lineSpacing, lineRule: LineRuleType.AUTO },
       children: buildDocxTextRuns(text || "", hwStyle, {
         size,
         bold,
         defaultRole: "bodyBlack",
         fallbackColorHex: color,
         fontName: wordFont,
+        area: "general",
       }),
     });
   }
@@ -145,13 +165,16 @@ const createParagraph = (
   return new Paragraph({
     alignment: alignment,
     bidirectional: true,
+    spacing: { line: lineSpacing, lineRule: LineRuleType.AUTO },
     children: (text || "").split('\n').map((line, i, arr) => [
       new TextRun({
         text: line,
         bold: bold,
+        boldComplexScript: bold,
         color: color,
         rightToLeft: true,
-        size: size,
+        size: scaledSize,
+        sizeComplexScript: scaledSize,
         font: fontAttrs
       }),
       ...(i < arr.length - 1 ? [new TextRun({ break: 1 })] : [])
@@ -169,7 +192,7 @@ const createCell = (
   alignment: any = AlignmentType.CENTER,
   vertical = false,
   semantic = false,
-  hwContext?: { hwStyle: HandwritingStyleSettings; hwActive: boolean; wordFont: string }
+  hwContext?: DistHwContext
 ) => {
   return new TableCell({
     columnSpan,
@@ -220,18 +243,32 @@ const samePreviousMerged = (page: CurriculumSession[], index: number, field: "mi
   return normalized(current.midan) === normalized(previous.midan) && normalized(current.maqta) === normalized(previous.maqta);
 };
 
+export type GenerateDistributionDocxOptions = Pick<
+  PrepareDocxFontsOptions,
+  'allowFallback' | 'fontLoader' | 'settings'
+>;
+
 export const generateDistributionDocx = async (
   pages: CurriculumSession[][], 
   config: MemoConfig, 
   level: "1am" | "2am" | "3am" | "4am",
-  orientation: 'portrait' | 'landscape'
+  orientation: 'portrait' | 'landscape',
+  exportOptions?: GenerateDistributionDocxOptions
 ): Promise<Blob> => {
 
-  const hwStyle = loadHandwritingSettings();
+  const hwStyle = exportOptions?.settings ?? loadHandwritingSettings();
   const hwActive = isHandwritingActiveFor("general", hwStyle);
-  const wordFont = getEffectiveExportFontFamily("docx", hwStyle, "general");
-  const wordFontAttrs = { ascii: wordFont, hAnsi: wordFont, cs: wordFont, hint: "cs" };
-  const hwContext = { hwStyle, hwActive, wordFont };
+  const embeddedFonts = await prepareDocxFonts({
+    settings: hwStyle,
+    area: "general",
+    allowFallback: exportOptions?.allowFallback,
+    fontLoader: exportOptions?.fontLoader,
+  });
+  const wordFont = embeddedFonts.wordFont;
+  const wordFontAttrs = embeddedFonts.fontAttrs;
+  const lineSpacing = getDocxLineSpacing(hwStyle, "general");
+  const defaultBodySize = scaleDocxFontSize(20, hwStyle, "general");
+  const hwContext: DistHwContext = { hwStyle, hwActive, wordFont, fontAttrs: wordFontAttrs, lineSpacing };
 
   const levelLabel =
     level === '4am' ? 'السنة الرابعة متوسط'
@@ -244,11 +281,20 @@ export const generateDistributionDocx = async (
     : await svgToPngData(buildTeacherStampSvg(config));
 
   const doc = new Document({
+    fonts: embeddedFonts.fonts,
     styles: {
       default: {
         document: {
-          run: { rightToLeft: true, font: wordFontAttrs },
-          paragraph: {  alignment: AlignmentType.RIGHT }
+          run: {
+            rightToLeft: true,
+            font: wordFontAttrs,
+            size: defaultBodySize,
+            sizeComplexScript: defaultBodySize,
+          },
+          paragraph: {
+            alignment: AlignmentType.RIGHT,
+            spacing: { line: lineSpacing, lineRule: LineRuleType.AUTO },
+          }
         }
       }
     },
@@ -259,20 +305,20 @@ export const generateDistributionDocx = async (
 
       // The same field banner and column structure are used for all levels.
       rows.push(new TableRow({
-        children: [createCell(`الميدان: ${uniqueFields.join('  |  ') || '—'}`, true, "ECFDF5", 8, 1, 24)]
+        children: [createCell(`الميدان: ${uniqueFields.join('  |  ') || '—'}`, true, "ECFDF5", 8, 1, 24, AlignmentType.CENTER, false, false, hwContext)]
       }));
 
       rows.push(new TableRow({
         tableHeader: true,
         children: [
-          new TableCell({ width: { size: 7, type: WidthType.PERCENTAGE }, shading: { fill: "F8F8F8", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("الشهر", true, "000000", 20)] }),
-          new TableCell({ width: { size: 10, type: WidthType.PERCENTAGE }, shading: { fill: "F8F8F8", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("التاريخ", true, "000000", 20)] }),
-          new TableCell({ width: { size: 12, type: WidthType.PERCENTAGE }, shading: { fill: "ECFDF5", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("الميدان", true, "065F46", 20)] }),
-          new TableCell({ width: { size: 14, type: WidthType.PERCENTAGE }, shading: { fill: "FFFBEB", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("المقطع التعلمي", true, "92400E", 20)] }),
-          new TableCell({ width: { size: 14, type: WidthType.PERCENTAGE }, shading: { fill: "F8F8F8", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("المورد المعرفي", true, "000000", 20)] }),
-          new TableCell({ width: { size: 18, type: WidthType.PERCENTAGE }, shading: { fill: "F8F8F8", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("الحصة الأولى", true, "000000", 20)] }),
-          new TableCell({ width: { size: 18, type: WidthType.PERCENTAGE }, shading: { fill: "F8F8F8", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("الحصة الثانية", true, "000000", 20)] }),
-          new TableCell({ width: { size: 7, type: WidthType.PERCENTAGE }, shading: { fill: "F8F8F8", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("النسبة", true, "000000", 20)] }),
+          new TableCell({ width: { size: 7, type: WidthType.PERCENTAGE }, shading: { fill: "F8F8F8", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("الشهر", true, "000000", 20, AlignmentType.CENTER, false, hwContext)] }),
+          new TableCell({ width: { size: 10, type: WidthType.PERCENTAGE }, shading: { fill: "F8F8F8", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("التاريخ", true, "000000", 20, AlignmentType.CENTER, false, hwContext)] }),
+          new TableCell({ width: { size: 12, type: WidthType.PERCENTAGE }, shading: { fill: "ECFDF5", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("الميدان", true, "065F46", 20, AlignmentType.CENTER, false, hwContext)] }),
+          new TableCell({ width: { size: 14, type: WidthType.PERCENTAGE }, shading: { fill: "FFFBEB", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("المقطع التعلمي", true, "92400E", 20, AlignmentType.CENTER, false, hwContext)] }),
+          new TableCell({ width: { size: 14, type: WidthType.PERCENTAGE }, shading: { fill: "F8F8F8", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("المورد المعرفي", true, "000000", 20, AlignmentType.CENTER, false, hwContext)] }),
+          new TableCell({ width: { size: 18, type: WidthType.PERCENTAGE }, shading: { fill: "F8F8F8", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("الحصة الأولى", true, "000000", 20, AlignmentType.CENTER, false, hwContext)] }),
+          new TableCell({ width: { size: 18, type: WidthType.PERCENTAGE }, shading: { fill: "F8F8F8", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("الحصة الثانية", true, "000000", 20, AlignmentType.CENTER, false, hwContext)] }),
+          new TableCell({ width: { size: 7, type: WidthType.PERCENTAGE }, shading: { fill: "F8F8F8", type: ShadingType.CLEAR, color: "auto" }, children: [createParagraph("النسبة", true, "000000", 20, AlignmentType.CENTER, false, hwContext)] }),
         ]
       }));
 
@@ -289,43 +335,43 @@ export const generateDistributionDocx = async (
           if (isFull) {
             rows.push(new TableRow({
               children: [
-                createCell(item.month, true, "DCFCE7"),
-                createCell(weekDisplay, true, "DCFCE7"),
-                createCell(item.holidayLabel || item.session1 || 'عطلة', true, "DCFCE7", 5),
-                createCell((item as any).percent || '', true, "DCFCE7")
+                createCell(item.month, true, "DCFCE7", undefined, undefined, 20, AlignmentType.CENTER, false, false, hwContext),
+                createCell(weekDisplay, true, "DCFCE7", undefined, undefined, 20, AlignmentType.CENTER, false, false, hwContext),
+                createCell(item.holidayLabel || item.session1 || 'عطلة', true, "DCFCE7", 5, undefined, 20, AlignmentType.CENTER, false, false, hwContext),
+                createCell((item as any).percent || '', true, "DCFCE7", undefined, undefined, 20, AlignmentType.CENTER, false, false, hwContext)
               ]
             }));
           } else {
             rows.push(new TableRow({
               children: [
-                createCell(item.month, false, "FFFFFF"),
-                createCell(weekDisplay, false, "FFFFFF"),
-                createCell(item.midan || '', true, "ECFDF5"),
-                createCell(item.maqta || '', true, "FFFBEB"),
-                createCell(item.mawrid || '', true, "FFFFFF"),
-                createCell(item.session1 || '', false, "FFFFFF", 1, 1, 20, AlignmentType.RIGHT),
-                createCell(item.session2 || item.holidayLabel || 'عطلة', true, "DCFCE7", 1, 1, 20, AlignmentType.CENTER),
-                createCell((item as any).percent || '', true, "FFFFFF")
+                createCell(item.month, false, "FFFFFF", undefined, undefined, 20, AlignmentType.CENTER, false, false, hwContext),
+                createCell(weekDisplay, false, "FFFFFF", undefined, undefined, 20, AlignmentType.CENTER, false, false, hwContext),
+                createCell(item.midan || '', true, "ECFDF5", undefined, undefined, 20, AlignmentType.CENTER, false, false, hwContext),
+                createCell(item.maqta || '', true, "FFFBEB", undefined, undefined, 20, AlignmentType.CENTER, false, false, hwContext),
+                createCell(item.mawrid || '', true, "FFFFFF", undefined, undefined, 20, AlignmentType.CENTER, false, false, hwContext),
+                createCell(item.session1 || '', false, "FFFFFF", 1, 1, 20, AlignmentType.RIGHT, false, false, hwContext),
+                createCell(item.session2 || item.holidayLabel || 'عطلة', true, "DCFCE7", 1, 1, 20, AlignmentType.CENTER, false, false, hwContext),
+                createCell((item as any).percent || '', true, "FFFFFF", undefined, undefined, 20, AlignmentType.CENTER, false, false, hwContext)
               ]
             }));
           }
         } else if (item.isExam) {
           rows.push(new TableRow({
             children: [
-              createCell(item.month, true, "FDF2F8"),
-              createCell(weekDisplay, true, "FDF2F8"),
-              createCell(item.session1 || item.mawrid || 'إختبارات الفصل', true, "DCFCE7", 5),
-              createCell((item as any).percent || '', true, "FDF2F8")
+              createCell(item.month, true, "FDF2F8", undefined, undefined, 20, AlignmentType.CENTER, false, false, hwContext),
+              createCell(weekDisplay, true, "FDF2F8", undefined, undefined, 20, AlignmentType.CENTER, false, false, hwContext),
+              createCell(item.session1 || item.mawrid || 'إختبارات الفصل', true, "DCFCE7", 5, undefined, 20, AlignmentType.CENTER, false, false, hwContext),
+              createCell((item as any).percent || '', true, "FDF2F8", undefined, undefined, 20, AlignmentType.CENTER, false, false, hwContext)
             ]
           }));
         } else {
           const rowBg = rowIndex % 2 === 0 ? "FFFFFF" : "F0FDF4";
           rows.push(new TableRow({
             children: [
-              createCell(item.month, false, rowBg),
-              createCell(weekDisplay, false, rowBg),
-              ...(!samePreviousMerged(page, rowIndex, "midan") ? [createCell(item.midan || '', true, "ECFDF5", undefined, mergedSpan(page, rowIndex, "midan"), 20, AlignmentType.CENTER, true)] : []),
-              ...(!samePreviousMerged(page, rowIndex, "maqta") ? [createCell(item.maqta || '', true, "FFFBEB", undefined, mergedSpan(page, rowIndex, "maqta"), 20, AlignmentType.CENTER, true)] : []),
+              createCell(item.month, false, rowBg, undefined, undefined, 20, AlignmentType.CENTER, false, false, hwContext),
+              createCell(weekDisplay, false, rowBg, undefined, undefined, 20, AlignmentType.CENTER, false, false, hwContext),
+              ...(!samePreviousMerged(page, rowIndex, "midan") ? [createCell(item.midan || '', true, "ECFDF5", undefined, mergedSpan(page, rowIndex, "midan"), 20, AlignmentType.CENTER, true, false, hwContext)] : []),
+              ...(!samePreviousMerged(page, rowIndex, "maqta") ? [createCell(item.maqta || '', true, "FFFBEB", undefined, mergedSpan(page, rowIndex, "maqta"), 20, AlignmentType.CENTER, true, false, hwContext)] : []),
               ...(!samePreviousMerged(page, rowIndex, "mawrid") ? [createCell(item.mawrid || '', true, rowBg, undefined, mergedSpan(page, rowIndex, "mawrid"), 20, AlignmentType.CENTER, true, false, hwContext)] : []),
               createCell(item.session1 || '', false, rowBg, 1, 1, 20, AlignmentType.RIGHT, false, true, hwContext),
               createCell(item.session2 || '', false, rowBg, 1, 1, 20, AlignmentType.RIGHT, false, true, hwContext),
@@ -349,8 +395,8 @@ export const generateDistributionDocx = async (
             children: [new Paragraph({
               alignment: AlignmentType.CENTER,
               children: [
-                new TextRun({ text: 'الصفحة ', font: wordFontAttrs, rightToLeft: true }),
-                new TextRun({ children: [PageNumber.CURRENT], font: wordFontAttrs })
+                new TextRun({ text: 'الصفحة ', font: wordFontAttrs, rightToLeft: true, size: defaultBodySize, sizeComplexScript: defaultBodySize }),
+                new TextRun({ children: [PageNumber.CURRENT], font: wordFontAttrs, size: defaultBodySize, sizeComplexScript: defaultBodySize })
               ]
             })]
           })
@@ -371,9 +417,9 @@ export const generateDistributionDocx = async (
             rows: [
               new TableRow({
                 children: [
-                  createCell(`المستوى: ${levelLabel}`, true, undefined, 1, 1, 24, AlignmentType.RIGHT),
-                  createCell(`التدرج السنوي لبناء التعلمات`, true, undefined, 1, 1, 28, AlignmentType.CENTER),
-                  createCell(`الأستاذ: ${config.teacherName}`, true, undefined, 1, 1, 24, AlignmentType.LEFT),
+                  createCell(`المستوى: ${levelLabel}`, true, undefined, 1, 1, 24, AlignmentType.RIGHT, false, false, hwContext),
+                  createCell(`التدرج السنوي لبناء التعلمات`, true, undefined, 1, 1, 28, AlignmentType.CENTER, false, false, hwContext),
+                  createCell(`الأستاذ: ${config.teacherName}`, true, undefined, 1, 1, 24, AlignmentType.LEFT, false, false, hwContext),
                 ]
               })
             ]
@@ -411,11 +457,11 @@ export const generateDistributionDocx = async (
               new TableRow({
                 children: [
                   new TableCell({ children: [
-                    createParagraph("إمضاء الأستاذ(ة):", true, "000000", 22, AlignmentType.RIGHT),
+                    createParagraph("إمضاء الأستاذ(ة):", true, "000000", 22, AlignmentType.RIGHT, false, hwContext),
                     new Paragraph({ alignment: AlignmentType.CENTER, children: [new ImageRun({ type: "png", data: teacherStampData, transformation: { width: 90, height: 90 } })] })
                   ] }),
-                  createCell("السيد(ة) المدير(ة):", true, undefined, 1, 1, 22, AlignmentType.CENTER),
-                  createCell("السيد(ة) المفتش(ة):", true, undefined, 1, 1, 22, AlignmentType.LEFT),
+                  createCell("السيد(ة) المدير(ة):", true, undefined, 1, 1, 22, AlignmentType.CENTER, false, false, hwContext),
+                  createCell("السيد(ة) المفتش(ة):", true, undefined, 1, 1, 22, AlignmentType.LEFT, false, false, hwContext),
                 ]
               })
             ]
