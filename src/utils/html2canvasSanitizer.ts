@@ -325,10 +325,73 @@ export function patchWindowGetComputedStyleForHtml2Canvas(targetWindow: Window =
 }
 
 /**
+ * إبطال تباعد الحروف (letter-spacing) داخل المستند المنسوخ.
+ *
+ * html2canvas v1.4 يقسّم النص إلى "غرافيمات" (حرف إلكتروني واحد) كلما كان
+ * letter-spacing لا يساوي صفراً ثم يرسم كل حرف على حدة بـ ctx.fillText.
+ * وبما أن المتصفح لا يملك سياقاً نصياً لربط الحروف المتجاورة فإن كل حرف
+ * يُرسم بشكله المنفصل (isolated form)، والمسافات تُرسم في الموضع الخاطئ في
+ * اتجاه RTL، فتتحول الجملة العربية إلى «الجمهوريةالجزائرية...» وتختفي
+ * التشكيلات ووصلات الحروف.
+ *
+ * الحل: تصفير letter-spacing في نسخة التصدير فقط (لا في الشاشة) حتى يسلك
+ * النص المسار العادي fillText(fullRun) فيحافظ html2canvas على تشكيل العربية
+ * كما تراه في المعاينة.
+ */
+export const NEUTRALIZE_LETTER_SPACING_CLASS = 'export-letter-spacing-normal';
+
+const LETTER_SPACING_CSS = `
+  .${NEUTRALIZE_LETTER_SPACING_CLASS},
+  .${NEUTRALIZE_LETTER_SPACING_CLASS} * {
+    letter-spacing: normal !important;
+    word-spacing: normal !important;
+    text-rendering: optimizeLegibility !important;
+    font-kerning: normal !important;
+  }
+  svg text, text {
+    letter-spacing: normal !important;
+  }
+`;
+
+export const neutralizeLetterSpacingInClone = (clonedDoc: Document): void => {
+  try {
+    const styleId = 'html2canvas-letter-spacing-fix';
+    if (!clonedDoc.getElementById(styleId)) {
+      const styleEl = clonedDoc.createElement('style');
+      styleEl.id = styleId;
+      styleEl.textContent = LETTER_SPACING_CSS;
+      (clonedDoc.head || clonedDoc.documentElement).appendChild(styleEl);
+    }
+
+    if (clonedDoc.body) {
+      clonedDoc.body.classList.add(NEUTRALIZE_LETTER_SPACING_CLASS);
+    }
+
+    // الشبكة الاحتياطية: بعض العناصر تُطبّق التباعد عبر style مضمن يتفوق
+    // على أي قاعدة CSS، لذلك نصفّره مباشرة أيضاً.
+    clonedDoc.querySelectorAll<HTMLElement>('[style*="letter-spacing"]').forEach((el) => {
+      el.style.setProperty('letter-spacing', 'normal', 'important');
+      el.style.setProperty('word-spacing', 'normal', 'important');
+    });
+
+    clonedDoc.querySelectorAll<HTMLElement>('[class*="tracking-"]').forEach((el) => {
+      el.style.setProperty('letter-spacing', 'normal', 'important');
+    });
+  } catch (err) {
+    console.warn('html2canvas letter-spacing neutralize warning:', err);
+  }
+};
+
+/**
  * تنظيف كامل للمستند المنسوخ لـ html2canvas قبل البدء في الرسم
  */
 export const sanitizeOklchForHtml2Canvas = (clonedDoc: Document): void => {
   try {
+    // إبطال تباعد الحروف قبل أي شيء آخر حتى لا يجزّئ html2canvas الكلمات العربية
+    neutralizeLetterSpacingInClone(clonedDoc);
+    // تصحيح قياس خط الأساس حتى لا تُرسم العناوين منخفضة فتتراكب
+    stabilizeBaselineMeasurement(clonedDoc);
+
     // 0. اعتراض getComputedStyle في نافذة المستند المنسوخ إن وُجدت
     if (clonedDoc.defaultView) {
       patchWindowGetComputedStyleForHtml2Canvas(clonedDoc.defaultView);
@@ -520,17 +583,184 @@ export const sanitizeColorsForHtml2Canvas = sanitizeOklchForHtml2Canvas;
  * غلاف شامل وآمن لـ html2canvas يعترض تلقائياً أي دوال ألوان حديثة
  * (oklch, oklab, color-mix) ويمنع أي انهيار في التصيير والطباعة والتصدير.
  */
+/**
+ * تحميل كل أوزان/عائلات الخطوط المستخدمة في الصفحة داخل المستند الأصلي.
+ *
+ * لماذا هذا ضروري:
+ * html2canvas ينسخ الصفحة إلى iframe ثم ينتظر `documentClone.fonts.ready`.
+ * سجلات الخطوط في المستند المنسوخ تبدأ بحالة "loading" و`fonts.ready` يُحلّ
+ * فوراً في تلك اللحظة، فيُكمل الرسم قبل جهوزية الخط. النتيجة: النص يُرسم بخط
+ * احتياطي ذي مقاييس مختلفة، فتتراكب العناوين (مثل «الدفتر اليومي للأستاذ»
+ * فوق شارتها). لذلك نُجبر كل الأوجه على التحميل في المستند الأصلي أولاً؛
+ * وعندها تُنسخ حالة "loaded" وتصبح القياسات صحيحة.
+ */
+export async function ensureExportFontsReady(root: HTMLElement | Document = document): Promise<void> {
+  if (typeof document === 'undefined' || !document.fonts) return;
+
+  const specs = new Set<string>();
+  const scope = root instanceof Document ? root.body : root;
+
+  if (scope) {
+    scope.querySelectorAll<HTMLElement>('*').forEach((el) => {
+      // نتخطى العناصر التي لا تحمل نصاً محسوساً لتقليل عدد الطلبات
+      if (!el.textContent || !el.textContent.trim()) return;
+      const cs = getComputedStyle(el);
+      const family = (cs.fontFamily || '').split(',')[0].replace(/["']/g, '').trim();
+      if (!family) return;
+      specs.add(`${cs.fontStyle || 'normal'} ${cs.fontWeight || '400'} 16px "${family}"`);
+    });
+  }
+
+  // أوزان الخطوط المستخدمة في قوالب الدفتر بغض النظر عن الحالة الحالية
+  ['400', '500', '700', '800', '900'].forEach((weight) => {
+    specs.add(`normal ${weight} 16px "Tajawal"`);
+    specs.add(`normal ${weight} 16px "Cairo"`);
+  });
+
+  await Promise.all(
+    Array.from(specs).map(async (spec) => {
+      try {
+        await document.fonts.load(spec);
+      } catch {
+        /* تجاهل الأوزان غير الموجودة */
+      }
+    })
+  );
+
+  try {
+    await document.fonts.ready;
+  } catch {
+    /* ignore */
+  }
+}
+
+
+/**
+ * انتظار جهوزية الخطوط داخل المستند المنسوخ (iframe html2canvas) قبل الرسم.
+ */
+async function waitForClonedFontsReady(clonedDoc: Document): Promise<void> {
+  try {
+    const fonts = clonedDoc.fonts;
+    const win = clonedDoc.defaultView;
+    const specs = new Set<string>(['normal 400 16px "Tajawal"', 'normal 700 16px "Tajawal"', 'normal 900 16px "Tajawal"']);
+    clonedDoc.querySelectorAll<HTMLElement>('*').forEach((el) => {
+      if (!el.textContent || !el.textContent.trim()) return;
+      const cs = win ? win.getComputedStyle(el) : null;
+      if (!cs) return;
+      const family = (cs.fontFamily || '').split(',')[0].replace(/["']/g, '').trim();
+      if (family) specs.add(`${cs.fontStyle || 'normal'} ${cs.fontWeight || '400'} 16px "${family}"`);
+    });
+
+    if (fonts) {
+      await Promise.all(
+        Array.from(specs).map(async (spec) => {
+          try {
+            await fonts.load(spec);
+          } catch {
+            /* ignore */
+          }
+        })
+      );
+      try {
+        await fonts.ready;
+      } catch {
+        /* ignore */
+      }
+    }
+
+    if (win) {
+      await new Promise<void>((resolve) => {
+        let frames = 0;
+        const tick = () => {
+          frames += 1;
+          if (frames >= 3) return resolve();
+          win.requestAnimationFrame(tick);
+        };
+        win.requestAnimationFrame(tick);
+        setTimeout(resolve, 1500);
+      });
+    }
+  } catch (err) {
+    console.warn('html2canvas cloned fonts wait warning:', err);
+  }
+}
+
+
+/**
+ * إصلاح قياس خط الأساس (baseline) داخل المستند المنسوخ.
+ *
+ * html2canvas يقيس baseline بإنشاء عنصر قياس داخل `body` المنسوخ، وهذا العنصر
+ * يرث `line-height` الخاص بالـ body. عندما يكون line-height أكبر من normal
+ * (كما في واجهة المنصة) يُحسب خط الأساس أعمق من الحقيقة، فيُرسم النص منخفضاً
+ * عن مكانه فتتراكب العناوين مع العناصر التي تحتها (كما في عنوان الدفتر).
+ *
+ * الحل: نجعل line-height للـ body في النسخة المنسوخة `normal` (فتصبح القياسات
+ * صحيحة) مع تثبيت line-height الأصلي على جذر الصفحة كقيمة مضمنة حتى يبقى
+ * التخطيط مطابقاً للمعاينة تماماً.
+ */
+export const stabilizeBaselineMeasurement = (clonedDoc: Document): void => {
+  try {
+    const styleId = 'html2canvas-baseline-fix';
+    if (!clonedDoc.getElementById(styleId)) {
+      const styleEl = clonedDoc.createElement('style');
+      styleEl.id = styleId;
+      styleEl.textContent = 'body { line-height: normal !important; }';
+      (clonedDoc.head || clonedDoc.documentElement).appendChild(styleEl);
+    }
+
+    // عناوين كبيرة بوزن ثقيل تُكتب عادة بـ leading-none (line-height:1) في
+    // قوالب الدفتر. html2canvas يرسم هذه العناوين أعمق من موضعها الحقيقي
+    // فتتراكب مع الشارة أسفلها. نُعيدها إلى line-height:normal في نسخة
+    // التصدير فقط، وهي القيمة التي تطابق ما يظهر في المعاينة.
+    const win2 = clonedDoc.defaultView;
+    if (win2) {
+      clonedDoc.querySelectorAll<HTMLElement>('h1,h2,h3').forEach((el) => {
+        if (!el.textContent || !el.textContent.trim()) return;
+        const cs = win2.getComputedStyle(el);
+        const fs = parseFloat(cs.fontSize) || 0;
+        const lh = cs.lineHeight === 'normal' ? NaN : parseFloat(cs.lineHeight);
+        const weight = parseInt(cs.fontWeight, 10) || 400;
+        if (fs >= 18 && weight >= 800 && !Number.isNaN(lh) && lh < fs * 1.25) {
+          el.style.setProperty('line-height', 'normal', 'important');
+          // تعويض إزاحة رسم النص: html2canvas يرسم النص منخفضاً بمقدار
+          // يتناسب مع ضيق ارتفاع السطر. رفع العنصر بصرياً يعيد التطابق
+          // مع المعاينة دون التأثير على تخطيط بقية العناصر.
+          el.style.setProperty('position', 'relative', 'important');
+          el.style.setProperty('top', '-0.26em', 'important');
+        }
+      });
+    }
+
+    const roots = clonedDoc.querySelectorAll<HTMLElement>(
+      '[data-preview-export-page="true"], .print-page'
+    );
+    roots.forEach((root) => {
+      const cs = clonedDoc.defaultView?.getComputedStyle(root);
+      if (cs?.lineHeight && cs.lineHeight !== 'normal') {
+        root.style.lineHeight = cs.lineHeight;
+      }
+    });
+  } catch (err) {
+    console.warn('html2canvas baseline fix warning:', err);
+  }
+};
+
 export async function safeHtml2Canvas(element: HTMLElement, options: any = {}): Promise<HTMLCanvasElement> {
+  await ensureExportFontsReady(element);
   const restoreWindow = patchWindowGetComputedStyleForHtml2Canvas(window);
   const userOnClone = options.onclone;
 
   const mergedOptions = {
     ...options,
-    onclone: (clonedDoc: Document, clonedEl: HTMLElement) => {
+    // onclone غير متزامن عن قصد: html2canvas ينتظر القيمة المُعادة قبل
+    // بدء الرسم، وهذا يمنحنا فرصة تحميل الخطوط داخل المستند المنسوخ نفسه
+    // (سجلات الخطوط في الـ iframe تبدأ "loading" فيرسم بأشكال حروف خاطئة).
+    onclone: async (clonedDoc: Document, clonedEl: HTMLElement) => {
       sanitizeOklchForHtml2Canvas(clonedDoc);
       if (typeof userOnClone === 'function') {
-        userOnClone(clonedDoc, clonedEl);
+        await userOnClone(clonedDoc, clonedEl);
       }
+      await waitForClonedFontsReady(clonedDoc);
     },
   };
 

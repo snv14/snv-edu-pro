@@ -1,5 +1,6 @@
-@import "@fontsource/cairo/400.css";
-@import "@fontsource/cairo/700.css";
+/* خطوط Cairo + Tajawal (كل الأوزان) مضمّنة كـ data URI بدل ملفات خارجية،
+   ليعمل تصدير PDF/Word بخط مطابق للمعاينة حتى داخل iframe الرسم وبلا إنترنت. */
+@import "./styles/embedded-fonts.css";
 @import "tailwindcss";
 
 :root { --platform-ink:#172033; --platform-teal:#0f766e; --platform-teal-dark:#115e59; }

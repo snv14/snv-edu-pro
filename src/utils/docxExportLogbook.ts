@@ -19,11 +19,36 @@ import {
 } from "docx";
 import { MemoConfig } from "../types";
 import { LogEntry, getBaseSection } from "../components/DailyLogbook";
-import { safeHtml2Canvas } from "./html2canvasSanitizer";
+import { safeHtml2Canvas, neutralizeLetterSpacingInClone } from "./html2canvasSanitizer";
 import { splitLogbookTime } from "./logbookPageTemplate";
+
+/**
+ * ملاحظة مهمة حول الخطوط في Word:
+ * الخاصية `w:rFonts/@w:ascii` تضيف تباعداً حرفياً (letter-spacing) داخل Word،
+ * وهو ما يجعل العربية تبدو مقطّعة تماماً كعطل html2canvas. لذلك نستخدم في
+ * المستند exporting خطاً عربياً بلا تباعد حرفي، ونضبط أيضاً الخط الخاص
+ * بالنص المركّب (Complex Script) عبر sizeComplexScript/boldComplexScript حتى
+ * تُعرض العربية بحجمها ووزنها الصحيح داخل Word.
+ */
+const DOCX_ARABIC_FONT = "Tajawal";
+
+/**
+ * خيارات الخط لـ Word:
+ * ascii/hAnsi → خط لاتيني قياسي حتى تظهر الأرقام ورموز الحروف اللاتينية
+ *               (Eau distillée, KNOP, N, P, K...) بشكل سليم.
+ * cs          → خط عربي (Complex Script) حتى لا يستبدل Word العربية بخط آخر.
+ */
+const createWordFont = (): any => ({
+  ascii: "Calibri",
+  hAnsi: "Calibri",
+  eastAsia: DOCX_ARABIC_FONT,
+  cs: DOCX_ARABIC_FONT,
+  hint: "default",
+});
 
 const createParagraph = (text: string, bold = false, color = "000000", size = 20, alignment: any = AlignmentType.CENTER) => {
   return new Paragraph({
+    bidirectional: true,
     alignment: alignment,
     children: (text || "").split('\n').map((line, i, arr) => {
       const parts = line.split(/(<u>.*?<\/u>)/g);
@@ -36,7 +61,9 @@ const createParagraph = (text: string, bold = false, color = "000000", size = 20
             color: color,
             rightToLeft: true,
             size: size,
-            font: "Tajawal"
+            sizeComplexScript: size,
+            boldComplexScript: bold,
+            font: createWordFont()
           });
         }
         return new TextRun({
@@ -45,7 +72,9 @@ const createParagraph = (text: string, bold = false, color = "000000", size = 20
           color: color,
           rightToLeft: true,
           size: size,
-          font: "Tajawal"
+          sizeComplexScript: size,
+          boldComplexScript: bold,
+          font: createWordFont()
         });
       });
       return [ ...runs, ...(i < arr.length - 1 ? [new TextRun({ break: 1 })] : []) ];
@@ -379,6 +408,7 @@ export const generateLogbookDocx = async (
   const skyBorder = { style: BorderStyle.SINGLE, size: 2, color: "0284C7" };
   const dashedBorder = { style: BorderStyle.DASHED, size: 1, color: "7DD3FC" };
   const noneBorder = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
+  const stampedBorder = { style: BorderStyle.SINGLE, size: 4, color: "8AC1C5" };
 
   // ==========================================
   // الصفحة 1: الصفحة التعريفية (Introductory Page)
@@ -536,6 +566,36 @@ export const generateLogbookDocx = async (
     );
   }
 
+  // صفحة استعمال الزمن إلزامية: إن لم تكن الشبكة محمّلة في هذه اللحظة
+  // نضع صفحة صريحة تشرح ذلك بدل حذف الصفحة بالكامل من الملف.
+  if (!gridRows.length) {
+    coverChildren.push(
+      createParagraph("جدول استعمال الزمن الأسبوعي الرسمي للأستاذ", true, "0369A1", 20, AlignmentType.RIGHT),
+      new Paragraph({ text: "", spacing: { after: 80 } }),
+      new Table({
+        visuallyRightToLeft: true,
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        borders: { top: skyBorder, bottom: skyBorder, left: skyBorder, right: skyBorder, insideHorizontal: dashedBorder, insideVertical: dashedBorder },
+        rows: [
+          new TableRow({
+            tableHeader: true,
+            children: [
+              createCell("اليوم \\ التوقيت", true, "E1F0FA", 1, 1, 17, AlignmentType.CENTER, 25, "0369A1"),
+              createCell("التوقيت", true, "E1F0FA", 1, 1, 17, AlignmentType.CENTER, 75, "0369A1"),
+            ],
+          }),
+          ...WEEK_DAYS.map((day) => new TableRow({
+            children: [
+              createCell(day, true, "F0F9FF", 1, 1, 16, AlignmentType.CENTER, 25, "0369A1"),
+              createCell("—", false, "FFFFFF", 1, 1, 16, AlignmentType.CENTER, 75),
+            ],
+          })),
+        ],
+      }),
+      new Paragraph({ text: "", spacing: { after: 160 } })
+    );
+  }
+
   // التوقيعات الأربعة في صفحة الغلاف
   coverChildren.push(
     new Table({
@@ -587,15 +647,21 @@ export const generateLogbookDocx = async (
         createCell('سير الحصة و الأنشطة', true, 'DEEFF1', 1, 1, 18, AlignmentType.CENTER, cells[4]),
         createCell('ملاحظات', true, 'DEEFF1', 1, 1, 18, AlignmentType.CENTER, cells[5]),
       ] });
+      // الحصة الواحدة قد تمتد على أكثر من صفحة؛ لا نكرّر محتواها في كل صفحة
+      // (كان Word يعرض نفس الدرس 5-6 مرات كما ظهر في ملف PDF المرجعي).
+      const seenInEarlierPages = new Set(
+        pages.slice(0, pageIdx).flat().map((l) => l.id)
+      );
       const body = pageRows.map(log => {
         const previous = findPreviousComparableCurriculumLog(logs, logs.findIndex(item => item.id === log.id), log);
         const [from, to] = splitLogbookTime(log.time);
+        const alreadyShown = seenInEarlierPages.has(log.id);
         return new TableRow({ cantSplit: true, children: [
           createCell(`${log.dayName || ''}\n${log.dateStr || ''}`.trim(), false, 'FFFFFF', 1, 1, 16, AlignmentType.CENTER, cells[0]),
           createCell(from, false, 'FFFFFF', 1, 1, 16, AlignmentType.CENTER, cells[1]),
           createCell(to, false, 'FFFFFF', 1, 1, 16, AlignmentType.CENTER, cells[2]),
           createCell(log.section || '', true, 'FFFFFF', 1, 1, 16, AlignmentType.CENTER, cells[3]),
-          createCell(getExportLessonContent(log, previous), false, 'FFFFFF', 1, 1, 16, AlignmentType.RIGHT, cells[4]),
+          createCell(alreadyShown ? '— (تكملة الحصة في الصفحة السابقة)' : getExportLessonContent(log, previous), false, 'FFFFFF', 1, 1, 16, AlignmentType.RIGHT, cells[4]),
           createCell(log.note || '', false, 'FFFFFF', 1, 1, 16, AlignmentType.RIGHT, cells[5]),
         ] });
       });
@@ -604,8 +670,30 @@ export const generateLogbookDocx = async (
         children: [
           createParagraph('التاريخ: ........................                         الموافق لـ: ........................', true, '255960', 20),
           new Table({ visuallyRightToLeft: true, width: { size: 100, type: WidthType.PERCENTAGE }, borders: { top: border, bottom: border, left: border, right: border, insideHorizontal: dashedBorder, insideVertical: border }, rows: [header, ...body] }),
-          new Paragraph({ text: '', spacing: { after: 240 } }),
-          createParagraph('المدير(ة)                               الأستاذ(ة)                               المفتش(ة)', true, '000000', 20),
+          new Paragraph({ text: '', spacing: { after: 120 } }),
+          // شريط التوقيعات الرسمي مع الختم — كما يظهر في تذييل المعاينة تماماً
+          new Table({
+            visuallyRightToLeft: true,
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            borders: { top: stampedBorder, bottom: stampedBorder, left: stampedBorder, right: stampedBorder, insideHorizontal: stampedBorder, insideVertical: stampedBorder },
+            rows: [
+              new TableRow({
+                children: [
+                  createCell('توقيع الأستاذ(ة)\n\n\n..................', true, 'F8FAFC', 1, 1, 15, AlignmentType.CENTER, 25),
+                  createCell([
+                    createParagraph('ختم الأستاذ(ة)', true, '18181B', 14),
+                    new Paragraph({
+                      alignment: AlignmentType.CENTER,
+                      children: [new ImageRun({ type: 'png', data: stampPngBytes, transformation: { width: 46, height: 46 } })],
+                    }),
+                  ], false, 'F8FAFC', 1, 1, 15, AlignmentType.CENTER, 25),
+                  createCell('تأشيرة مدير المؤسسة\n\n\n..................', true, 'F8FAFC', 1, 1, 15, AlignmentType.CENTER, 25),
+                  createCell('تأشيرة مفتش المادة\n\n\n..................', true, 'F8FAFC', 1, 1, 15, AlignmentType.CENTER, 25),
+                ],
+              }),
+            ],
+          }),
+          new Paragraph({ children: [new TextRun({ text: `صفحة ${pageIdx + 1} من ${totalPages} — 🇩🇿`, bold: true, color: '0369A1', size: 15, sizeComplexScript: 15, rightToLeft: true, font: createWordFont() })], bidirectional: true, alignment: AlignmentType.CENTER, spacing: { before: 120 } }),
         ],
       };
     }
@@ -649,6 +737,8 @@ export const generateLogbookDocx = async (
                   createParagraph("الجمهورية الجزائرية الديمقراطية الشعبية", true, "18181B", 18),
                   createParagraph("وزارة التربية الوطنية", true, "0369A1", 16),
                   createParagraph("◆", true, "0284C7", 13),
+                  // شارة واحدة (جدول بخلية واحدة) تجمع العنوان وسطره الفرعي،
+                  // بدل صفّين منفصلين كانا يظهران كصندوقين متباعدين في Word.
                   new Table({
                     visuallyRightToLeft: true,
                     width: { size: 100, type: WidthType.PERCENTAGE },
@@ -952,7 +1042,7 @@ export const generateLogbookDocx = async (
     styles: {
       default: {
         document: {
-          run: { rightToLeft: true, font: "Tajawal" },
+          run: { rightToLeft: true, size: 20, sizeComplexScript: 20, font: createWordFont() },
           paragraph: { alignment: AlignmentType.RIGHT }
         }
       }
