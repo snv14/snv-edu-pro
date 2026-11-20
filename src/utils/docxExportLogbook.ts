@@ -325,20 +325,7 @@ const getExportLessonContent = (log: LogEntry, previous?: LogEntry): string => {
   return parts.join('\n') || content || learningOutcome || clean(log.mawrid);
 };
 
-const base64ToUint8Array = (base64: string): Uint8Array => {
-  const binary = typeof atob === 'function'
-    ? atob(base64)
-    : typeof window !== 'undefined' && typeof window.atob === 'function'
-    ? window.atob(base64)
-    : typeof Buffer !== 'undefined'
-    ? Buffer.from(base64, 'base64').toString('binary')
-    : '';
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes;
-};
-
-const FALLBACK_1X1_PNG = base64ToUint8Array("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=");
+import { FALLBACK_1X1_PNG, base64ToUint8Array } from './exportDom';
 
 const imageDataUrlToPng = async (dataUrl: string): Promise<Uint8Array> => {
   try {

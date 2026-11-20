@@ -9,17 +9,7 @@ import {
 
 export type DistributionOrientation = "portrait" | "landscape";
 
-const waitForImages = async (root: HTMLElement) => {
-  await Promise.all(Array.from(root.querySelectorAll("img")).map(async (img) => {
-    if (img.complete) return;
-    await new Promise<void>(resolve => {
-      img.addEventListener("load", () => resolve(), { once: true });
-      img.addEventListener("error", () => resolve(), { once: true });
-      // مهلة أمان لمنع أي توقف لا نهائي
-      setTimeout(() => resolve(), 2500);
-    });
-  }));
-};
+import { waitForImages } from './exportDom';
 
 export const generateDistributionPdf = async (
   pageElements: HTMLElement[],

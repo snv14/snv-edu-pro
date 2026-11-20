@@ -1,10 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { Plus, Save, Trash2, Download, Search, Edit3, X, Database } from 'lucide-react';
+import { Plus, Save, Trash2, Download, Search, Edit3, X, Database, Layers, Sparkles, AlertTriangle, ListChecks } from 'lucide-react';
 import { LessonMemo, Activity } from '../types';
+import { saveCurriculumDatabase, exportCurriculumDatabase } from '../data/memos/curriculumDb';
 
 const normalizeKey = (v: string) => v.trim().replace(/\s+/g, ' ').toLowerCase();
 const lessonKey = (l: LessonMemo) => l.sourceLearningUnitId || [l.level, l.maqta, l.mawrid, l.ta3alom].map(normalizeKey).join('|');
-import { saveCurriculumDatabase, exportCurriculumDatabase } from '../data/memos/curriculumDb';
 
 interface Props {
   lessons: LessonMemo[];
@@ -17,18 +17,25 @@ const LABELS: Record<LessonMemo['level'], string> = {
   '3am': 'السنة الثالثة متوسط', '4am': 'السنة الرابعة متوسط'
 };
 
+/** معرّف فريد: كان Date.now() وحده ينتج معرّفات متطابقة لسجلات تُنشأ في نفس اللحظة. */
+const uniqueId = (prefix: string) =>
+  `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
 const newActivity = (): Activity => ({
   title: 'نشاط جديد', asila: '', ajwiba: '', zaman: '', mola7adha: '', diagrams: [], tables: []
 });
 
 const newLesson = (level: LessonMemo['level']): LessonMemo => ({
-  sourceLearningUnitId: 'custom_' + level + '_' + Date.now(),
+  sourceLearningUnitId: uniqueId('custom_' + level),
   sourceOfficial: false, level, midan: '', maqta: '', mawrid: '', ta3alom: '',
   markaba: '', marifa: '', manhaji: '', mostalahat: '', wasail: '', wadiya: '',
   moshkila: '', faradiyat: '', anshita: [newActivity()], irsae: '', taqwim: '', memoNumber: ''
 });
 
 const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
+
+const inputClass =
+  'w-full rounded-xl border border-[#e2e8e5] bg-white px-3 py-2 text-[12px] font-medium text-[#0b1f1c] outline-none transition focus:border-[#0e7a68] focus:ring-2 focus:ring-[#0e7a68]/15';
 
 export const CurriculumDatabaseManager: React.FC<Props> = ({ lessons, setLessons, showToast }) => {
   const [level, setLevel] = useState<LessonMemo['level']>('1am');
@@ -114,100 +121,299 @@ export const CurriculumDatabaseManager: React.FC<Props> = ({ lessons, setLessons
 
   const field = (key: keyof LessonMemo, label: string) => (
     <label className="block" key={String(key)}>
-      <span className="block text-[11px] font-bold text-gray-600 mb-1">{label}</span>
-      <textarea value={String(editing?.[key] ?? '')}
+      <span className="mb-1 block text-[11px] font-bold text-[#5c6f6a]">{label}</span>
+      <textarea
+        value={String(editing?.[key] ?? '')}
         onChange={e => editing && setEditing({ ...editing, [key]: e.target.value } as LessonMemo)}
-        className="w-full min-h-10 border rounded-lg p-2 text-xs resize-y focus:border-emerald-600 outline-none" />
+        className={`${inputClass} min-h-16 resize-y leading-relaxed`}
+      />
     </label>
   );
 
+  const stats = [
+    { id: 'records', label: 'السجلات', value: lessons.length, icon: Database, tint: '#eef5f2', ink: '#0a5f51' },
+    { id: 'custom', label: 'مضاف / معدّل', value: diagnostics.custom, icon: Sparkles, tint: '#f7f2e2', ink: '#8a6a14' },
+    { id: 'dupes', label: 'تكرارات محتملة', value: diagnostics.duplicates, icon: AlertTriangle, tint: '#fbeeee', ink: '#a33b3b' },
+    { id: 'empty', label: 'بدون نشاط', value: diagnostics.emptyActivities, icon: ListChecks, tint: '#eef2f5', ink: '#3f5a6b' },
+  ];
+
   return (
-    <main className="flex-1 p-3.5 sm:p-5 bg-slate-50 overflow-y-auto overflow-x-clip" dir="rtl">
-      <div className="max-w-7xl mx-auto">
-        <div className="bg-white rounded-2xl border border-slate-200 p-4 mb-4">
-          <div className="flex flex-wrap justify-between items-center gap-3">
-            <div className="flex items-center gap-2"><Database className="w-5 h-5 text-emerald-700" /><h1 className="text-lg sm:text-xl font-extrabold text-slate-900">إدارة قاعدة البيانات والموارد التعليمية</h1></div>
+    <main className="flex-1 overflow-y-auto overflow-x-clip p-3.5 sm:p-5" dir="rtl">
+      <div className="mx-auto max-w-[1400px] space-y-4">
+
+        {/* ترويسة القسم */}
+        <section className="snv-service-panel !p-4 sm:!p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <span className="snv-icon-tile !h-10 !w-10">
+                <Database className="h-5 w-5" aria-hidden="true" />
+              </span>
+              <div>
+                <span className="snv-kicker">قاعدة العمل</span>
+                <h1 className="text-base font-extrabold text-[#0b1f1c] sm:text-lg">
+                  إدارة قاعدة البيانات والموارد التعليمية
+                </h1>
+              </div>
+            </div>
+
             <div className="flex flex-wrap items-center gap-2">
-              <button onClick={handleNewDatabase} className="px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-xs transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap">
-                <Plus className="w-4 h-4" />
+              <button
+                type="button"
+                onClick={handleNewDatabase}
+                className="snv-btn !bg-[#0e7a68] !px-3.5 !py-2 !text-[11.5px] !text-white hover:!brightness-110"
+              >
+                <Plus className="h-4 w-4" aria-hidden="true" />
                 <span>قاعدة بيانات جديدة</span>
               </button>
-              <button onClick={exportDb} className="px-3 py-2 rounded-xl border border-slate-300 hover:bg-slate-50 text-xs font-bold transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap">
-                <Download className="w-4 h-4" />
+              <button
+                type="button"
+                onClick={exportDb}
+                className="inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-xl border border-[#e2e8e5] bg-white px-3.5 py-2 text-[11.5px] font-bold text-[#334842] transition hover:border-[#0e7a68]/35 hover:text-[#0a5f51]"
+              >
+                <Download className="h-4 w-4" aria-hidden="true" />
                 <span>تصدير JSON</span>
               </button>
             </div>
           </div>
-          <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-bold tabular-nums">
-            <div className="rounded-xl bg-slate-50 border border-slate-200/70 p-2">السجلات: <b>{lessons.length}</b></div>
-            <div className="rounded-xl bg-emerald-50 border border-emerald-100 p-2">مضاف/معدل: <b>{diagnostics.custom}</b></div>
-            <div className="rounded-xl bg-amber-50 border border-amber-100 p-2">تكرارات محتملة: <b>{diagnostics.duplicates}</b></div>
-            <div className="rounded-xl bg-rose-50 border border-rose-100 p-2">بدون نشاط: <b>{diagnostics.emptyActivities}</b></div>
-          </div>
-        </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-4">
-          <section className="bg-white rounded-2xl border overflow-hidden">
-            <div className="p-3 border-b bg-gray-50">
-              <div className="grid grid-cols-4 gap-1 mb-3">
-                {(['1am','2am','3am','4am'] as LessonMemo['level'][]).map(l =>
-                  <button key={l} onClick={() => { setLevel(l); setEditing(null); setSelectedKey(''); }}
-                    className={'py-2 rounded-lg text-[11px] font-black ' + (level === l ? 'bg-emerald-700 text-white' : 'bg-white border')}>{l.toUpperCase()}</button>
-                )}
+          <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
+            {stats.map(({ id, label, value, icon: Icon, tint, ink }) => (
+              <div
+                key={id}
+                className="flex items-center justify-between gap-2 rounded-xl border border-[#e2e8e5] px-3 py-2.5"
+                style={{ backgroundColor: tint }}
+              >
+                <div>
+                  <div className="text-[10.5px] font-bold" style={{ color: ink }}>{label}</div>
+                  <div className="text-lg font-extrabold tabular-nums text-[#0b1f1c]">{value}</div>
+                </div>
+                <Icon className="h-4 w-4 opacity-50" style={{ color: ink }} aria-hidden="true" />
               </div>
-              <div className="relative"><Search className="absolute right-3 top-2.5 w-4 h-4 text-gray-400" />
-                <input value={query} onChange={e => setQuery(e.target.value)} placeholder="بحث في السجلات والأنشطة..."
-                  className="w-full border rounded-xl py-2.5 pr-9 pl-3 text-xs" /></div>
-            </div>
-            <div className="max-h-[650px] overflow-y-auto p-2">
-              {list.map(l => {
-                const key = lessonKey(l);
-                return <div key={key} className={'p-3 rounded-xl mb-1 border ' + (selectedKey === key ? 'border-emerald-500 bg-emerald-50' : 'border-transparent hover:bg-gray-50')}>
-                  <button className="w-full text-right" onClick={() => open(l)}>
-                    <div className="text-[10px] text-gray-400">مذكرة {l.memoNumber || '—'} • {l.maqta || 'بدون مقطع'}</div>
-                    <div className="text-[12px] font-black">{l.ta3alom || 'تعلم مورد بدون عنوان'}</div>
-                    <div className="text-[10px] text-gray-500">{l.anshita.length} نشاط • {l.sourceOfficial ? 'مصدر رسمي' : 'مضاف/معدل'}</div>
+            ))}
+          </div>
+        </section>
+
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[340px_minmax(0,1fr)]">
+          {/* قائمة السجلات */}
+          <section className="snv-service-panel !gap-0 overflow-hidden !p-0">
+            <div className="space-y-2.5 border-b border-[#eef2f0] p-3">
+              <div className="grid grid-cols-4 gap-1 rounded-xl border border-[#e2e8e5] bg-[#f4f7f6] p-1">
+                {(['1am', '2am', '3am', '4am'] as LessonMemo['level'][]).map(l => (
+                  <button
+                    key={l}
+                    type="button"
+                    onClick={() => { setLevel(l); setEditing(null); setSelectedKey(''); }}
+                    className={`cursor-pointer rounded-lg py-1.5 text-[11px] font-extrabold tabular-nums transition ${
+                      level === l ? 'bg-[#0e7a68] text-white shadow-sm' : 'text-[#5c6f6a] hover:bg-white'
+                    }`}
+                  >
+                    {l.toUpperCase()}
                   </button>
-                  <button onClick={() => remove(l)} className="mt-1 p-1.5 rounded-lg text-red-600 hover:bg-red-50"><Trash2 className="w-3.5 h-3.5" /></button>
-                </div>;
+                ))}
+              </div>
+
+              <div className="relative">
+                <Search className="pointer-events-none absolute right-3 top-2.5 h-4 w-4 text-[#9db3ad]" aria-hidden="true" />
+                <input
+                  value={query}
+                  onChange={e => setQuery(e.target.value)}
+                  placeholder="بحث في السجلات والأنشطة..."
+                  className={`${inputClass} !py-2.5 pr-9`}
+                />
+              </div>
+
+              <div className="flex items-center justify-between px-1 text-[10.5px] font-bold text-[#7b8d88]">
+                <span>{LABELS[level]}</span>
+                <span className="tabular-nums">{list.length} سجل</span>
+              </div>
+            </div>
+
+            <div className="max-h-[560px] overflow-y-auto p-2">
+              {list.length === 0 ? (
+                <div className="px-4 py-10 text-center text-[11.5px] font-bold text-[#8fa39d]">
+                  لا توجد سجلات مطابقة في هذه السنة.
+                </div>
+              ) : list.map(l => {
+                const key = lessonKey(l);
+                const isActive = selectedKey === key;
+                return (
+                  <div
+                    key={key}
+                    className={`mb-1 flex items-start gap-1 rounded-xl border px-2 py-2 transition ${
+                      isActive ? 'border-[#0e7a68]/40 bg-[#eef5f2]' : 'border-transparent hover:bg-[#f6faf8]'
+                    }`}
+                  >
+                    <button type="button" className="w-full cursor-pointer text-right" onClick={() => open(l)}>
+                      <div className="text-[10px] text-[#9db3ad] tabular-nums">
+                        مذكرة {l.memoNumber || '—'} • {l.maqta || 'بدون مقطع'}
+                      </div>
+                      <div className="mt-0.5 text-[12px] font-extrabold text-[#0b1f1c]">
+                        {l.ta3alom || 'تعلم مورد بدون عنوان'}
+                      </div>
+                      <div className="mt-0.5 text-[10px] text-[#7b8d88]">
+                        {l.anshita.length} نشاط • {l.sourceOfficial ? 'مصدر رسمي' : 'مضاف/معدل'}
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => remove(l)}
+                      aria-label="حذف السجل"
+                      title="حذف السجل"
+                      className="cursor-pointer rounded-lg p-1.5 text-[#b4576a] transition hover:bg-[#fbeeee]"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                );
               })}
             </div>
-            <div className="p-3 border-t"><button onClick={add} className="w-full py-2.5 rounded-xl bg-emerald-700 text-white text-xs font-black"><Plus className="w-4 h-4 inline" /> إضافة تعلم مورد</button></div>
+
+            <div className="border-t border-[#eef2f0] p-2.5">
+              <button
+                type="button"
+                onClick={add}
+                className="inline-flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-[#0e7a68] py-2.5 text-[11.5px] font-extrabold text-white transition hover:brightness-110"
+              >
+                <Plus className="h-4 w-4" aria-hidden="true" />
+                إضافة تعلم مورد
+              </button>
+            </div>
           </section>
 
-          <section className="bg-white rounded-2xl border p-5">
-            {!editing ? <div className="min-h-[500px] flex flex-col items-center justify-center text-gray-400"><Edit3 className="w-10 h-10 mb-3" /><p className="font-bold">اختر سجلًا لتعديله</p><p className="text-xs">يمكن تعديل الحقول والأنشطة وإضافة أو حذف الأنشطة.</p></div> :
-            <div>
-              <div className="flex justify-between items-center border-b pb-3 mb-4">
-                <div><h2 className="font-black">تعديل قاعدة البيانات</h2><p className="text-[10px] text-gray-500">{LABELS[editing.level]} • {editing.sourceOfficial ? 'مرتبط بالمصدر الرسمي' : 'سجل عمل'}</p></div>
-                <div className="flex gap-2"><button onClick={() => setEditing(null)} className="px-3 py-2 rounded-xl border text-xs"><X className="w-4 h-4 inline" /> إلغاء</button><button onClick={save} className="px-3 py-2 rounded-xl bg-emerald-700 text-white text-xs font-black"><Save className="w-4 h-4 inline" /> حفظ</button></div>
+          {/* محرر السجل */}
+          <section className="snv-service-panel !p-4 sm:!p-5">
+            {!editing ? (
+              <div className="flex min-h-[460px] flex-col items-center justify-center text-center text-[#9db3ad]">
+                <span className="mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-[#eef5f2] text-[#0e7a68]">
+                  <Edit3 className="h-6 w-6" aria-hidden="true" />
+                </span>
+                <p className="text-[13px] font-extrabold text-[#334842]">اختر سجلًا لتعديله</p>
+                <p className="mt-1 max-w-xs text-[11.5px] leading-relaxed">
+                  يمكن تعديل الحقول والأنشطة وإضافة أو حذف الأنشطة، ثم الحفظ في قاعدة العمل.
+                </p>
               </div>
-              <div className="grid md:grid-cols-2 gap-3">
-                {field('midan','الميدان')}{field('maqta','المقطع التعلمي')}{field('mawrid','المورد التعلمي')}{field('ta3alom','تعلم مورد')}
-                {field('markaba','المركبة')}{field('marifa','المعرفة')}{field('manhaji','المنهجية')}{field('mostalahat','المصطلحات')}
-                {field('wasail','الوسائل')}{field('wadiya','الوضعية')}{field('moshkila','المشكلة')}{field('faradiyat','الفرضيات')}
-                {field('irsae','إرساء الموارد')}{field('taqwim','التقويم')}
-              </div>
-              <div className="mt-6 border-t pt-5">
-                <div className="flex justify-between items-center mb-3"><h3 className="font-black">الأنشطة ({editing.anshita.length})</h3>
-                  <button onClick={() => setEditing({ ...editing, anshita: [...editing.anshita, newActivity()] })} className="px-3 py-2 rounded-lg bg-blue-600 text-white text-xs font-bold"><Plus className="w-3.5 h-3.5 inline" /> إضافة نشاط</button>
-                </div>
-                <div className="space-y-4">
-                  {editing.anshita.map((a, i) => <div key={i} className="rounded-xl border p-4 bg-gray-50">
-                    <div className="flex justify-between mb-3"><span className="text-xs font-black">النشاط {i + 1}</span>
-                      <button onClick={() => setEditing({ ...editing, anshita: editing.anshita.filter((_, j) => j !== i) })} className="text-red-600 text-[10px]"><Trash2 className="w-3 h-3 inline" /> حذف النشاط</button>
+            ) : (
+              <div>
+                <div className="mb-4 flex flex-wrap items-start justify-between gap-2 border-b border-[#eef2f0] pb-3">
+                  <div className="flex items-start gap-2.5">
+                    <span className="snv-icon-tile !h-9 !w-9">
+                      <Layers className="h-4 w-4" aria-hidden="true" />
+                    </span>
+                    <div>
+                      <h2 className="text-[13.5px] font-extrabold text-[#0b1f1c]">تعديل قاعدة البيانات</h2>
+                      <p className="text-[10.5px] text-[#7b8d88]">
+                        {LABELS[editing.level]} • {editing.sourceOfficial ? 'مرتبط بالمصدر الرسمي' : 'سجل عمل'}
+                      </p>
                     </div>
-                    <label className="block mb-3"><span className="text-[11px] font-bold">عنوان النشاط</span><input value={a.title} onChange={e => { const x=[...editing.anshita]; x[i]={...a,title:e.target.value}; setEditing({...editing,anshita:x}); }} className="w-full border rounded-lg p-2 text-xs mt-1" /></label>
-                    <div className="grid md:grid-cols-2 gap-3">
-                      <label><span className="text-[11px] font-bold">نشاط الأستاذ / الأسئلة</span><textarea value={a.asila} onChange={e=>{const x=[...editing.anshita];x[i]={...a,asila:e.target.value};setEditing({...editing,anshita:x});}} className="w-full min-h-28 border rounded-lg p-2 text-xs mt-1" /></label>
-                      <label><span className="text-[11px] font-bold">نشاط المتعلم / الأجوبة</span><textarea value={a.ajwiba} onChange={e=>{const x=[...editing.anshita];x[i]={...a,ajwiba:e.target.value};setEditing({...editing,anshita:x});}} className="w-full min-h-28 border rounded-lg p-2 text-xs mt-1" /></label>
-                      <label><span className="text-[11px] font-bold">المدة</span><input value={a.zaman || ''} onChange={e=>{const x=[...editing.anshita];x[i]={...a,zaman:e.target.value};setEditing({...editing,anshita:x});}} className="w-full border rounded-lg p-2 text-xs mt-1" /></label>
-                      <label><span className="text-[11px] font-bold">ملاحظات</span><textarea value={a.mola7adha || ''} onChange={e=>{const x=[...editing.anshita];x[i]={...a,mola7adha:e.target.value};setEditing({...editing,anshita:x});}} className="w-full border rounded-lg p-2 text-xs mt-1" /></label>
-                    </div>
-                  </div>)}
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setEditing(null)}
+                      className="inline-flex cursor-pointer items-center gap-1 rounded-xl border border-[#e2e8e5] bg-white px-3 py-2 text-[11.5px] font-bold text-[#5c6f6a] transition hover:bg-[#f6faf8]"
+                    >
+                      <X className="h-3.5 w-3.5" aria-hidden="true" />
+                      إلغاء
+                    </button>
+                    <button
+                      type="button"
+                      onClick={save}
+                      className="inline-flex cursor-pointer items-center gap-1 rounded-xl bg-[#0e7a68] px-3.5 py-2 text-[11.5px] font-extrabold text-white transition hover:brightness-110"
+                    >
+                      <Save className="h-3.5 w-3.5" aria-hidden="true" />
+                      حفظ
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  {field('midan', 'الميدان')}{field('maqta', 'المقطع التعلمي')}{field('mawrid', 'المورد التعلمي')}{field('ta3alom', 'تعلم مورد')}
+                  {field('markaba', 'المركبة')}{field('marifa', 'المعرفة')}{field('manhaji', 'المنهجية')}{field('mostalahat', 'المصطلحات')}
+                  {field('wasail', 'الوسائل')}{field('wadiya', 'الوضعية')}{field('moshkila', 'المشكلة')}{field('faradiyat', 'الفرضيات')}
+                  {field('irsae', 'إرساء الموارد')}{field('taqwim', 'التقويم')}
+                </div>
+
+                <div className="mt-5 border-t border-[#eef2f0] pt-4">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="text-[12.5px] font-extrabold text-[#0b1f1c]">
+                      الأنشطة <span className="tabular-nums text-[#7b8d88]">({editing.anshita.length})</span>
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => setEditing({ ...editing, anshita: [...editing.anshita, newActivity()] })}
+                      className="inline-flex cursor-pointer items-center gap-1 rounded-xl border border-[#cfe3dc] bg-[#eef5f2] px-3 py-1.5 text-[11px] font-extrabold text-[#0a5f51] transition hover:bg-[#e3efe9]"
+                    >
+                      <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                      إضافة نشاط
+                    </button>
+                  </div>
+
+                  <div className="space-y-3">
+                    {editing.anshita.map((a, i) => (
+                      <div key={i} className="rounded-xl border border-[#e2e8e5] bg-[#f9fbfa] p-3.5">
+                        <div className="mb-2.5 flex items-center justify-between gap-2">
+                          <span className="rounded-md bg-white px-2 py-0.5 text-[10.5px] font-extrabold tabular-nums text-[#334842] border border-[#e2e8e5]">
+                            النشاط {i + 1}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setEditing({ ...editing, anshita: editing.anshita.filter((_, j) => j !== i) })}
+                            className="inline-flex cursor-pointer items-center gap-1 text-[10.5px] font-bold text-[#b4576a] transition hover:text-[#8f3348]"
+                          >
+                            <Trash2 className="h-3 w-3" aria-hidden="true" />
+                            حذف النشاط
+                          </button>
+                        </div>
+
+                        <label className="mb-3 block">
+                          <span className="mb-1 block text-[11px] font-bold text-[#5c6f6a]">عنوان النشاط</span>
+                          <input
+                            value={a.title}
+                            onChange={e => { const x = [...editing.anshita]; x[i] = { ...a, title: e.target.value }; setEditing({ ...editing, anshita: x }); }}
+                            className={inputClass}
+                          />
+                        </label>
+
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <label>
+                            <span className="mb-1 block text-[11px] font-bold text-[#5c6f6a]">نشاط الأستاذ / الأسئلة</span>
+                            <textarea
+                              value={a.asila}
+                              onChange={e => { const x = [...editing.anshita]; x[i] = { ...a, asila: e.target.value }; setEditing({ ...editing, anshita: x }); }}
+                              className={`${inputClass} min-h-28 resize-y leading-relaxed`}
+                            />
+                          </label>
+                          <label>
+                            <span className="mb-1 block text-[11px] font-bold text-[#5c6f6a]">نشاط المتعلم / الأجوبة</span>
+                            <textarea
+                              value={a.ajwiba}
+                              onChange={e => { const x = [...editing.anshita]; x[i] = { ...a, ajwiba: e.target.value }; setEditing({ ...editing, anshita: x }); }}
+                              className={`${inputClass} min-h-28 resize-y leading-relaxed`}
+                            />
+                          </label>
+                          <label>
+                            <span className="mb-1 block text-[11px] font-bold text-[#5c6f6a]">المدة</span>
+                            <input
+                              value={a.zaman || ''}
+                              onChange={e => { const x = [...editing.anshita]; x[i] = { ...a, zaman: e.target.value }; setEditing({ ...editing, anshita: x }); }}
+                              className={inputClass}
+                            />
+                          </label>
+                          <label>
+                            <span className="mb-1 block text-[11px] font-bold text-[#5c6f6a]">ملاحظات</span>
+                            <textarea
+                              value={a.mola7adha || ''}
+                              onChange={e => { const x = [...editing.anshita]; x[i] = { ...a, mola7adha: e.target.value }; setEditing({ ...editing, anshita: x }); }}
+                              className={`${inputClass} min-h-16 resize-y leading-relaxed`}
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>}
+            )}
           </section>
         </div>
       </div>

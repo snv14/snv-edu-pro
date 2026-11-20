@@ -1,20 +1,34 @@
-import { CorrectionMemoData, fillFromPlatform } from './correctionMemoModel';
+import { CorrectionMemoData, INTEGRATION_CRITERIA, examStructure, fillFromPlatform, uid } from './correctionMemoModel';
 import { LessonMemo, MemoConfig } from '../types';
 
 export interface MappedQuestion {
   number: string;
   text: string;
   points?: number | string;
+  expected?: string;
 }
 
 export interface MappedExercise {
   number: string;
   title?: string;
+  kind?: 'exercise' | 'integration';
   questions: MappedQuestion[];
+}
+
+export interface MappedMeta {
+  level?: string;
+  midan?: string;
+  maqta?: string;
+  kafaa?: string;
+  mawrid?: string;
+  term?: string;
+  duration?: string;
+  title?: string;
 }
 
 export interface CorrectionSourceMapping {
   title?: string;
+  meta?: MappedMeta;
   exercises: MappedExercise[];
   totalPoints?: number | string;
   source: 'file' | 'ai';
@@ -30,10 +44,16 @@ export interface ExtractionOutcome {
   missing: string[];
 }
 
-const acceptedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf', 'text/plain'];
+const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const DOC_MIME = 'application/msword';
+
+const acceptedTypes = [
+  'image/jpeg', 'image/png', 'image/webp', 'image/gif',
+  'application/pdf', 'text/plain', DOCX_MIME, DOC_MIME,
+];
 
 export const isSupportedCorrectionFile = (file: File): boolean =>
-  acceptedTypes.includes(file.type) || /\.(jpe?g|png|webp|gif|pdf|txt)$/i.test(file.name);
+  acceptedTypes.includes(file.type) || /\.(jpe?g|png|webp|gif|pdf|txt|docx?)$/i.test(file.name);
 
 export const readFileAsDataUrl = (file: File): Promise<string> => new Promise((resolve, reject) => {
   const reader = new FileReader();
@@ -54,9 +74,12 @@ const decodeTextDataUrl = (dataUrl: string): string => {
   }
 };
 
+const isIntegrationHeading = (heading: string): boolean =>
+  /الوضعية\s*(الإدماجية|الادماجية)/.test(heading) || /وضعية\s*إدماجية/.test(heading);
+
 /**
  * استخراج التمارين من نص ورقة التقييم محليًا، دون أي تخمين:
- * يعتمد على ترويسات التمارين والأسئلة المرقّمة، ويتجاهل ما لا يفهمه.
+ * يعتمد على ترويسات التمارين والأسئلة المرقّمة، ويعزل الوضعية الإدماجية.
  */
 export function parseExamTextLocally(text: string): CorrectionSourceMapping | null {
   const cleaned = (text || '')
@@ -94,7 +117,13 @@ export function parseExamTextLocally(text: string): CorrectionSourceMapping | nu
       .filter((item): item is MappedQuestion => Boolean(item));
 
     if (questions.length) {
-      exercises.push({ number, title: heading, questions });
+      const integration = isIntegrationHeading(match[1]);
+      exercises.push({
+        number,
+        title: heading,
+        kind: integration ? 'integration' : 'exercise',
+        questions,
+      });
     }
   });
 
@@ -108,23 +137,114 @@ export function parseExamTextLocally(text: string): CorrectionSourceMapping | nu
   };
 }
 
+const toPointsString = (value: unknown): string => {
+  if (value === undefined || value === null || value === '') return '';
+  const parsed = typeof value === 'number' ? value : Number(String(value).replace(',', '.'));
+  return Number.isFinite(parsed) ? String(parsed) : '';
+};
+
+const asText = (value: unknown, max = 4000): string => (typeof value === 'string' ? value.slice(0, max) : '');
+
+const normalizeMeta = (parsed: any): MappedMeta => ({
+  level: asText(parsed?.meta?.level, 80),
+  midan: asText(parsed?.meta?.midan, 300),
+  maqta: asText(parsed?.meta?.maqta, 300),
+  kafaa: asText(parsed?.meta?.kafaa, 800),
+  mawrid: asText(parsed?.meta?.mawrid, 300),
+  term: asText(parsed?.meta?.term, 60),
+  duration: asText(parsed?.meta?.duration, 60),
+  title: asText(parsed?.meta?.title, 200),
+});
+
+const normalizeExercises = (parsed: any): MappedExercise[] =>
+  Array.isArray(parsed?.exercises)
+    ? parsed.exercises
+      .map((exercise: any, index: number): MappedExercise => {
+        const title = asText(exercise?.title, 120);
+        return {
+          number: String(exercise?.number || index + 1),
+          title: title || undefined,
+          kind: exercise?.kind === 'integration' || isIntegrationHeading(title) ? 'integration' : 'exercise',
+          questions: Array.isArray(exercise?.questions)
+            ? exercise.questions
+              .map((question: any, qIndex: number): MappedQuestion => ({
+                number: String(question?.number || qIndex + 1),
+                text: asText(question?.text, 2000).trim(),
+                points: question?.points,
+                expected: asText(question?.expected, 4000),
+              }))
+              .filter(question => question.text || question.expected)
+            : [],
+        };
+      })
+      .filter((exercise: MappedExercise) => exercise.questions.length > 0)
+    : [];
+
 /**
- * الاستيراد: يقرأ نص TXT محليًا، ويحاول قراءة بقية الصيغ عبر خدمة المنصة.
- * أي فشل يُعلن صراحة، ولا تُملأ خانات بالظن.
+ * تطبيق بنية الورقة على التمارين المستخرجة:
+ * الفرض يحتفظ بالتمارين فقط، والاختبار بتمرينين ثم وضعية إدماجية في معاييرها.
  */
-export async function importCorrectionFile(args: {
+const buildExercises = (
+  mapping: CorrectionSourceMapping,
+  examType: 'فرض' | 'اختبار',
+  base: CorrectionMemoData,
+  fileName: string
+) => {
+  const structure = examStructure(examType);
+  const plain = mapping.exercises.filter(exercise => exercise.kind !== 'integration');
+  const integration = mapping.exercises.filter(exercise => exercise.kind === 'integration');
+  const selected = plain.slice(0, examType === 'اختبار' ? structure.exercises : 6);
+
+  const exercises = selected.map((exercise, index) => {
+    const fallbackLabel = index === 0 ? 'التمرين الأول' : index === 1 ? 'التمرين الثاني' : `التمرين ${index + 1}`;
+    const fromFile = exercise.title && !/^(التمرين|الجزء)$/.test(exercise.title)
+      ? `${exercise.title} ${exercise.number}`
+      : fallbackLabel;
+    return {
+      id: uid('ex'),
+      part: 1 as const,
+      label: `${fromFile} — ${fileName}`.slice(0, 120),
+      declaredPoints: '',
+      maqta: base.exercises[index]?.maqta || '',
+      knowledge: base.exercises[index]?.knowledge || '',
+      criteria: base.exercises[index]?.criteria || '',
+      source: 'imported' as const,
+      questions: exercise.questions.map((question, qIndex) => ({
+        id: uid('q'),
+        number: question.number || String(qIndex + 1),
+        text: (question.text || '').trim(),
+        points: toPointsString(question.points),
+        expected: (question.expected || '').trim(),
+        source: (question.expected ? 'ai' : 'imported') as 'ai' | 'imported',
+        needsReview: !question.text,
+      })),
+    };
+  });
+
+  return { exercises, integration };
+};
+
+export interface ImportCorrectionArgs {
   file: File;
   dataUrl: string;
   examType: 'فرض' | 'اختبار';
   current: CorrectionMemoData;
   lesson?: LessonMemo | null;
   config?: MemoConfig;
-}): Promise<ExtractionOutcome> {
+}
+
+/**
+ * الاستيراد: يقرأ TXT محليًا، ويقرأ PDF والصور وWord عبر خدمة المنصة.
+ * يُعبّئ التمارين ثم الحقول التربوية (الميدان/المقطع/الكفاءة) ثم يطبّق بنية
+ * نوع الورقة. أي فشل يُعلن صراحة، ولا تُملأ خانات بالظن.
+ */
+export async function importCorrectionFile(args: ImportCorrectionArgs): Promise<ExtractionOutcome> {
   const { file, dataUrl, examType, current, lesson, config } = args;
   const base = fillFromPlatform(current, { config, lesson, level: lesson?.level }).data;
   let mapping: CorrectionSourceMapping | null = null;
   let notice = '';
   let usedAI = false;
+  let providerError = '';
 
   if (file.type === 'text/plain' || /\.txt$/i.test(file.name)) {
     const text = decodeTextDataUrl(dataUrl);
@@ -147,21 +267,15 @@ export async function importCorrectionFile(args: {
         const payload = await response.json();
         if (typeof payload?.json === 'string' && payload.json.trim()) {
           const parsed = JSON.parse(payload.json);
-          const exercises: MappedExercise[] = Array.isArray(parsed?.exercises)
-            ? parsed.exercises.map((exercise: any, index: number) => ({
-                number: String(exercise?.number || index + 1),
-                title: typeof exercise?.title === 'string' ? exercise.title : undefined,
-                questions: Array.isArray(exercise?.questions)
-                  ? exercise.questions.map((question: any, qIndex: number) => ({
-                      number: String(question?.number || qIndex + 1),
-                      text: typeof question?.text === 'string' ? question.text : '',
-                      points: question?.points,
-                    }))
-                  : [],
-              })).filter((exercise: MappedExercise) => exercise.questions.length > 0)
-            : [];
+          const exercises = normalizeExercises(parsed);
           if (exercises.length) {
-            mapping = { exercises, totalPoints: parsed?.totalPoints, source: 'ai' };
+            mapping = {
+              title: asText(parsed?.title, 200),
+              meta: normalizeMeta(parsed),
+              exercises,
+              totalPoints: parsed?.totalPoints,
+              source: 'ai',
+            };
             usedAI = true;
           } else {
             notice = 'لم أستخرج أسئلة قابلة للاعتماد من الملف. أدخل التمارين يدويًا.';
@@ -169,10 +283,18 @@ export async function importCorrectionFile(args: {
         } else {
           notice = 'لم تُرجِع خدمة التحليل بيانات قابلة للقراءة. أدخل التمارين يدويًا.';
         }
-      } else if (response.status === 503) {
-        notice = 'قراءة الصور وPDF تحتاج مزوّد ذكاء اصطناعي مضبوطًا على الخادم، وهو غير متوفر حاليًا. أدخل التمارين يدويًا.';
       } else {
-        notice = 'تعذر تحليل الملف. أدخل التمارين يدويًا.';
+        const body = await response.json().catch(() => ({}));
+        providerError = typeof body?.error === 'string' ? body.error : '';
+        if (response.status === 503) {
+          notice = 'قراءة الصور وPDF وWord تحتاج مزوّد ذكاء اصطناعي مضبوطًا على الخادم (GEMINI_API_KEY)، وهو غير متوفر حاليًا. يمكنك إدخال التمارين يدويًا ثم استعمال «تعبئة من قاعدة البيانات» و«اقتراح التنقيط».';
+        } else if (/\.doc$/i.test(file.name)) {
+          notice = 'صيغة .doc القديمة غير مدعومة. احفظ الملف بصيغة .docx أو PDF ثم أعد الاستيراد.';
+        } else {
+          notice = providerError
+            ? `تعذر تحليل الملف: ${providerError}. أدخل التمارين يدويًا.`
+            : 'تعذر تحليل الملف. أدخل التمارين يدويًا.';
+        }
       }
     } catch {
       notice = 'تعذر الاتصال بخدمة التحليل. أدخل التمارين يدويًا.';
@@ -180,48 +302,103 @@ export async function importCorrectionFile(args: {
   }
 
   if (!mapping) {
-    return { data: { ...base, examType }, extractedExercises: 0, extractedQuestions: 0, extractedPoints: 0, usedAI: false, notice, missing: ['التمارين', 'الأسئلة', 'النقاط'] };
+    return {
+      data: { ...base, examType },
+      extractedExercises: 0,
+      extractedQuestions: 0,
+      extractedPoints: 0,
+      usedAI: false,
+      notice,
+      missing: ['التمارين', 'الأسئلة', 'النقاط'],
+    };
   }
 
-  const exercises = mapping.exercises.slice(0, 12).map((exercise, index) => ({
-    id: `${Date.now().toString(36)}-${index}`,
-    part: (1 as const),
-    label: exercise.title && exercise.title !== 'التمرين' ? `${exercise.title} ${exercise.number} — ${file.name}` : `التمرين ${exercise.number}`,
-    declaredPoints: '',
-    maqta: base.exercises[index]?.maqta || '',
-    knowledge: base.exercises[index]?.knowledge || '',
-    criteria: base.exercises[index]?.criteria || '',
-    source: 'imported' as const,
-    questions: exercise.questions.map((question, qIndex) => ({
-      id: `q-${Date.now().toString(36)}-${index}-${qIndex}`,
-      number: question.number || String(qIndex + 1),
-      text: (question.text || '').trim(),
-      points: question.points === undefined || question.points === null || question.points === '' ? '' : String(question.points),
-      expected: '',
-      source: 'imported' as const,
-      needsReview: !question.text,
-    })),
-  }));
+  const { exercises, integration } = buildExercises(mapping, examType, base, file.name);
 
-  const extractedQuestions = exercises.reduce((sum, exercise) => sum + exercise.questions.length, 0);
-  const extractedPoints = exercises.reduce((sum, exercise) => sum + exercise.questions.filter(question => question.points && !Number.isNaN(Number(question.points))).length, 0);
+  const integrationQuestions = integration.flatMap(exercise => exercise.questions);
+  const criteria = base.integration.criteria.map(criterion => structuredClone(criterion));
+  if (examType === 'اختبار' && integrationQuestions.length) {
+    integrationQuestions.forEach((question, index) => {
+      const criterion = criteria[index % criteria.length];
+      const indicator = criterion.indicators.find(item => !item.text.trim()) || criterion.indicators[0];
+      if (!indicator) return;
+      indicator.text = (question.expected || question.text || '').slice(0, 1000);
+      if (question.points !== undefined && question.points !== '') {
+        indicator.points = toPointsString(question.points);
+      }
+    });
+  }
 
-  const part1Declared = typeof mapping.totalPoints === 'number' && Number.isFinite(mapping.totalPoints)
-    ? String(mapping.totalPoints)
-    : base.part1DeclaredPoints;
+  const extractedQuestions = exercises.reduce((sum, exercise) => sum + exercise.questions.length, 0)
+    + (examType === 'اختبار' ? integrationQuestions.length : 0);
+  const extractedPoints = exercises.reduce(
+    (sum, exercise) => sum + exercise.questions.filter(question => question.points && !Number.isNaN(Number(question.points))).length,
+    0
+  );
+
+  const meta = mapping.meta || {};
+  const structure = examStructure(examType);
+  const part1Declared = typeof mapping.totalPoints === 'number'
+    ? String(Math.min(Number(mapping.totalPoints), 20))
+    : String(structure.part1Points);
 
   const missing: string[] = [];
   if (!exercises.some(exercise => exercise.questions.some(question => question.points))) missing.push('النقاط الجزئية (لم تُقرأ من الورقة)');
-  missing.push('عناصر الإجابة (تُكتب يدويًا أو تُولَّد آليًا)');
-  missing.push('المعايير ومؤشرات الوضعية الإدماجية');
-  missing.push('نتائج القسم وخطة المعالجة');
+  if (!exercises.some(exercise => exercise.questions.some(question => question.expected))) missing.push('عناصر الإجابة (تُكتب يدويًا أو تُولَّد آليًا)');
+  if (!meta.midan) missing.push('الميدان (يمكن تعبئته من قاعدة البيانات)');
+  if (!meta.kafaa) missing.push('الكفاءة الختامية (يمكن تعبئتها من قاعدة البيانات)');
+  if (examType === 'اختبار' && !integrationQuestions.length) missing.push('الوضعية الإدماجية (لم تُقرأ من الورقة)');
 
   const data: CorrectionMemoData = {
     ...base,
     examType,
+    title: base.title,
+    term: meta.term || base.term,
+    duration: meta.duration || base.duration,
+    level: meta.level || base.level,
+    midan: meta.midan || base.midan,
+    midanSource: meta.midan ? 'ai' : base.midanSource,
+    competence: meta.kafaa || base.competence,
+    competenceSource: meta.kafaa ? 'ai' : base.competenceSource,
     part1DeclaredPoints: part1Declared,
+    integration: {
+      declaredPoints: examType === 'اختبار' ? String(structure.integrationPoints) : '',
+      criteria,
+    },
     exercises,
   };
+
+  // صفوف الموارد تُبنى من جديد لتطابق التمارين المستخرجة، مع نقل ما عُبّئ من المنصة.
+  data.resources = exercises.map((exercise, index) => {
+    const existing = base.resources[index];
+    return {
+      id: uid('res'),
+      exerciseLabel: exercise.label,
+      maqta: meta.maqta || existing?.maqta || '',
+      knowledge: meta.mawrid || existing?.knowledge || '',
+      criteria: existing?.criteria || '',
+      maqtaSource: (meta.maqta ? 'ai' : existing?.maqtaSource || 'template') as CorrectionMemoData['resources'][number]['maqtaSource'],
+      knowledgeSource: (meta.mawrid ? 'ai' : existing?.knowledgeSource || 'template') as CorrectionMemoData['resources'][number]['knowledgeSource'],
+      criteriaSource: (existing?.criteriaSource || 'template') as CorrectionMemoData['resources'][number]['criteriaSource'],
+    };
+  });
+  if (examType === 'اختبار') {
+    const integrationRow = base.resources.find(row => row.exerciseLabel.includes('الإدماجية'));
+    data.resources.push({
+      id: uid('res'),
+      exerciseLabel: 'الوضعية الإدماجية',
+      maqta: meta.maqta || integrationRow?.maqta || '',
+      knowledge: meta.mawrid || integrationRow?.knowledge || '',
+      criteria: base.integration.criteria.map(criterion => criterion.label).join(' · '),
+      maqtaSource: meta.maqta ? 'ai' : integrationRow?.maqtaSource || 'template',
+      knowledgeSource: meta.mawrid ? 'ai' : integrationRow?.knowledgeSource || 'template',
+      criteriaSource: 'platform',
+    });
+  }
+
+  const summary = usedAI
+    ? 'قُرئ الملف عبر خدمة التحليل، وعُبّئت الحقول التربوية المتاحة. راجع كل سؤال ونقطة قبل الاعتماد.'
+    : 'استُخرجت التمارين من الملف النصي؛ راجعها قبل الاعتماد.';
 
   return {
     data,
@@ -229,7 +406,9 @@ export async function importCorrectionFile(args: {
     extractedQuestions,
     extractedPoints,
     usedAI,
-    notice: notice || (usedAI ? 'استُخرجت التمارين عبر خدمة التحليل؛ راجع كل سؤال ونقطة قبل الاعتماد.' : 'استُخرجت التمارين من الملف النصي؛ راجعها قبل الاعتماد.'),
+    notice: notice || summary,
     missing,
   };
 }
+
+export const INTEGRATION_HEADING = INTEGRATION_CRITERIA.map(criterion => criterion.label).join(' · ');

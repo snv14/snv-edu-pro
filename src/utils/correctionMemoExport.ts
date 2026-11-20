@@ -265,14 +265,18 @@ export async function exportCorrectionMemoDataToDocx(
     line('الأستاذ(ة)', data.teacherName, fontAttrs, sz(20), lineSpacing),
     line('المدة', data.duration, fontAttrs, sz(20), lineSpacing),
     line('الفصل', data.term, fontAttrs, sz(20), lineSpacing),
+    line('الميدان', data.midan, fontAttrs, sz(20), lineSpacing),
+    line('الكفاءة الختامية', data.competence, fontAttrs, sz(20), lineSpacing),
     new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 160, after: 40, line: lineSpacing, lineRule: LineRuleType.AUTO }, children: [new TextRun({ text: data.title, bold: true, boldComplexScript: true, color: titleColor, font: fontAttrs, size: sz(30), sizeComplexScript: sz(30), rightToLeft: true })] }),
     new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 160, line: lineSpacing, lineRule: LineRuleType.AUTO }, children: [new TextRun({ text: `${data.examType} ${data.term} في مادة علوم الطبيعة والحياة`, bold: true, boldComplexScript: true, color: subColor, font: fontAttrs, size: sz(22), sizeComplexScript: sz(22), rightToLeft: true })] }),
   ];
 
-  children.push(docHeading('الموارد المعرفية المستهدفة في الاختبار', 22, 120, 'titleBlue', ctx));
+  children.push(docHeading(`الموارد المعرفية المستهدفة في ${data.examType}`, 22, 120, 'titleBlue', ctx));
   children.push(docTable(
     ['التمرين', 'المقطع التعلمي', 'الموارد المعرفية', 'معايير ومؤشرات التقويم'],
-    data.resources.map(row => [row.exerciseLabel, row.maqta, row.knowledge, row.criteria]),
+    data.resources
+      .filter(row => data.examType === 'اختبار' || !row.exerciseLabel.includes('الإدماجية'))
+      .map(row => [row.exerciseLabel, row.maqta, row.knowledge, row.criteria]),
     [16, 22, 32, 30],
     ctx
   ));
@@ -291,22 +295,26 @@ export async function exportCorrectionMemoDataToDocx(
     ));
   });
 
-  children.push(docHeading(`الجزء الثاني: الوضعية الإدماجية (${data.integration.declaredPoints || '…'} نقطة)`, 22, 120, 'titleBlue', ctx));
-  children.push(docTable(
-    ['المعيار', 'مؤشرات التصحيح (عناصر الإجابة المنتظرة)', 'ت. الجزئي', 'المجموع'],
-    [
-      ...data.integration.criteria.flatMap(criterion => criterion.indicators.map((indicator, index) => [
-        index === 0 ? criterion.label : '',
-        indicator.text,
-        indicator.points ? `${indicator.points} ن` : '',
-        index === 0 ? formatPoints(criterionTotal(criterion)) : '',
-      ])),
-      ['مجموع نقاط الوضعية الإدماجية', '', '', `${formatPoints(integrationTotal(data))} ن`],
-      ['المجموع العام للمذكرة', '', '', `${formatPoints(overallTotal(data))} ن`],
-    ],
-    [22, 54, 12, 12],
-    ctx
-  ));
+  if (data.examType === 'اختبار') {
+    children.push(docHeading(`الجزء الثاني: الوضعية الإدماجية (${data.integration.declaredPoints || '…'} نقطة)`, 22, 120, 'titleBlue', ctx));
+    children.push(docTable(
+      ['المعيار', 'مؤشرات التصحيح (عناصر الإجابة المنتظرة)', 'ت. الجزئي', 'المجموع'],
+      [
+        ...data.integration.criteria.flatMap(criterion => criterion.indicators.map((indicator, index) => [
+          index === 0 ? criterion.label : '',
+          indicator.text,
+          indicator.points ? `${indicator.points} ن` : '',
+          index === 0 ? formatPoints(criterionTotal(criterion)) : '',
+        ])),
+        ['مجموع نقاط الوضعية الإدماجية', '', '', `${formatPoints(integrationTotal(data))} ن`],
+        ['المجموع العام للمذكرة', '', '', `${formatPoints(overallTotal(data))} ن`],
+      ],
+      [22, 54, 12, 12],
+      ctx
+    ));
+  } else {
+    children.push(docHeading(`المجموع العام للفرض: ${formatPoints(part1Total(data))} ن`, 22, 120, 'titleBlue', ctx));
+  }
 
   children.push(docHeading('التصحيح البعدي وتحليل النتائج', 22, 120, 'defGreen', ctx));
   children.push(docTable(

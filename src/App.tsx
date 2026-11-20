@@ -524,7 +524,7 @@ export const App: React.FC = () => {
       {toastMessage && (
         <div
           id="toast-notification"
-          className="fixed bottom-5 left-5 bg-gray-900 text-white px-4 py-2.5 rounded-xl shadow-2xl text-[13px] font-bold z-50 flex items-center gap-2 animate-in slide-in-from-bottom-5 duration-200"
+          className="fixed bottom-5 left-5 bg-[#0b1f1c] text-white px-4 py-2.5 rounded-2xl border border-white/10 shadow-2xl text-[12.5px] font-bold z-50 flex items-center gap-2 animate-in slide-in-from-bottom-5 duration-200"
         >
           <CheckCircle2 className="w-4 h-4 text-green-400" />
           {toastMessage}
@@ -533,9 +533,9 @@ export const App: React.FC = () => {
 
       {/* Main Streamlined Sticky Header */}
       <header className="app-header sticky top-0 z-30">
-        <div className="px-3 sm:px-4 md:px-6 h-14 sm:h-16 flex items-center justify-between gap-2 sm:gap-4 max-w-[1440px] mx-auto w-full">
+        <div className="px-3 sm:px-4 md:px-6 min-h-14 sm:h-16 py-2 sm:py-0 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 sm:gap-4 max-w-[1400px] mx-auto w-full">
           {/* Right Section: Drawer Trigger + Brand or Active Context */}
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          <div className="flex flex-1 items-center gap-2 sm:gap-3 min-w-0 overflow-hidden">
             <button
               type="button"
               id="btn-open-nav-drawer"
@@ -570,7 +570,7 @@ export const App: React.FC = () => {
                     setActiveSection('home');
                     showToast('العودة إلى الصفحة الرئيسية');
                   }}
-                  className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 shadow-xs transition cursor-pointer whitespace-nowrap shrink-0"
+                  className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-[#0b1f1c] text-white text-[11.5px] font-bold hover:bg-[#16302b] shadow-sm transition cursor-pointer whitespace-nowrap shrink-0"
                 >
                   <ArrowRight className="w-4 h-4" />
                   <span>الرئيسية</span>
@@ -578,11 +578,11 @@ export const App: React.FC = () => {
 
                 {isYearSection ? (
                   <>
-                    <div className="hidden sm:flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 whitespace-nowrap shrink-0">
+                    <div className="hidden xl:flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-[#e2e8e5] shadow-[0_1px_2px_rgba(11,31,28,0.04)] whitespace-nowrap shrink-0">
                       <span className="text-[12.5px] font-extrabold text-slate-900">{currentLevelLabel}</span>
                     </div>
 
-                    <div className="hidden md:flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                    <div className="hidden xl:flex items-center snv-segmented">
                       <button
                         type="button"
                         id="year-subtab-memos"
@@ -627,17 +627,17 @@ export const App: React.FC = () => {
                     </div>
                   </>
                 ) : activeSection === 'logbook' ? (
-                  <div className="flex items-center gap-2 bg-emerald-50 px-2.5 sm:px-3 py-1.5 rounded-xl border border-emerald-200 text-emerald-900 font-extrabold text-xs sm:text-[13px] whitespace-nowrap truncate">
+                  <div className="flex items-center gap-2 bg-[#eef5f2] px-2.5 sm:px-3 py-1.5 rounded-xl border border-[#cfe3dc] text-[#0a5f51] font-extrabold text-xs sm:text-[13px] whitespace-nowrap truncate">
                     <BookOpenCheck className="w-4 h-4 text-emerald-700 shrink-0" />
                     <span className="truncate">الدفتر الرقمي</span>
                   </div>
                 ) : activeSection === 'database' ? (
-                  <div className="flex items-center gap-2 bg-emerald-50 px-2.5 sm:px-3 py-1.5 rounded-xl border border-emerald-200 text-emerald-900 font-extrabold text-xs sm:text-[13px] whitespace-nowrap truncate">
+                  <div className="flex items-center gap-2 bg-[#eef5f2] px-2.5 sm:px-3 py-1.5 rounded-xl border border-[#cfe3dc] text-[#0a5f51] font-extrabold text-xs sm:text-[13px] whitespace-nowrap truncate">
                     <Database className="w-4 h-4 text-emerald-700 shrink-0" />
                     <span className="truncate">الموارد التعليمية</span>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-2 bg-slate-100 px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-200 text-slate-900 font-extrabold text-xs sm:text-[13px] whitespace-nowrap truncate">
+                  <div className="flex items-center gap-2 bg-white px-2.5 sm:px-3 py-1.5 rounded-xl border border-[#e2e8e5] text-[#0b1f1c] font-extrabold text-xs sm:text-[13px] whitespace-nowrap truncate">
                     <Settings className="w-4 h-4 text-slate-700 shrink-0" />
                     <span className="truncate">الإعدادات والخاتم</span>
                   </div>
@@ -648,14 +648,14 @@ export const App: React.FC = () => {
 
           {/* Center Navigation Links (Home Desktop) */}
           {activeSection === 'home' && (
-            <nav aria-label="التنقل السريع" className="hidden lg:flex items-center gap-6 text-[13px] font-bold text-slate-600">
+            <nav aria-label="التنقل السريع" className="hidden xl:flex items-center gap-1 text-[12.5px] font-bold text-slate-600 shrink-0">
               <button
                 type="button"
                 onClick={() => {
                   const el = document.getElementById('levels-strip');
                   el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }}
-                className="hover:text-teal-700 hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                className="rounded-full px-3 py-1.5 text-[#5c6f6a] transition-colors whitespace-nowrap shrink-0 cursor-pointer hover:bg-[#eef5f2] hover:text-[#0a5f51]"
               >
                 السنوات الدراسية
               </button>
@@ -665,7 +665,7 @@ export const App: React.FC = () => {
                   setLogbookInitialTimetable(false);
                   setActiveSection('logbook');
                 }}
-                className="hover:text-teal-700 hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                className="rounded-full px-3 py-1.5 text-[#5c6f6a] transition-colors whitespace-nowrap shrink-0 cursor-pointer hover:bg-[#eef5f2] hover:text-[#0a5f51]"
               >
                 الدفتر الرقمي
               </button>
@@ -675,21 +675,21 @@ export const App: React.FC = () => {
                   setLogbookInitialTimetable(true);
                   setActiveSection('logbook');
                 }}
-                className="hover:text-teal-700 hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                className="rounded-full px-3 py-1.5 text-[#5c6f6a] transition-colors whitespace-nowrap shrink-0 cursor-pointer hover:bg-[#eef5f2] hover:text-[#0a5f51]"
               >
                 استعمال الزمن
               </button>
               <button
                 type="button"
                 onClick={() => setActiveTool('assistant')}
-                className="hover:text-teal-700 hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                className="rounded-full px-3 py-1.5 text-[#5c6f6a] transition-colors whitespace-nowrap shrink-0 cursor-pointer hover:bg-[#eef5f2] hover:text-[#0a5f51]"
               >
                 المساعد الذكي
               </button>
               <button
                 type="button"
                 onClick={() => setActiveSection('database')}
-                className="hover:text-teal-700 hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                className="rounded-full px-3 py-1.5 text-[#5c6f6a] transition-colors whitespace-nowrap shrink-0 cursor-pointer hover:bg-[#eef5f2] hover:text-[#0a5f51]"
               >
                 الموارد التعليمية
               </button>
@@ -697,7 +697,7 @@ export const App: React.FC = () => {
           )}
 
           {/* Left Section: Export Actions (when in memos) + Notifications + Settings + Account */}
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2 shrink-0">
             {isYearSection && yearSubTab === 'memos' && (
               <>
                 <button
@@ -708,9 +708,9 @@ export const App: React.FC = () => {
                   title="معاينة المذكرة والطباعة"
                 >
                   <Eye className="w-4 h-4 text-teal-700" />
-                  <span className="hidden sm:inline">معاينة وطباعة</span>
+                  <span className="hidden lg:inline">معاينة وطباعة</span>
                 </button>
-                <ActionMenu label="التصدير والإعدادات" items={[
+                <ActionMenu label="التصدير والإعدادات" compactLabel="تصدير" items={[
                   { id: 'btn-print-memo', label: 'تصدير PDF', title: 'تحميل ملف PDF حقيقي', onSelect: handlePrint, icon: <FileDown className="w-4 h-4" /> },
                   { id: 'btn-export-word', label: 'تصدير Word', title: 'تصدير كملف Word', onSelect: handleExportWord, icon: <FileDown className="w-4 h-4" /> },
                   { id: 'btn-reset-defaults', label: 'استعادة الإعدادات الافتراضية', onSelect: handleResetDefaults, icon: <RotateCcw className="w-4 h-4" /> },
@@ -731,7 +731,7 @@ export const App: React.FC = () => {
               >
                 <Bell className="w-4 h-4" />
                 {platformNotifications.length > 0 && (
-                  <span className="absolute -top-1 -left-1 min-w-[18px] h-[18px] px-1 rounded-full bg-teal-700 text-white text-[10px] font-bold flex items-center justify-center tabular-nums">
+                  <span className="absolute -top-1 -left-1 min-w-[18px] h-[18px] px-1 rounded-full bg-[#0e7a68] text-white text-[10px] font-bold flex items-center justify-center tabular-nums shadow-sm">
                     {platformNotifications.length}
                   </span>
                 )}
@@ -780,7 +780,7 @@ export const App: React.FC = () => {
                           <button
                             type="button"
                             onClick={item.onAction}
-                            className="text-[11.5px] font-bold text-teal-700 hover:text-teal-900 cursor-pointer"
+                            className="text-[11.5px] font-bold text-[#0a5f51] hover:text-[#0b1f1c] cursor-pointer"
                           >
                             {item.actionLabel} ←
                           </button>
@@ -802,7 +802,7 @@ export const App: React.FC = () => {
               }}
               aria-label="الكتابة اليدوية والأقلام الملونة"
               title="تخصيص الخط اليدوي وألوان الأقلام"
-              className={`icon-button inline-flex items-center justify-center gap-1.5 h-10 px-2.5 rounded-xl transition cursor-pointer ${
+              className={`icon-button hidden sm:inline-flex items-center justify-center gap-1.5 h-10 px-2.5 rounded-xl transition cursor-pointer ${
                 hwStyle.enabled ? 'text-blue-700 border-blue-200 bg-blue-50/70' : 'text-slate-700'
               }`}
             >
@@ -820,8 +820,8 @@ export const App: React.FC = () => {
               }}
               aria-label="إعدادات الحساب والمؤسسة"
               title="إعدادات الحساب والخاتم والمؤسسة"
-              className={`icon-button inline-flex items-center justify-center w-10 h-10 rounded-xl transition cursor-pointer ${
-                activeSection === 'settings' ? 'bg-teal-50 text-teal-800 border-teal-300' : 'text-slate-700'
+              className={`icon-button hidden sm:inline-flex items-center justify-center w-10 h-10 rounded-xl transition cursor-pointer ${
+                activeSection === 'settings' ? 'bg-[#eef5f2] text-[#0a5f51] border-[#cfe3dc]' : 'text-slate-700'
               }`}
             >
               <Settings className="w-4 h-4" />
@@ -834,12 +834,12 @@ export const App: React.FC = () => {
 
         {/* Mobile/Tablet Secondary Year Sub-tabs (prevents header horizontal crowding) */}
         {isYearSection && (
-          <div className="md:hidden px-3 pb-2 flex items-center gap-1.5 overflow-x-auto border-t border-slate-100 pt-1.5">
+          <div className="xl:hidden px-3 pb-2 flex items-center gap-1.5 overflow-x-auto border-t border-[#eef2f0] pt-2">
             <button
               type="button"
               onClick={() => setYearSubTab('memos')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer whitespace-nowrap shrink-0 ${
-                yearSubTab === 'memos' ? midanTheme.activeTabBg : 'bg-slate-100 text-slate-700'
+                yearSubTab === 'memos' ? midanTheme.activeTabBg : 'bg-white border border-[#e2e8e5] text-[#5c6f6a]'
               }`}
             >
               <FileText className="w-3.5 h-3.5" />
@@ -849,7 +849,7 @@ export const App: React.FC = () => {
               type="button"
               onClick={() => setYearSubTab('source')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer whitespace-nowrap shrink-0 ${
-                yearSubTab === 'source' ? midanTheme.activeTabBg : 'bg-slate-100 text-slate-700'
+                yearSubTab === 'source' ? midanTheme.activeTabBg : 'bg-white border border-[#e2e8e5] text-[#5c6f6a]'
               }`}
             >
               <BookOpen className="w-3.5 h-3.5" />
@@ -859,7 +859,7 @@ export const App: React.FC = () => {
               type="button"
               onClick={() => setYearSubTab('distribution')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer whitespace-nowrap shrink-0 ${
-                yearSubTab === 'distribution' ? midanTheme.activeTabBg : 'bg-slate-100 text-slate-700'
+                yearSubTab === 'distribution' ? midanTheme.activeTabBg : 'bg-white border border-[#e2e8e5] text-[#5c6f6a]'
               }`}
             >
               <CalendarDays className="w-3.5 h-3.5" />

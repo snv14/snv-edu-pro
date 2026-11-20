@@ -9,20 +9,7 @@ import {
   type HandwritingStyleSettings,
 } from '../services/handwritingStyle';
 
-const waitForImages = async (root: HTMLElement): Promise<void> => {
-  const images = Array.from(root.querySelectorAll('img'));
-  await Promise.all(
-    images.map(async (img) => {
-      if (img.complete) return;
-      await new Promise<void>((resolve) => {
-        img.addEventListener('load', () => resolve(), { once: true });
-        img.addEventListener('error', () => resolve(), { once: true });
-        // حد أقصى 2.5 ثانية للانتظار حتى لا يتعطل التصدير عند وجود صور بطيئة أو غير متاحة
-        setTimeout(() => resolve(), 2500);
-      });
-    })
-  );
-};
+import { waitForImages } from './exportDom';
 
 const buildSafeFilename = (config: MemoConfig, title: string): string => {
   const raw = `مذكرة_${config.level || 'niveau'}_${config.teacherName || ''}_${title || 'بيداغوجية'}`;

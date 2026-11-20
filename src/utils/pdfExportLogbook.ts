@@ -10,17 +10,7 @@ import {
 
 export type LogbookOrientation = "portrait" | "landscape";
 
-const waitForImages = async (root: HTMLElement): Promise<void> => {
-  const images = Array.from(root.querySelectorAll("img"));
-  await Promise.all(images.map(async (img) => {
-    if (img.complete) return;
-    await new Promise<void>((resolve) => {
-      img.addEventListener("load", () => resolve(), { once: true });
-      img.addEventListener("error", () => resolve(), { once: true });
-      setTimeout(() => resolve(), 2500);
-    });
-  }));
-};
+import { waitForImages } from './exportDom';
 
 
 const preparePageForExport = (

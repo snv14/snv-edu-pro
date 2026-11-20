@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
+  ArrowLeft,
   BookOpen,
   BookOpenCheck,
   CalendarDays,
@@ -115,24 +116,20 @@ export const LevelsHomePage: React.FC<LevelsHomePageProps> = ({
       number: '01',
       code: '1AM',
       title: 'السنة الأولى متوسط',
-      focus: 'التغذية عند الإنسان والنبات الأخضر والتحصل على الطاقة',
+      focus: 'التغذية عند الإنسان والنبات الأخضر والتحصّل على الطاقة',
       image: card1amImg,
       icon: Sprout,
-      accentText: 'text-emerald-800',
-      numberColor: 'text-emerald-700',
-      ctaClass: 'bg-emerald-700 hover:bg-emerald-800 text-white',
+      accent: '#0e7a68',
     },
     {
       id: '2am' as const,
       number: '02',
       code: '2AM',
       title: 'السنة الثانية متوسط',
-      focus: 'الوسط الحي، العلاقات الغذائية، والتكيف وإعمار الأوساط',
+      focus: 'الوسط الحي، العلاقات الغذائية، والتكيّف وإعمار الأوساط',
       image: card2amImg,
       icon: TreePine,
-      accentText: 'text-teal-800',
-      numberColor: 'text-teal-700',
-      ctaClass: 'bg-teal-700 hover:bg-teal-800 text-white',
+      accent: '#0d6f8f',
     },
     {
       id: '3am' as const,
@@ -142,9 +139,7 @@ export const LevelsHomePage: React.FC<LevelsHomePageProps> = ({
       focus: 'الدينامية الداخلية والخارجية للأرض والموارد الطبيعية',
       image: card3amImg,
       icon: Globe2,
-      accentText: 'text-sky-800',
-      numberColor: 'text-sky-700',
-      ctaClass: 'bg-sky-700 hover:bg-sky-800 text-white',
+      accent: '#a06a12',
     },
     {
       id: '4am' as const,
@@ -154,9 +149,7 @@ export const LevelsHomePage: React.FC<LevelsHomePageProps> = ({
       focus: 'التغذية والأيض، التنسيق الوظيفي والمناعة، والوراثة',
       image: card4amImg,
       icon: Dna,
-      accentText: 'text-cyan-900',
-      numberColor: 'text-cyan-800',
-      ctaClass: 'bg-slate-900 hover:bg-slate-800 text-white',
+      accent: '#a33b5b',
     },
   ];
 
@@ -165,7 +158,6 @@ export const LevelsHomePage: React.FC<LevelsHomePageProps> = ({
       id: 'group-planning',
       title: 'التخطيط البيداغوجي',
       subtitle: 'إعداد المذكرات والمخططات الزمنية للتعلمات',
-      accentBg: 'bg-emerald-50 text-emerald-700 border-emerald-200/70',
       items: [
         {
           id: 'service-memos',
@@ -187,7 +179,6 @@ export const LevelsHomePage: React.FC<LevelsHomePageProps> = ({
       id: 'group-school-org',
       title: 'التنظيم المدرسي',
       subtitle: 'تسيير الحصص اليومية وجدول التوقيت الأسبوعي',
-      accentBg: 'bg-teal-50 text-teal-700 border-teal-200/70',
       items: [
         {
           id: 'service-logbook',
@@ -209,7 +200,6 @@ export const LevelsHomePage: React.FC<LevelsHomePageProps> = ({
       id: 'group-learning',
       title: 'التعليم والتعلم والموارد',
       subtitle: 'الأنشطة المخبرية ودلائل الأستاذ وقاعدة المنهاج',
-      accentBg: 'bg-sky-50 text-sky-700 border-sky-200/70',
       items: [
         {
           id: 'service-activities',
@@ -231,7 +221,6 @@ export const LevelsHomePage: React.FC<LevelsHomePageProps> = ({
       id: 'group-eval-ai',
       title: 'التقويم والمساعد الذكي',
       subtitle: 'مذكرات التصحيح والمساعدة التربوية الفورية',
-      accentBg: 'bg-cyan-50 text-cyan-800 border-cyan-200/70',
       items: [
         {
           id: 'service-assessment',
@@ -253,55 +242,99 @@ export const LevelsHomePage: React.FC<LevelsHomePageProps> = ({
 
   return (
     <main id="main-content" className="flex-1 w-full overflow-x-hidden">
-      <div className="max-w-[1360px] mx-auto px-3.5 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-6">
-        {/* ═══════════════════════════════════════════════════════════════
-            1. وسط الصفحة: مخبر علوم الطبيعة والحياة (Hero Laboratory Showcase)
-           ═══════════════════════════════════════════════════════════════ */}
-        <section
-          aria-labelledby="hero-lab-title"
-          className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-slate-900 shadow-md group"
-        >
-          <div className="relative min-h-[300px] sm:min-h-[350px] lg:min-h-[390px] w-full flex flex-col justify-end">
-            {!heroImgFailed ? (
-              <img
-                key={activeScene.id}
-                src={activeScene.image}
-                alt={activeScene.caption}
-                referrerPolicy="no-referrer"
-                onError={() => setHeroImgFailed(true)}
-                className="absolute inset-0 w-full h-full object-cover object-center transition-transform duration-500 ease-out group-hover:scale-[1.015]"
-              />
-            ) : (
-              <div
-                className="absolute inset-0 bg-gradient-to-br from-emerald-950 via-teal-900 to-sky-900 flex items-center justify-center"
-                aria-hidden="true"
-              >
-                <Microscope className="w-20 h-20 text-emerald-300/30" />
-              </div>
-            )}
+      <div className="mx-auto w-full max-w-[1360px] px-4 sm:px-6 lg:px-8 py-5 sm:py-8 space-y-8">
 
-            <div
-              className="absolute inset-0 bg-gradient-to-l from-[#042420]/92 via-[#063430]/75 to-[#082f49]/40 pointer-events-none"
-              aria-hidden="true"
-            />
-            <div
-              className="absolute inset-0 bg-gradient-to-t from-[#031917]/90 via-transparent to-black/15 pointer-events-none"
-              aria-hidden="true"
-            />
-
-            {/* Top Scene Switcher */}
-            <div className="relative z-10 flex flex-wrap items-center justify-between gap-2 px-4 sm:px-8 pt-4 sm:pt-5">
-              <div className="flex items-center gap-2 text-xs font-semibold text-emerald-100/95">
-                <FlaskConical className="w-4 h-4 text-emerald-300 shrink-0" aria-hidden="true" />
-                <span>مخبر علوم الطبيعة والحياة</span>
-                <span aria-hidden="true" className="text-emerald-300/60">·</span>
-                <span className="text-sky-100/90">التعليم المتوسط</span>
+        {/* ═══════════════════════════════════════════════════════════
+            الواجهة الرئيسية: عنوان المنصة + مشهد المخبر
+           ═══════════════════════════════════════════════════════════ */}
+        <section aria-labelledby="hero-lab-title" className="snv-hero">
+          <div className="relative z-10 grid gap-7 p-5 sm:p-8 lg:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)] lg:items-center lg:gap-9 lg:p-10">
+            {/* النص */}
+            <div className="space-y-5">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="snv-eyebrow">
+                  <FlaskConical className="h-3.5 w-3.5" aria-hidden="true" />
+                  منصة المذكرة البيداغوجية
+                </span>
+                <span className="snv-eyebrow snv-eyebrow--ghost">علوم الطبيعة والحياة · التعليم المتوسط</span>
               </div>
+
+              <h1 id="hero-lab-title" className="snv-hero-title">
+                منهاجُك البيداغوجي،
+                <br />
+                <span>في مساحة عمل واحدة.</span>
+              </h1>
+
+              <p className="max-w-xl text-[13px] font-medium leading-relaxed text-[#cfdedb] sm:text-sm">
+                مذكرات، تدرجات سنوية، دفتر رقمي ومساعد ذكي — مبنية على وثائق المنهاج الرسمية
+                للجيل الثاني، مع تصدير مباشر إلى Word وPDF.
+              </p>
+
+              <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                <button type="button" onClick={scrollToLevels} className="snv-btn snv-btn--gold">
+                  <GraduationCap className="h-4 w-4" aria-hidden="true" />
+                  استعراض السنوات الدراسية
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onOpenTool('assistant')}
+                  className="snv-btn snv-btn--outline-light"
+                >
+                  <MessagesSquare className="h-4 w-4" aria-hidden="true" />
+                  المساعد الذكي
+                </button>
+              </div>
+
+              <dl className="grid max-w-md grid-cols-3 gap-3 pt-2">
+                <div className="snv-stat">
+                  <dt>سنوات دراسية</dt>
+                  <dd className="tabular-nums">4</dd>
+                </div>
+                <div className="snv-stat">
+                  <dt>مذكرة جاهزة</dt>
+                  <dd className="tabular-nums">{totalLessons}</dd>
+                </div>
+                <div className="snv-stat">
+                  <dt>صيغتا التصدير</dt>
+                  <dd className="text-base">Word · PDF</dd>
+                </div>
+              </dl>
+            </div>
+
+            {/* الصورة والمشاهد */}
+            <div className="space-y-2.5">
+              <figure className="snv-hero-media">
+                {!heroImgFailed ? (
+                  <img
+                    key={activeScene.id}
+                    src={activeScene.image}
+                    alt={activeScene.caption}
+                    referrerPolicy="no-referrer"
+                    onError={() => setHeroImgFailed(true)}
+                  />
+                ) : (
+                  <div
+                    className="flex h-full w-full items-center justify-center bg-gradient-to-br from-emerald-950 via-teal-900 to-sky-900"
+                    aria-hidden="true"
+                  >
+                    <Microscope className="h-16 w-16 text-emerald-300/40" />
+                  </div>
+                )}
+
+                <figcaption className="absolute inset-x-0 bottom-0 z-[2] bg-gradient-to-t from-[#04120f]/90 via-[#04120f]/45 to-transparent px-3.5 pb-3 pt-8">
+                  <span className="mb-0.5 block text-[10.5px] font-extrabold tracking-wide text-[#f0d492]">
+                    {activeScene.label}
+                  </span>
+                  <span className="block text-[11.5px] font-medium leading-snug text-white/85">
+                    {activeScene.caption}
+                  </span>
+                </figcaption>
+              </figure>
 
               <div
                 role="tablist"
                 aria-label="مشاهد المخبر العلمي"
-                className="flex flex-wrap items-center gap-1 p-1 rounded-xl bg-slate-950/55 backdrop-blur-md border border-white/15"
+                className="flex flex-wrap items-center gap-1 rounded-2xl border border-white/12 bg-white/[0.06] p-1"
               >
                 {LAB_SCENES.map((scene) => {
                   const isActive = scene.id === activeSceneId;
@@ -315,10 +348,10 @@ export const LevelsHomePage: React.FC<LevelsHomePageProps> = ({
                         setHeroImgFailed(false);
                         setActiveSceneId(scene.id);
                       }}
-                      className={`px-2.5 py-1 rounded-lg text-[11.5px] font-bold whitespace-nowrap transition-colors duration-200 cursor-pointer ${
+                      className={`flex-1 cursor-pointer whitespace-nowrap rounded-xl px-2.5 py-1.5 text-[11px] font-bold transition ${
                         isActive
-                          ? 'bg-white text-slate-900 shadow-xs'
-                          : 'text-slate-100/85 hover:text-white hover:bg-white/10'
+                          ? 'bg-white text-[#0b1f1c] shadow-sm'
+                          : 'text-white/75 hover:bg-white/10 hover:text-white'
                       }`}
                     >
                       {scene.label}
@@ -327,132 +360,69 @@ export const LevelsHomePage: React.FC<LevelsHomePageProps> = ({
                 })}
               </div>
             </div>
-
-            {/* Hero Main Content */}
-            <div className="relative z-10 mt-auto px-4 sm:px-8 pb-5 sm:pb-7 pt-8 flex flex-col lg:flex-row lg:items-end justify-between gap-4">
-              <div className="max-w-2xl space-y-2.5">
-                <h1
-                  id="hero-lab-title"
-                  style={{ fontSize: 'clamp(1.6rem, 3vw, 2.65rem)', textWrap: 'balance' }}
-                  className="font-extrabold text-white leading-[1.2] tracking-tight"
-                >
-                  اكتشف عالم علوم الطبيعة والحياة
-                </h1>
-
-                <p className="text-xs sm:text-sm text-slate-100/95 font-medium leading-relaxed max-w-xl">
-                  فضاء بيداغوجي حديث يجمع بين دقة التجربة المخبرية وسهولة إعداد المذكرات، التدرجات السنوية، والدفتر الرقمي وفق منهاج الجيل الثاني.
-                </p>
-
-                <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs font-semibold text-emerald-100/90 tabular-nums">
-                  <span>منهاج الجيل الثاني المعتمد</span>
-                  <span aria-hidden="true" className="text-emerald-300/60">·</span>
-                  <span>4 سنوات دراسية</span>
-                  <span aria-hidden="true" className="text-emerald-300/60">·</span>
-                  <span>{totalLessons} مذكرة جاهزة</span>
-                </div>
-
-                <div className="pt-1">
-                  <button
-                    type="button"
-                    onClick={scrollToLevels}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-bold shadow-md transition-all duration-200 hover:-translate-y-0.5 cursor-pointer whitespace-nowrap"
-                  >
-                    <GraduationCap className="w-4 h-4" />
-                    <span>استعراض السنوات الدراسية</span>
-                  </button>
-                </div>
-              </div>
-
-              <div className="hidden md:block max-w-xs text-right bg-slate-950/50 backdrop-blur-md border border-white/15 rounded-xl px-3.5 py-2.5 text-xs text-slate-100/90 leading-relaxed">
-                <span className="font-bold text-emerald-300 block mb-0.5">مشهد المخبر الحالي</span>
-                <span>{activeScene.caption}</span>
-              </div>
-            </div>
           </div>
         </section>
 
-        {/* ═══════════════════════════════════════════════════════════════
-            2. شريط السنوات الدراسية الأربع في أسفل القسم الرئيسي
-           ═══════════════════════════════════════════════════════════════ */}
-        <section id="levels-strip" aria-labelledby="levels-strip-title" className="space-y-3 scroll-mt-20">
-          <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200/80">
-            <div className="flex items-center gap-2">
-              <GraduationCap className="w-5 h-5 text-teal-700 shrink-0" aria-hidden="true" />
-              <h2 id="levels-strip-title" className="text-lg sm:text-xl font-extrabold text-slate-900">
-                السنوات الدراسية · التعليم المتوسط
+        {/* ═══════════════════════════════════════════════════════════
+            السنوات الدراسية
+           ═══════════════════════════════════════════════════════════ */}
+        <section id="levels-strip" aria-labelledby="levels-strip-title" className="scroll-mt-24 space-y-4">
+          <div className="snv-section-head">
+            <div>
+              <span className="snv-kicker">01 · المسار الدراسي</span>
+              <h2 id="levels-strip-title" className="snv-section-title">
+                السنوات الدراسية الأربع
               </h2>
             </div>
-            <span className="text-xs font-semibold text-slate-500 whitespace-nowrap tabular-nums">
-              اختر السنة للدخول المباشر
-            </span>
+            <span className="snv-note">اختر السنة للدخول المباشر إلى مذكراتها</span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {yearLevels.map((lvl) => {
               const Icon = lvl.icon;
               const lessonCount = curriculumLessons.filter((l) => l.level === lvl.id).length;
 
               return (
-                <article
-                  key={lvl.id}
-                  id={`card-select-level-${lvl.id}`}
-                  className="group bg-white rounded-2xl border border-slate-200/90 shadow-xs hover:shadow-md hover:border-teal-500/50 transition-all duration-200 hover:-translate-y-0.5 flex flex-col overflow-hidden"
-                >
+                <article key={lvl.id} id={`card-select-level-${lvl.id}`} className="snv-level-card">
                   <button
                     type="button"
                     onClick={() => onSelectYear(lvl.id, 'memos')}
-                    className="relative h-28 w-full overflow-hidden bg-slate-100 text-right cursor-pointer focus-visible:outline-2 focus-visible:outline-teal-700"
+                    className="snv-level-media w-full cursor-pointer text-right focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0e7a68]"
+                    aria-label={`دخول ${lvl.title}`}
                   >
-                    <img
-                      src={lvl.image}
-                      alt={lvl.title}
-                      referrerPolicy="no-referrer"
-                      className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                    />
-                    <div
-                      className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-900/25 to-transparent"
-                      aria-hidden="true"
-                    />
-                    <div className="absolute top-2.5 right-2.5 flex items-center justify-center w-9 h-9 rounded-xl bg-white/95 text-slate-900 shadow-xs">
-                      <Icon className={`w-4 h-4 ${lvl.numberColor}`} aria-hidden="true" />
-                    </div>
-                    <div className="absolute bottom-2.5 right-3 left-3 flex items-end justify-between gap-2">
-                      <span className="text-2xl font-extrabold text-white tracking-tight tabular-nums leading-none">
-                        {lvl.number}
-                      </span>
-                      <span className="text-[11px] font-bold text-slate-100/95 tabular-nums">
-                        {lvl.code}
-                      </span>
-                    </div>
+                    <img src={lvl.image} alt={lvl.title} referrerPolicy="no-referrer" />
+                    <span className="snv-level-icon">
+                      <Icon className="h-4 w-4" style={{ color: lvl.accent }} aria-hidden="true" />
+                    </span>
+                    <span className="snv-level-index tabular-nums">{lvl.number}</span>
+                    <span className="snv-level-code tabular-nums">{lvl.code}</span>
                   </button>
 
-                  <div className="p-3.5 flex-1 flex flex-col justify-between gap-3">
-                    <div className="space-y-1">
-                      <h3 className={`text-sm sm:text-[15px] font-extrabold ${lvl.accentText}`}>
-                        {lvl.title}
-                      </h3>
-                      <p className="text-xs text-slate-600 leading-relaxed line-clamp-2">
-                        {lvl.focus}
-                      </p>
-                      <div className="text-[11.5px] font-semibold text-slate-500 tabular-nums">
+                  <div className="snv-level-body">
+                    <div className="space-y-1.5">
+                      <h3 className="text-sm font-extrabold text-[#0b1f1c] sm:text-[15px]">{lvl.title}</h3>
+                      <p className="line-clamp-2 text-[11.5px] leading-relaxed text-[#5c6f6a]">{lvl.focus}</p>
+                      <span className="snv-metric tabular-nums">
+                        <FileText className="h-3 w-3" aria-hidden="true" />
                         {lessonCount} مذكرة معتمدة
-                      </div>
+                      </span>
                     </div>
 
-                    <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                    <div className="mt-auto flex items-center gap-1.5 pt-3">
                       <button
                         type="button"
                         onClick={() => onSelectYear(lvl.id, 'memos')}
-                        className={`flex-1 inline-flex items-center justify-center gap-1 px-3 py-2 rounded-xl text-xs font-bold transition-colors duration-200 cursor-pointer whitespace-nowrap ${lvl.ctaClass}`}
+                        style={{ backgroundColor: lvl.accent }}
+                        className="inline-flex flex-1 cursor-pointer items-center justify-center gap-1 rounded-xl px-3 py-2 text-[11.5px] font-extrabold text-white shadow-sm transition hover:brightness-110"
                       >
                         <span>دخول السنة</span>
-                        <ChevronLeft className="w-3.5 h-3.5" aria-hidden="true" />
+                        <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" />
                       </button>
 
                       <button
                         type="button"
                         onClick={() => onSelectYear(lvl.id, 'distribution')}
-                        className="px-3 py-2 rounded-xl text-xs font-bold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 transition-colors duration-200 cursor-pointer whitespace-nowrap"
+                        className="cursor-pointer whitespace-nowrap rounded-xl border border-[#e2e8e5] bg-white px-3 py-2 text-[11.5px] font-bold text-[#3f534e] transition hover:border-[#0e7a68]/40 hover:bg-[#f5faf8] hover:text-[#0a5f51]"
                         title="فتح التدرج السنوي"
                       >
                         التدرج
@@ -465,31 +435,34 @@ export const LevelsHomePage: React.FC<LevelsHomePageProps> = ({
           </div>
         </section>
 
-        {/* ═══════════════════════════════════════════════════════════════
-            3. بقية أقسام المنصة منظمة في مجموعات منطقية واضحة
-           ═══════════════════════════════════════════════════════════════ */}
-        <section id="platform-services" aria-labelledby="platform-services-title" className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200/80">
-            <h2 id="platform-services-title" className="text-lg sm:text-xl font-extrabold text-slate-900">
-              أقسام وخدمات المنصة
-            </h2>
-            <span className="text-xs font-semibold text-slate-500 whitespace-nowrap">
-              منظمة حسب المهام البيداغوجية والمدرسية
-            </span>
+        {/* ═══════════════════════════════════════════════════════════
+            أقسام وخدمات المنصة
+           ═══════════════════════════════════════════════════════════ */}
+        <section id="platform-services" aria-labelledby="platform-services-title" className="space-y-4">
+          <div className="snv-section-head">
+            <div>
+              <span className="snv-kicker">02 · مساحة العمل</span>
+              <h2 id="platform-services-title" className="snv-section-title">
+                أقسام وخدمات المنصة
+              </h2>
+            </div>
+            <span className="snv-note">منظمة حسب المهام البيداغوجية والمدرسية</span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {serviceGroups.map((group) => (
-              <div
-                key={group.id}
-                className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-xs flex flex-col gap-3"
-              >
-                <div className="flex items-baseline justify-between gap-2 pb-2 border-b border-slate-100">
-                  <h3 className="text-sm font-extrabold text-slate-900">{group.title}</h3>
-                  <span className="text-[11.5px] text-slate-500 truncate">{group.subtitle}</span>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {serviceGroups.map((group, groupIndex) => (
+              <div key={group.id} className="snv-service-panel">
+                <div className="flex items-start gap-3 pb-2">
+                  <span className="mt-0.5 font-[Tajawal] text-xs font-extrabold tabular-nums text-[#9db3ad]">
+                    0{groupIndex + 1}
+                  </span>
+                  <div className="min-w-0">
+                    <h3 className="text-[13.5px] font-extrabold text-[#0b1f1c]">{group.title}</h3>
+                    <p className="mt-0.5 truncate text-[11px] text-[#6b7d78]">{group.subtitle}</p>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
                   {group.items.map((item) => {
                     const Icon = item.icon;
                     return (
@@ -498,22 +471,20 @@ export const LevelsHomePage: React.FC<LevelsHomePageProps> = ({
                         id={item.id}
                         type="button"
                         onClick={item.onClick}
-                        className="group text-right p-3 rounded-xl border border-slate-200/75 bg-slate-50/50 hover:bg-white hover:border-teal-500/50 hover:shadow-xs transition-all duration-200 flex items-start gap-3 cursor-pointer"
+                        className="snv-service-row"
                       >
-                        <div className={`w-9 h-9 rounded-lg border flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-105 ${group.accentBg}`}>
-                          <Icon className="w-4 h-4" aria-hidden="true" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-1">
-                            <span className="text-xs sm:text-[13px] font-extrabold text-slate-900 group-hover:text-teal-800 truncate">
-                              {item.title}
-                            </span>
-                            <ChevronLeft className="w-3.5 h-3.5 text-slate-400 group-hover:text-teal-700 shrink-0 transition-transform duration-200 group-hover:-translate-x-0.5" aria-hidden="true" />
-                          </div>
-                          <p className="text-[11.5px] text-slate-600 leading-snug mt-0.5 line-clamp-2">
+                        <span className="snv-icon-tile">
+                          <Icon className="h-4 w-4" aria-hidden="true" />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-center justify-between gap-1">
+                            <span className="truncate text-[12px] font-extrabold text-[#0b1f1c]">{item.title}</span>
+                            <ChevronLeft className="h-3.5 w-3.5 shrink-0 text-[#9db3ad]" aria-hidden="true" />
+                          </span>
+                          <span className="mt-0.5 line-clamp-2 block text-[11px] leading-snug text-[#61736e]">
                             {item.description}
-                          </p>
-                        </div>
+                          </span>
+                        </span>
                       </button>
                     );
                   })}
@@ -523,71 +494,79 @@ export const LevelsHomePage: React.FC<LevelsHomePageProps> = ({
           </div>
         </section>
 
-        {/* ═══════════════════════════════════════════════════════════════
-            4. تذييل مدمج لمعلومات المصمم ودليل المنصة
-           ═══════════════════════════════════════════════════════════════ */}
-        <footer className="bg-white rounded-2xl border border-slate-200/90 px-4 py-3.5 sm:px-5 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="relative shrink-0">
-              <img
-                src={designerPhoto}
-                alt="مصمم المنصة الأستاذ بغداد الطيب"
-                referrerPolicy="no-referrer"
-                className="w-12 h-12 rounded-xl object-cover border border-slate-200"
-              />
-              <label
-                htmlFor="upload-designer-photo-banner"
-                className="absolute -bottom-1 -left-1 w-6 h-6 rounded-md bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 flex items-center justify-center cursor-pointer shadow-xs transition"
-                title="تحديث صورة المصمم"
-              >
-                <Upload className="w-3 h-3" aria-hidden="true" />
-                <input
-                  type="file"
-                  id="upload-designer-photo-banner"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handlePhotoUpload}
+        {/* ═══════════════════════════════════════════════════════════
+            تذييل المنصة
+           ═══════════════════════════════════════════════════════════ */}
+        <footer className="snv-footer">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <div className="relative shrink-0">
+                <img
+                  src={designerPhoto}
+                  alt="مصمم المنصة الأستاذ بغداد الطيب"
+                  referrerPolicy="no-referrer"
+                  className="h-12 w-12 rounded-xl border border-white/20 object-cover"
                 />
-              </label>
+                <label
+                  htmlFor="upload-designer-photo-banner"
+                  className="absolute -bottom-1 -left-1 flex h-6 w-6 cursor-pointer items-center justify-center rounded-md border border-white/20 bg-white/90 text-[#0b1f1c] shadow-sm transition hover:bg-white"
+                  title="تحديث صورة المصمم"
+                >
+                  <Upload className="h-3 w-3" aria-hidden="true" />
+                  <input
+                    type="file"
+                    id="upload-designer-photo-banner"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handlePhotoUpload}
+                  />
+                </label>
+              </div>
+
+              <div className="min-w-0">
+                <div className="text-xs font-extrabold text-white">
+                  الأستاذ بغداد الطيب
+                  <span className="font-semibold text-[#f0d492]"> · تصميم وتطوير المنصة</span>
+                </div>
+                <div className="text-[11px] text-white/60">
+                  منصة المذكرة البيداغوجية لعلوم الطبيعة والحياة — التعليم المتوسط
+                </div>
+              </div>
             </div>
 
-            <div>
-              <div className="text-xs font-extrabold text-slate-900">
-                الأستاذ بغداد الطيب <span className="font-semibold text-teal-700">· تصميم وتطوير المنصة</span>
-              </div>
-              <div className="text-[11.5px] text-slate-500">
-                منصة المذكرة البيداغوجية لعلوم الطبيعة والحياة — التعليم المتوسط
-              </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => onOpenInfoModal?.('about')}
+                className="snv-btn snv-btn--outline-light !px-3 !py-1.5 !text-[11.5px]"
+              >
+                <Info className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>حول المنصة</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onOpenInfoModal?.('guide')}
+                className="snv-btn snv-btn--outline-light !px-3 !py-1.5 !text-[11.5px]"
+              >
+                <HelpCircle className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>دليل الاستخدام</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onOpenInfoModal?.('contact')}
+                className="snv-btn snv-btn--outline-light !px-3 !py-1.5 !text-[11.5px]"
+              >
+                <Mail className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>تواصل معنا</span>
+              </button>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => onOpenInfoModal?.('about')}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-xs font-bold text-slate-700 transition cursor-pointer whitespace-nowrap"
-            >
-              <Info className="w-3.5 h-3.5 text-sky-700" aria-hidden="true" />
-              <span>حول المنصة</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => onOpenInfoModal?.('guide')}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-xs font-bold text-slate-700 transition cursor-pointer whitespace-nowrap"
-            >
-              <HelpCircle className="w-3.5 h-3.5 text-emerald-700" aria-hidden="true" />
-              <span>دليل الاستخدام</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => onOpenInfoModal?.('contact')}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-xs font-bold text-slate-700 transition cursor-pointer whitespace-nowrap"
-            >
-              <Mail className="w-3.5 h-3.5 text-slate-600" aria-hidden="true" />
-              <span>تواصل معنا</span>
-            </button>
+          <div className="mt-3 flex items-center gap-2 border-t border-white/10 pt-2.5 text-[10.5px] text-white/45">
+            <ArrowLeft className="h-3 w-3" aria-hidden="true" />
+            <span>منهاج الجيل الثاني · 4 سنوات دراسية · مذكرات وتدرجات رسمية</span>
           </div>
         </footer>
       </div>

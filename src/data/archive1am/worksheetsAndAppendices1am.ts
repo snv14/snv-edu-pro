@@ -47,7 +47,7 @@ export const ARCHIVE_1AM_EXTRA_TABLES: ArchivedTableRecord[] = [
     relatedActivityId: 'act_1am_1_1_2_1',
     sourcePage: 10,
     table: {
-      title: 'الكشف عن العناصر المعدنية في الأغذية (مطبوعة ص 10)',
+      table_title: 'الكشف عن العناصر المعدنية في الأغذية (مطبوعة ص 10)',
       headers: ['الكاشف', 'يكشف عن وجود', 'النتيجة'],
       rows: [
         ['التسخين', 'الماء', 'صعود بخار الماء وتشكل قطرات مائية'],
@@ -66,7 +66,7 @@ export const ARCHIVE_1AM_EXTRA_TABLES: ArchivedTableRecord[] = [
     relatedActivityId: 'act_1am_1_1_2_2',
     sourcePage: 10,
     table: {
-      title: 'الكشف عن العناصر العضوية في الأغذية (مطبوعة ص 10)',
+      table_title: 'الكشف عن العناصر العضوية في الأغذية (مطبوعة ص 10)',
       headers: ['الكاشف', 'يكشف عن وجود', 'النتيجة'],
       rows: [
         ['محلول فهلينغ + التسخين', 'السكر', 'تشكل راسب أحمر آجوري'],
@@ -88,7 +88,7 @@ export const ARCHIVE_1AM_EXTRA_TABLES: ArchivedTableRecord[] = [
     digitizedFromImage: true,
     originalImageId: 'med_1am_p20_01',
     table: {
-      title: 'تركيب محلول كنوب (الوثيقة 1 - ص 20)',
+      table_title: 'تركيب محلول كنوب (الوثيقة 1 - ص 20)',
       headers: ['العنصر الكيميائي / المعدني', 'الكمية في اللتر'],
       rows: [
         ['ماء مقطر', '1000مل'],
@@ -109,7 +109,7 @@ export const ARCHIVE_1AM_EXTRA_TABLES: ArchivedTableRecord[] = [
     relatedActivityId: 'act_1am_2_1_1_1',
     sourcePage: 22,
     table: {
-      title: 'ورقة عمل تجارب شروط نمو النبات الأخضر (ص 22)',
+      table_title: 'ورقة عمل تجارب شروط نمو النبات الأخضر (ص 22)',
       headers: ['التجربة', 'التركيب التجريبي', 'الملاحظة', 'التفسير', 'الاستنتاج'],
       rows: [
         ['1', 'نحضر نبات أخضر ولا نقوم بسقيه لعدة أيام.', 'ذبول وموت النبات الأخضر', 'عدم توفر الماء', 'الماء ضروري لنمو النبات الأخضر'],
@@ -131,7 +131,7 @@ export const ARCHIVE_1AM_EXTRA_TABLES: ArchivedTableRecord[] = [
     digitizedFromImage: true,
     originalImageId: 'med_1am_p48_ws',
     table: {
-      title: 'مطبوعة التلميذ ص 48 (مقارنة المبادلات الغازية)',
+      table_title: 'مطبوعة التلميذ ص 48 (مقارنة المبادلات الغازية)',
       headers: ['وجه المقارنة', 'تحدث في الضوء/الظلام', 'امتصاص غاز', 'طرح غاز', 'مقر المبادلات'],
       rows: [
         ['م.غ اليخضورية', 'في الضوء فقط', 'CO2', 'O2', 'على مستوى الأوراق'],
@@ -149,7 +149,7 @@ export const ARCHIVE_1AM_EXTRA_TABLES: ArchivedTableRecord[] = [
     relatedActivityId: 'act_1am_4_3_1_2',
     sourcePage: 56,
     table: {
-      title: 'نتائج زراعة الخميرة في وسط هوائي ووسط لاهوائي (مطبوعة ص 56)',
+      table_title: 'نتائج زراعة الخميرة في وسط هوائي ووسط لاهوائي (مطبوعة ص 56)',
       headers: ['الشروط', 'وسط هوائي', 'وسط لاهوائي'],
       rows: [
         ['المدة', '9 أيام', '3 أشهر'],
@@ -171,7 +171,7 @@ export const ARCHIVE_1AM_EXTRA_TABLES: ArchivedTableRecord[] = [
     relatedActivityId: 'act_1am_6_1_1_2',
     sourcePage: 70,
     table: {
-      title: 'مراحل إنتاش البذرة ووصف التغيرات (مطبوعة ص 70)',
+      table_title: 'مراحل إنتاش البذرة ووصف التغيرات (مطبوعة ص 70)',
       headers: ['المدة', 'بعد 6 أيام', 'بعد 9 أيام', 'بعد 12 يوم', 'بعد 15 يوم', 'بعد 20 يوم'],
       rows: [
         ['المرحلة', 'المرحلة 1', 'المرحلة 2', 'المرحلة 3', 'المرحلة 4', 'المرحلة 5'],
@@ -195,7 +195,7 @@ export const ARCHIVE_1AM_EXTRA_TABLES: ArchivedTableRecord[] = [
     digitizedFromImage: true,
     originalImageId: 'med_1am_p97_safety',
     table: {
-      title: 'رموز السلامة في المختبر (ص 97)',
+      table_title: 'رموز السلامة في المختبر (ص 97)',
       headers: ['رموز السلامة', 'المخاطر', 'الأمثلة', 'الاحتياطات', 'العلاج'],
       rows: [
         [

@@ -99,6 +99,12 @@ export interface CorrectionMemoData {
   title: string;
   term: string;
   level: string;
+  /** الميدان المستهدف في الورقة (يُعبّأ من قاعدة المناهج). */
+  midan: string;
+  /** الكفاءة الختامية/المستهدفة المرتبطة بالمورد. */
+  competence: string;
+  midanSource: MemoFieldSource;
+  competenceSource: MemoFieldSource;
   schoolName: string;
   directorate: string;
   schoolYear: string;
@@ -174,27 +180,52 @@ const emptyResource = (exerciseLabel: string): ResourceRow => ({
   criteriaSource: 'template',
 });
 
-export function createDefaultCorrectionMemo(): CorrectionMemoData {
+/**
+ * بنية ورقة التقييم: الفرض تمارين فقط، والاختبار تمرينان ووضعية إدماجية.
+ * الاعتماد عليها يمنع ظهور أقسام لا تنتمي لنوع الورقة.
+ */
+export interface ExamStructure {
+  exercises: number;
+  integration: boolean;
+  part1Points: number;
+  integrationPoints: number;
+  total: number;
+}
+
+export const examStructure = (examType: 'فرض' | 'اختبار'): ExamStructure => (examType === 'اختبار'
+  ? { exercises: 2, integration: true, part1Points: 12, integrationPoints: 8, total: 20 }
+  : { exercises: 2, integration: false, part1Points: 20, integrationPoints: 0, total: 20 });
+
+export function createDefaultCorrectionMemo(examType: 'فرض' | 'اختبار' = 'اختبار'): CorrectionMemoData {
+  const structure = examStructure(examType);
   const first = emptyExercise(1, 'التمرين الأول');
   const second = emptyExercise(1, 'التمرين الثاني');
+  const exercises = [first, second].slice(0, structure.exercises);
   return {
     version: 1,
-    examType: 'اختبار',
+    examType,
     title: 'مذكرة التصحيح (الإجابة النموذجية وسلّم التنقيط)',
     term: 'الفصل الأول',
     level: '',
+    midan: '',
+    competence: '',
+    midanSource: 'template',
+    competenceSource: 'template',
     schoolName: '',
     directorate: '',
     schoolYear: '',
     teacherName: '',
     duration: '',
-    part1DeclaredPoints: '12',
+    part1DeclaredPoints: String(structure.part1Points),
     integration: {
-      declaredPoints: '8',
+      declaredPoints: structure.integration ? String(structure.integrationPoints) : '',
       criteria: INTEGRATION_CRITERIA.map((_, index) => emptyCriterion(index)),
     },
-    resources: [emptyResource('التمرين الأول'), emptyResource('التمرين الثاني'), emptyResource('الوضعية الإدماجية')],
-    exercises: [first, second],
+    resources: [
+      ...exercises.map(exercise => emptyResource(exercise.label)),
+      ...(structure.integration ? [emptyResource('الوضعية الإدماجية')] : []),
+    ],
+    exercises,
     results: { learners: '', above10: '', passRate: '', average: '' },
     errors: [
       { id: uid('err'), exercise: '', error: '', kind: '', learners: '', cause: '' },
@@ -210,6 +241,38 @@ export function createDefaultCorrectionMemo(): CorrectionMemoData {
 }
 
 /** رقم من نص عربي/لاتيني؛ الفراغ يعني غير محدد وليس صفراً. */
+/**
+ * يطبّق بنية نوع الورقة على مسودة قائمة دون حذف أي عمل كتبه الأستاذ:
+ * الفرض يُخفي الوضعية الإدماجية ويجعل الجزء الأول من 20، والاختبار يضمن
+ * تمرينين ووضعية إدماجية من 8. القيم التي عدّلها الأستاذ لا تُستبدل.
+ */
+export function applyExamStructure(data: CorrectionMemoData, examType: 'فرض' | 'اختبار'): CorrectionMemoData {
+  const next: CorrectionMemoData = structuredClone(data);
+  const previous = examStructure(next.examType);
+  const structure = examStructure(examType);
+  next.examType = examType;
+
+  if (!next.part1DeclaredPoints.trim() || toNumber(next.part1DeclaredPoints) === previous.part1Points) {
+    next.part1DeclaredPoints = String(structure.part1Points);
+  }
+  if (!next.integration.declaredPoints.trim() || toNumber(next.integration.declaredPoints) === previous.integrationPoints) {
+    next.integration.declaredPoints = structure.integration ? String(structure.integrationPoints) : '';
+  }
+
+  for (let index = next.exercises.length; index < structure.exercises; index += 1) {
+    const exercise = emptyExercise(1, index === 0 ? 'التمرين الأول' : index === 1 ? 'التمرين الثاني' : `التمرين ${index + 1}`);
+    next.exercises.push(exercise);
+    next.resources.push(emptyResource(exercise.label));
+  }
+
+  if (structure.integration && !next.resources.some(row => row.exerciseLabel.includes('الإدماجية'))) {
+    next.resources.push(emptyResource('الوضعية الإدماجية'));
+  }
+
+  next.updatedAt = new Date().toISOString();
+  return next;
+}
+
 export const toNumber = (value: unknown): number | null => {
   if (typeof value === 'number') return Number.isFinite(value) ? value : null;
   if (typeof value !== 'string') return null;
@@ -274,6 +337,7 @@ export function validateCorrectionMemo(data: CorrectionMemoData, expectedTotal =
     }
   });
 
+  const isExam = data.examType === 'اختبار';
   const declaredPart1 = toNumber(data.part1DeclaredPoints);
   const computedPart1 = part1Total(data);
   if (declaredPart1 !== null && computedPart1 > 0 && declaredPart1 !== computedPart1) {
@@ -285,7 +349,7 @@ export function validateCorrectionMemo(data: CorrectionMemoData, expectedTotal =
 
   const declaredIntegration = toNumber(data.integration.declaredPoints);
   const computedIntegration = integrationTotal(data);
-  if (declaredIntegration !== null && computedIntegration > 0 && declaredIntegration !== computedIntegration) {
+  if (isExam && declaredIntegration !== null && computedIntegration > 0 && declaredIntegration !== computedIntegration) {
     warnings.push({
       message: `الوضعية الإدماجية: مجموع المعايير ${formatPoints(computedIntegration)} ن لا يطابق النقطة المعلنة ${formatPoints(declaredIntegration)} ن.`,
       blocking: true,
@@ -365,6 +429,8 @@ export function fillFromPlatform(
   assign('السنة الدراسية', next.schoolYear, config?.schoolYear, text => { next.schoolYear = text; });
   assign('الأستاذ(ة)', next.teacherName, config?.teacherName, text => { next.teacherName = text; });
   assign('المستوى', next.level, levelLabel(lesson?.level || level), text => { next.level = text; });
+  assign('الميدان', next.midan, lesson?.midan, text => { next.midan = text; next.midanSource = 'platform'; });
+  assign('الكفاءة الختامية', next.competence, lesson?.kafaaKhitamiya, text => { next.competence = text; next.competenceSource = 'platform'; });
 
   if (lesson) {
     const sameLevel = curriculum.filter(item => item.level === lesson.level);
@@ -372,8 +438,11 @@ export function fillFromPlatform(
     const criteria = lesson.ma3ayirTaqwim || sameMaqta.map(item => item.ma3ayirTaqwim).filter(Boolean).join(' | ');
     const knowledge = lesson.markaba || lesson.ta3alom || lesson.mawrid;
 
+    const integrationVisible = next.examType === 'اختبار';
     next.resources.forEach((resource, index) => {
-      if (index >= next.exercises.length + 1) return;
+      const isIntegrationRow = resource.exerciseLabel.includes('الإدماجية');
+      if (!integrationVisible && isIntegrationRow) return;
+      if (index >= next.exercises.length + (integrationVisible ? 1 : 0)) return;
       if (!resource.maqta.trim() && lesson.maqta) { resource.maqta = lesson.maqta; resource.maqtaSource = 'platform'; filled.push(`المقطع/${resource.exerciseLabel}`); }
       if (!resource.knowledge.trim() && knowledge) { resource.knowledge = knowledge; resource.knowledgeSource = 'platform'; filled.push(`الموارد المعرفية/${resource.exerciseLabel}`); }
       if (!resource.criteria.trim() && criteria) { resource.criteria = criteria; resource.criteriaSource = 'platform'; filled.push(`المعايير/${resource.exerciseLabel}`); }
@@ -490,6 +559,10 @@ export function normalizeCorrectionMemo(raw: unknown): CorrectionMemoData {
     title: clampString(source.title, 200) || base.title,
     term: clampString(source.term, 60) || base.term,
     level: clampString(source.level, 80),
+    midan: clampString(source.midan, 300),
+    competence: clampString(source.competence, 800),
+    midanSource: normalizeSource(source.midanSource),
+    competenceSource: normalizeSource(source.competenceSource),
     schoolName: clampString(source.schoolName, 200),
     directorate: clampString(source.directorate, 200),
     schoolYear: clampString(source.schoolYear, 60),

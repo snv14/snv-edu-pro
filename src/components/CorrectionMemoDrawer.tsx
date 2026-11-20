@@ -1,14 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AlertTriangle, CheckCircle2, FileDown, FileUp, Loader2, Printer, Plus, RotateCcw,
+  AlertTriangle, Calculator, CheckCircle2, Database, FileDown, FileUp, Loader2, Printer, Plus, RotateCcw,
   Sparkles, Trash2, Wand2, X,
 } from 'lucide-react';
 import { LessonMemo, MemoConfig } from '../types';
 import {
   CorrectionMemoData, CorrectionExercise, MemoFieldSource, SOURCE_CONFIDENCE, SOURCE_LABEL,
-  createDefaultCorrectionMemo, exerciseTotal, fillFromPlatform,
+  applyExamStructure, createDefaultCorrectionMemo, examStructure, exerciseTotal, fillFromPlatform,
   normalizeCorrectionMemo, overallTotal, uid, validateCorrectionMemo,
 } from '../services/correctionMemoModel';
+import {
+  applyPointSuggestion, buildPointSuggestion, enrichCorrectionMemoFromDb, PointSuggestion,
+} from '../services/correctionMemoEnrich';
 import { importCorrectionFile, isSupportedCorrectionFile, readFileAsDataUrl } from '../services/correctionMemoImport';
 import { applyCorrectionSuggestions, suggestAnswersForExercises, CorrectionSuggestionsResult } from '../services/correctionMemoAi';
 import { exportCorrectionMemoDataToDocx, exportCorrectionMemoToPdf, printCorrectionMemo } from '../utils/correctionMemoExport';
@@ -78,6 +81,7 @@ export const CorrectionMemoDrawer: React.FC<{
   const [importMeta, setImportMeta] = useState<{ exercises: number; questions: number; points: number; usedAI: boolean; missing: string[] } | null>(null);
   const [aiResult, setAiResult] = useState<CorrectionSuggestionsResult | null>(null);
   const [aiTarget, setAiTarget] = useState<string>('all');
+  const [pointSuggestion, setPointSuggestion] = useState<PointSuggestion | null>(null);
   const [showPreview, setShowPreview] = useState(true);
   const sheetRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -118,6 +122,42 @@ export const CorrectionMemoDrawer: React.FC<{
     });
   }, []);
 
+  const changeExamType = (examType: 'فرض' | 'اختبار') => {
+    if (examType === data.examType) return;
+    setData(applyExamStructure(data, examType));
+    setAiResult(null);
+    setPointSuggestion(null);
+    setNotice(examType === 'فرض'
+      ? 'تحوّلت الورقة إلى فرض: تمارين فقط بلا وضعية إدماجية، والجزء الأول من 20.'
+      : 'تحوّلت الورقة إلى اختبار: تمرينان ووضعية إدماجية من 8 نقاط.');
+  };
+
+  const enrichFromDb = () => {
+    const result = enrichCorrectionMemoFromDb(data, { lesson: currentLesson, curriculum: curriculumLessons });
+    setData(result.data);
+    setPointSuggestion(null);
+    if (!result.matched) {
+      setNotice('لم أجد في قاعدة المناهج درساً مطابقاً لأسئلة هذه الورقة. اكتب الميدان والمقطع والكفاءة يدويًا أو افتح الدرس المقصود في المنصة.');
+      return;
+    }
+    setNotice(result.filled.length
+      ? `عُبّئت ${result.filled.length} خانة من قاعدة المناهج (${result.matched.mawrid || result.matched.maqta}). راجعها قبل الاعتماد.`
+      : 'كل الحقول التربوية معبّأة مسبقاً؛ لم يُستبدل أي نص كتبته.');
+  };
+
+  const proposePoints = () => {
+    setPointSuggestion(buildPointSuggestion(data));
+    setNotice('اقتراح تنقيط متوازن جاهز للمراجعة. لم يُطبّق بعد؛ راجع التوزيع ثم اختر «تطبيق التنقيط».');
+  };
+
+  const applyPoints = () => {
+    if (!pointSuggestion) return;
+    const applied = applyPointSuggestion(data, pointSuggestion);
+    setData(applied.data);
+    setPointSuggestion(null);
+    setNotice(`طُبّق التنقيط المقترح على ${applied.applied} خانة فارغة. ما كتبته يدويًا لم يُستبدل.`);
+  };
+
   const refillFromPlatform = () => {
     const filled = fillFromPlatform(data, { config, lesson: currentLesson, curriculum: curriculumLessons, level: currentLesson?.level });
     setData(filled.data);
@@ -132,7 +172,7 @@ export const CorrectionMemoDrawer: React.FC<{
     setError('');
     setNotice('');
     if (!isSupportedCorrectionFile(file)) {
-      setError('نوع الملف غير مدعوم. المدعوم: صورة، PDF، أو ملف TXT.');
+      setError('نوع الملف غير مدعوم. المدعوم: صورة، PDF، Word (.docx)، أو ملف TXT.');
       return;
     }
     if (file.size > 20 * 1024 * 1024) {
@@ -143,9 +183,21 @@ export const CorrectionMemoDrawer: React.FC<{
     try {
       const dataUrl = await readFileAsDataUrl(file);
       const outcome = await importCorrectionFile({ file, dataUrl, examType: data.examType, current: data, lesson: currentLesson, config });
-      setData(outcome.data);
+      const enriched = enrichCorrectionMemoFromDb(outcome.data, { lesson: currentLesson, curriculum: curriculumLessons });
+      setData(enriched.data);
+      setPointSuggestion(enriched.data.exercises.some(exercise => exercise.questions.length)
+        ? buildPointSuggestion(enriched.data)
+        : null);
       setImportMeta({ exercises: outcome.extractedExercises, questions: outcome.extractedQuestions, points: outcome.extractedPoints, usedAI: outcome.usedAI, missing: outcome.missing });
-      setNotice(outcome.notice);
+      setNotice([
+        outcome.notice,
+        enriched.filled.length
+          ? `وعُبّئت ${enriched.filled.length} خانة من قاعدة المناهج (${enriched.matched?.mawrid || enriched.matched?.maqta || 'الدرس المطابق'}).`
+          : '',
+        enriched.data.exercises.some(exercise => exercise.questions.some(question => question.text.trim()))
+          ? 'واقتراح التنقيط جاهز للمراجعة أسفل الشريط.'
+          : '',
+      ].filter(Boolean).join(' '));
     } catch {
       setError('تعذر استرداد الملف. أعد المحاولة أو أدخل التمارين يدويًا.');
     } finally {
@@ -193,7 +245,7 @@ export const CorrectionMemoDrawer: React.FC<{
   };
 
   const resetAll = () => {
-    const fresh = createDefaultCorrectionMemo();
+    const fresh = createDefaultCorrectionMemo(data.examType);
     const filled = fillFromPlatform(fresh, { config, lesson: currentLesson, curriculum: curriculumLessons, level: currentLesson?.level });
     setData(filled.data);
     setFilledFromPlatform(filled.filled);
@@ -250,9 +302,9 @@ export const CorrectionMemoDrawer: React.FC<{
       >
         <header className="sticky top-0 z-20 px-4 py-3 bg-gradient-to-l from-teal-900 to-emerald-700 text-white flex justify-between items-center gap-2 cm-toolbar">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-2xl bg-white/15 flex items-center justify-center shrink-0"><CheckCircle2 className="w-5 h-5" /></div>
+            <div className="w-9 h-9 rounded-2xl bg-white/15 items-center justify-center shrink-0 hidden sm:flex"><CheckCircle2 className="w-5 h-5" /></div>
             <div className="min-w-0">
-              <h2 className="font-black text-[15px] leading-tight">مذكرة التصحيح — الإجابة النموذجية وسلّم التنقيط</h2>
+              <h2 className="font-black text-[13px] sm:text-[15px] leading-tight">مذكرة التصحيح — الإجابة النموذجية وسلّم التنقيط</h2>
               <p className="text-[10.5px] text-white/80 truncate">
                 قالب قابل للتحرير · المجموع الحالي {total} ن · {savedAt ? `حُفظ محليًا ${savedAt}` : 'حفظ محلي'}
               </p>
@@ -262,6 +314,28 @@ export const CorrectionMemoDrawer: React.FC<{
         </header>
 
         <div className="cm-toolbar p-3 space-y-2">
+          <div className="flex flex-wrap items-center gap-1.5 bg-white rounded-2xl border border-emerald-200 p-2.5">
+            <span className="text-[11px] font-black text-slate-500 px-1">نوع الورقة</span>
+            {(['فرض', 'اختبار'] as const).map(type => (
+              <button
+                key={type}
+                type="button"
+                onClick={() => changeExamType(type)}
+                aria-pressed={data.examType === type}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11.5px] font-black border transition ${data.examType === type
+                  ? 'bg-teal-700 text-white border-teal-700'
+                  : 'bg-white text-teal-900 border-teal-200 hover:bg-teal-50'}`}
+              >
+                {type === 'فرض' ? 'فرض — تمارين فقط' : 'اختبار — تمرينان ووضعية إدماجية'}
+              </button>
+            ))}
+            <span className="text-[10px] text-slate-500 font-bold">
+              {data.examType === 'فرض'
+                ? `${examStructure('فرض').exercises} تمارين · المجموع 20 ن بلا وضعية إدماجية`
+                : `${examStructure('اختبار').exercises} تمارين (${examStructure('اختبار').part1Points} ن) + وضعية إدماجية (${examStructure('اختبار').integrationPoints} ن)`}
+            </span>
+          </div>
+
           <div className="flex flex-wrap items-center gap-1.5 bg-white rounded-2xl border border-teal-100 p-2.5">
             <span className="text-[11px] font-black text-slate-500 px-1">استرداد الملف</span>
             <button type="button" onClick={() => fileRef.current?.click()} disabled={busy !== null} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-700 text-white text-[11.5px] font-black disabled:opacity-50">
@@ -271,14 +345,17 @@ export const CorrectionMemoDrawer: React.FC<{
             <input
               ref={fileRef}
               type="file"
-              accept=".pdf,.txt,image/jpeg,image/png,image/webp,image/gif"
+              accept=".pdf,.txt,.docx,.doc,image/jpeg,image/png,image/webp,image/gif"
               hidden
               onChange={event => { const file = event.target.files?.[0]; if (file) void handleImport(file); event.target.value = ''; }}
             />
-            <span className="text-[10px] text-slate-500 font-bold">صورة أو PDF (يحتاج مزوّد ذكاء اصطناعي) أو TXT (قراءة محلية)</span>
+            <span className="text-[10px] text-slate-500 font-bold">صورة أو PDF أو Word (.docx) — يقرأ الملف ويعبّئ القالب، وTXT بقراءة محلية</span>
             <span className="flex-1" />
             <button type="button" onClick={refillFromPlatform} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-teal-200 text-teal-900 text-[11.5px] font-black">
               <Wand2 className="w-3.5 h-3.5" /> تعبئة من المنصة
+            </button>
+            <button type="button" onClick={enrichFromDb} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-emerald-300 text-emerald-900 text-[11.5px] font-black">
+              <Database className="w-3.5 h-3.5" /> تعبئة من قاعدة البيانات
             </button>
             <button type="button" onClick={resetAll} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-[11.5px] font-black">
               <RotateCcw className="w-3.5 h-3.5" /> قالب جديد
@@ -302,6 +379,9 @@ export const CorrectionMemoDrawer: React.FC<{
                 <CheckCircle2 className="w-3.5 h-3.5" /> تطبيق المقترحات ({aiResult.suggestions.length})
               </button>
             )}
+            <button type="button" onClick={proposePoints} disabled={!data.exercises.some(exercise => exercise.questions.length)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-700 text-white text-[11.5px] font-black disabled:opacity-50">
+              <Calculator className="w-3.5 h-3.5" /> اقتراح التنقيط
+            </button>
             <span className="text-[10px] text-slate-500 font-bold">أو اكتب عناصر الإجابة مباشرة في الجداول — المكتوب يدويًا لا يُستبدل آليًا</span>
           </div>
 
@@ -348,6 +428,40 @@ export const CorrectionMemoDrawer: React.FC<{
             <div className="rounded-xl bg-white border border-teal-100 px-3 py-2 text-[10.5px] text-slate-600">
               <span className="font-black text-teal-800">عُبّئ من المنصة: </span>{filledFromPlatform.slice(0, 8).join(' · ')}
               {skippedFromPlatform.length > 0 && <span className="block mt-1">لم يُعبّأ لغياب المصدر أو لوجود قيمة يدوية: {skippedFromPlatform.slice(0, 8).join(' · ')}</span>}
+            </div>
+          )}
+
+          {pointSuggestion && (
+            <div className="rounded-xl bg-white border border-indigo-200 p-2.5 space-y-1.5">
+              <div className="text-[11px] font-black text-indigo-800">
+                اقتراح التنقيط — الجزء الأول {pointSuggestion.part1DeclaredPoints} ن
+                {pointSuggestion.integrationDeclaredPoints ? ` + الوضعية الإدماجية ${pointSuggestion.integrationDeclaredPoints} ن` : ''}
+                {' '}· المجموع {pointSuggestion.total} ن (لم يُطبّق بعد)
+              </div>
+              <div className="grid gap-1 sm:grid-cols-2">
+                {pointSuggestion.exercises.map(exercise => (
+                  <div key={exercise.exerciseId} className="text-[10.5px] text-slate-700 border-t border-slate-100 pt-1">
+                    <span className="font-black">{exercise.label}</span> · {exercise.declaredPoints} ن
+                    <div className="text-[10px] text-slate-500">
+                      {exercise.questions.map(question => `س${question.number}: ${question.points} ن`).join(' · ')}
+                    </div>
+                  </div>
+                ))}
+                {pointSuggestion.criteria.length > 0 && (
+                  <div className="text-[10.5px] text-slate-700 border-t border-slate-100 pt-1">
+                    <span className="font-black">الوضعية الإدماجية</span>
+                    <div className="text-[10px] text-slate-500">
+                      {pointSuggestion.criteria.map(criterion => `${criterion.label}: ${criterion.indicators.reduce((sum, indicator) => sum + (Number(indicator.points) || 0), 0)} ن`).join(' · ')}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button type="button" onClick={applyPoints} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-700 text-white text-[10.5px] font-black">
+                  <CheckCircle2 className="w-3 h-3" /> تطبيق التنقيط على الخانات الفارغة
+                </button>
+                <button type="button" onClick={() => setPointSuggestion(null)} className="text-[10px] font-black text-slate-500 hover:text-slate-800">تجاهل</button>
+              </div>
             </div>
           )}
 

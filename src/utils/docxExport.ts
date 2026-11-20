@@ -32,24 +32,7 @@ import {
 } from "./docxFontEmbed";
 
 
-const base64ToUint8Array = (base64: string): Uint8Array => {
-  const binaryString = typeof atob === 'function'
-    ? atob(base64)
-    : typeof window !== 'undefined' && typeof window.atob === 'function'
-    ? window.atob(base64)
-    : typeof Buffer !== 'undefined'
-    ? Buffer.from(base64, 'base64').toString('binary')
-    : '';
-  const len = binaryString.length;
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-  return bytes;
-};
-
-// 1x1 transparent PNG fallback in case image generation fails
-const FALLBACK_1X1_PNG = base64ToUint8Array("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=");
+import { FALLBACK_1X1_PNG, base64ToUint8Array } from './exportDom';
 
 const imageDataUrlToPng = async (dataUrl: string): Promise<Uint8Array> => {
   try {

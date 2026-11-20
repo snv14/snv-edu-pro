@@ -6,6 +6,7 @@ import { Buffer } from 'node:buffer';
 import fs from 'node:fs';
 import { buildGeminiSystemPrompt } from '../services/geminiPrompts';
 import { generateTextWithGateway, getAIProviderStatus } from './aiGateway';
+import { extractDocxText } from './attachmentText';
 import { sourcePriorityOf } from '../services/aiSourcePriority';
 import {
   buildKnowledgeContext,
@@ -158,6 +159,8 @@ apiApp.post('/api/gemini/smart-assistant', async (req, res) => {
     ]);
 
     const attachmentInputs: Array<{ mimeType: string; base64: string; displayName: string }> = [];
+    const documentTexts: string[] = [];
+    const documentNames: string[] = [];
     let totalLength = 0;
     for (const item of attachments) {
       if (!item || !allowedTypes.has(item.mimeType)) {
@@ -172,10 +175,26 @@ apiApp.post('/api/gemini/smart-assistant', async (req, res) => {
       if (totalLength > 24_000_000) {
         return res.status(400).json({ error: 'إجمالي ملفات المساعد الذكي كبير جداً.' });
       }
+      const displayName = String(item.name || `assistant-source-${attachmentInputs.length + 1}`);
+      const isDocx = item.mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || /\.docx$/i.test(displayName);
+      const isLegacyDoc = item.mimeType === 'application/msword' || (/\.doc$/i.test(displayName) && !isDocx);
+      if (isLegacyDoc && !isDocx) {
+        return res.status(400).json({ error: 'صيغة .doc القديمة غير مدعومة؛ احفظ الملف بصيغة .docx أو PDF.' });
+      }
+      if (isDocx) {
+        const text = extractDocxText(dataUrl.slice(prefix.length));
+        if (!text.trim()) {
+          return res.status(400).json({ error: 'تعذر قراءة نص ملف Word. تأكد أنه ملف .docx سليم أو حوّله إلى PDF.' });
+        }
+        documentTexts.push(text.slice(0, 30_000));
+        documentNames.push(displayName);
+        continue;
+      }
+
       attachmentInputs.push({
         mimeType: item.mimeType,
         base64: dataUrl.slice(prefix.length),
-        displayName: String(item.name || `assistant-source-${attachmentInputs.length + 1}`),
+        displayName,
       });
     }
 
@@ -322,6 +341,9 @@ apiApp.post('/api/gemini/smart-assistant', async (req, res) => {
       JSON.stringify(curriculumRows, null, 2),
       conversationHistory.length ? 'سجل المحادثة (الأقدم أولاً):' : 'لا يوجد سجل محادثة سابق.',
       conversationHistory.length ? JSON.stringify(conversationHistory, null, 2) : '',
+      documentTexts.length
+        ? `نص ملفات Word المرفقة (${documentNames.join('، ')}):\n${documentTexts.join('\n\n')}`
+        : '',
       'سؤال الأستاذ:',
       String(question).slice(0, 12000),
     ].filter(Boolean).join('\n\n');
@@ -688,12 +710,17 @@ apiApp.post('/api/gemini/analyze-correction-source', async (req, res) => {
       return res.status(400).json({ error: 'مصدر التصحيح مطلوب' });
     }
 
-    const allowedTypes = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf', 'text/plain']);
+    const allowedTypes = new Set([
+      'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf', 'text/plain',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/msword',
+    ]);
     if (!Array.isArray(attachments) || attachments.length > 6) {
       return res.status(400).json({ error: 'عدد المرفقات غير مسموح' });
     }
 
     const attachmentInputs: Array<{ mimeType: string; base64: string; displayName: string }> = [];
+    const documentTexts: string[] = [];
     let totalLength = 0;
     for (const item of attachments) {
       if (!item || !allowedTypes.has(item.mimeType)) return res.status(400).json({ error: 'نوع مرفق غير مسموح' });
@@ -704,10 +731,26 @@ apiApp.post('/api/gemini/analyze-correction-source', async (req, res) => {
       }
       totalLength += dataUrl.length;
       if (totalLength > 32_000_000) return res.status(400).json({ error: 'إجمالي المرفقات كبير جداً' });
+
+      const name = String(item.name || `correction-analysis-${attachmentInputs.length + 1}`);
+      const isDocx = item.mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || /\.docx$/i.test(name);
+      const isLegacyDoc = item.mimeType === 'application/msword' || (/\.doc$/i.test(name) && !isDocx);
+      if (isLegacyDoc && !isDocx) {
+        return res.status(400).json({ error: 'صيغة .doc القديمة غير مدعومة؛ احفظ الملف بصيغة .docx أو PDF ثم أعد المحاولة' });
+      }
+      if (isDocx) {
+        const text = extractDocxText(dataUrl.slice(prefix.length));
+        if (!text.trim()) {
+          return res.status(400).json({ error: 'تعذر قراءة نص ملف Word. تأكد أنه ملف .docx سليم أو حوّله إلى PDF' });
+        }
+        documentTexts.push(`ملف Word «${name}»:\n${text.slice(0, 40_000)}`);
+        continue;
+      }
+
       attachmentInputs.push({
         mimeType: item.mimeType,
         base64: dataUrl.slice(prefix.length),
-        displayName: String(item.name || `correction-analysis-${attachmentInputs.length + 1}`),
+        displayName: name,
       });
     }
 
@@ -738,9 +781,16 @@ apiApp.post('/api/gemini/analyze-correction-source', async (req, res) => {
             text: [
               'حلل ورقة التقييم التالية كمصدر فقط ولا تحل الأسئلة.',
               'استخرج ما يمكن قراءته حرفياً من الورقة، مع الحفاظ على الترتيب.',
-              'أعد JSON فقط بالشكل: {title, exercises:[{number, title, questions:[{number,text,points,documentRefs}]}], totalPoints, documents:[{id,description}], ambiguities:[]}.',
+              'أعد JSON فقط بالشكل: {title, meta:{level, midan, maqta, kafaa, mawrid, term, duration}, exercises:[{number, kind:"exercise"|"integration", title, questions:[{number,text,points,expected,documentRefs}]}], totalPoints, documents:[{id,description}], ambiguities:[], pointsSuggestion:[{questionRef,points}]}.',
+              'قواعد إلزامية:',
+              '- في meta عبّئ ما تدل عليه الورقة فقط (المستوى، الميدان، المقطع، الكفاءة الختامية، المورد، الفصل، المدة)؛ اترك ما لا تعرفه فارغاً ولا تخترعه.',
+              '- إذا كانت الورقة اختباراً فاجعل أول تمرينين kind="exercise" والوضعية الإدماجية kind="integration". وإذا كانت فرضاً فلا تضف وضعية إدماجية.',
+              '- expected: عناصر الإجابة النموذجية الموجزة لكل سؤال. اتركه فارغاً إذا كان السؤال غير مقروء.',
+              '- points: انقل النقطة المكتوبة في الورقة حرفياً. إن لم تكن مكتوبة فاقترح توزيعاً في pointsSuggestion دون تغيير نص السؤال.',
+              '- لا تخترع سؤالاً أو نقطة أو معياراً. أضف غير المقروء إلى ambiguities.',
               'إذا لم تستطع قراءة عنصر اتركه فارغاً وأضفه إلى ambiguities. لا تخترع أي سؤال أو نقطة.',
               `نوع التقييم: ${examType}`,
+              documentTexts.length ? `نص ملفات Word المرفقة:\n${documentTexts.join('\n\n')}` : '',
               `النص المتاح: ${String(examText).slice(0, 30000)}`,
             ].join('\\n'),
           }, ...fileParts],

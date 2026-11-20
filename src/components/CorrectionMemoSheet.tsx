@@ -127,6 +127,8 @@ export const CorrectionMemoSheet: React.FC<SheetProps> = ({ data, editable = tru
         <HeaderLine label="الأستاذ(ة)" value={data.teacherName} editable={editable} onChange={value => update(draft => { draft.teacherName = value; })} />
         <HeaderLine label="المدة" value={data.duration} editable={editable} onChange={value => update(draft => { draft.duration = value; })} />
         <HeaderLine label="الفصل" value={data.term} editable={editable} onChange={value => update(draft => { draft.term = value; })} />
+        <HeaderLine label="الميدان" value={data.midan} editable={editable} onChange={value => update(draft => { draft.midan = value; draft.midanSource = 'teacher'; })} wide />
+        <HeaderLine label="الكفاءة الختامية" value={data.competence} editable={editable} onChange={value => update(draft => { draft.competence = value; draft.competenceSource = 'teacher'; })} wide />
       </div>
 
       <div className="mt-3 text-center">
@@ -145,7 +147,7 @@ export const CorrectionMemoSheet: React.FC<SheetProps> = ({ data, editable = tru
         className="mt-4 mb-1 text-[12.5px] font-black"
         style={hwActive ? { color: hwStyle.palette.titleBlue } : undefined}
       >
-        الموارد المعرفية المستهدفة في الاختبار
+        الموارد المعرفية المستهدفة في {data.examType}
       </h3>
       <table className="w-full border-collapse text-[12px]" style={{ tableLayout: 'fixed' }}>
         <thead>
@@ -157,7 +159,9 @@ export const CorrectionMemoSheet: React.FC<SheetProps> = ({ data, editable = tru
           </tr>
         </thead>
         <tbody>
-          {data.resources.map(row => (
+          {data.resources
+            .filter(row => data.examType === 'اختبار' || !row.exerciseLabel.includes('الإدماجية'))
+            .map(row => (
             <tr key={row.id}>
               <td className="border border-slate-600 px-1 py-0.5 align-middle">
                 <Cell value={row.exerciseLabel} editable={editable} onChange={value => update(draft => { const target = draft.resources.find(item => item.id === row.id); if (target) target.exerciseLabel = value; })} align="center" bold />
@@ -172,7 +176,7 @@ export const CorrectionMemoSheet: React.FC<SheetProps> = ({ data, editable = tru
                 <Cell value={row.criteria} editable={editable} source={row.criteriaSource} onChange={value => update(draft => { const target = draft.resources.find(item => item.id === row.id); if (target) { target.criteria = value; target.criteriaSource = 'teacher'; } })} placeholder="..........." multiline />
               </td>
             </tr>
-          ))}
+            ))}
         </tbody>
       </table>
 
@@ -252,6 +256,13 @@ export const CorrectionMemoSheet: React.FC<SheetProps> = ({ data, editable = tru
         })}
       </div>
 
+      {data.examType === 'فرض' ? (
+        <div className="mt-3 flex items-center justify-between text-[12.5px] font-black border-t-2 border-slate-700 pt-2">
+          <span style={hwActive ? { color: hwStyle.palette.titleBlue } : undefined}>المجموع العام للفرض</span>
+          <span>{formatPoints(part1Total(data))} ن</span>
+        </div>
+      ) : (
+        <>
       <div className="cm-page-break" />
 
       <div className="mt-3 flex items-center justify-between text-[12.5px] font-black">
@@ -330,6 +341,8 @@ export const CorrectionMemoSheet: React.FC<SheetProps> = ({ data, editable = tru
           </tr>
         </tbody>
       </table>
+        </>
+      )}
 
       <div className="mt-4">
         <h3 className="text-[12.5px] font-black mb-1" style={hwActive ? { color: hwStyle.palette.defGreen } : undefined}>التصحيح البعدي وتحليل النتائج</h3>

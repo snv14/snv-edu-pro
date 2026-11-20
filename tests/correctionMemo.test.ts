@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  applyExamStructure,
   createDefaultCorrectionMemo,
   fillFromPlatform,
   normalizeCorrectionMemo,
@@ -11,6 +12,7 @@ import {
   toNumber,
 } from '../src/services/correctionMemoModel';
 import { parseExamTextLocally } from '../src/services/correctionMemoImport';
+import { buildPointSuggestion, enrichCorrectionMemoFromDb } from '../src/services/correctionMemoEnrich';
 
 const withPoints = () => {
   const data = createDefaultCorrectionMemo();
@@ -120,6 +122,91 @@ test('local text parsing keeps exercise order, questions and points', () => {
 test('local text parsing returns null when the text has no exercises, so nothing is invented', () => {
   assert.equal(parseExamTextLocally('نص عادي بدون تمارين'), null);
   assert.equal(parseExamTextLocally(''), null);
+});
+
+test('a فرض keeps exercises only while an اختبار adds the integration situation', () => {
+  const quiz = createDefaultCorrectionMemo('فرض');
+  assert.equal(quiz.examType, 'فرض');
+  assert.equal(quiz.part1DeclaredPoints, '20');
+  assert.equal(quiz.integration.declaredPoints, '');
+  assert.ok(!quiz.resources.some(row => row.exerciseLabel.includes('الإدماجية')));
+
+  const exam = applyExamStructure(quiz, 'اختبار');
+  assert.equal(exam.part1DeclaredPoints, '12');
+  assert.equal(exam.integration.declaredPoints, '8');
+  assert.ok(exam.resources.some(row => row.exerciseLabel.includes('الإدماجية')));
+});
+
+test('the suggested point ladder adds up to 12 + 8 without touching teacher points', () => {
+  const data = createDefaultCorrectionMemo('اختبار');
+  const suggestion = buildPointSuggestion(data);
+  const part1 = suggestion.exercises.reduce((sum, exercise) => sum + Number(exercise.declaredPoints), 0);
+  const integration = suggestion.criteria.reduce(
+    (sum, criterion) => sum + criterion.indicators.reduce((acc, indicator) => acc + (Number(indicator.points) || 0), 0),
+    0
+  );
+  assert.equal(part1, 12);
+  assert.equal(Math.round(integration * 100) / 100, 8);
+  assert.equal(suggestion.total, 20);
+});
+
+test('database enrichment fills midan, maqta and competence but keeps teacher text', () => {
+  const data = createDefaultCorrectionMemo('فرض');
+  data.exercises[0].questions[0].text = 'التنفس عند النبات الأخضر';
+  data.midan = 'ميدان كتبه الأستاذ';
+  const lesson: any = {
+    level: '1am', midan: 'الإنسان والصحة', maqta: 'مقطع التنفس', mawrid: 'التنفس عند النبات',
+    ta3alom: 'تعلم', markaba: 'مركبة', kafaaKhitamiya: 'كفاءة ختامية', ma3ayirTaqwim: 'معيار', anshita: [],
+  };
+
+  const result = enrichCorrectionMemoFromDb(data, { lesson, curriculum: [lesson] });
+  assert.equal(result.data.midan, 'ميدان كتبه الأستاذ');
+  assert.equal(result.data.competence, 'كفاءة ختامية');
+  assert.equal(result.data.resources[0].maqta, 'مقطع التنفس');
+  assert.ok(result.filled.includes('الكفاءة الختامية'));
+});
+
+test('importing a text paper applies the exam structure and moves the integration prompts to the criteria', async () => {
+  const { importCorrectionFile } = await import('../src/services/correctionMemoImport');
+  const text = [
+    'التمرين الأول: (06 نقاط)',
+    '1) عرّف المصطلح. (2 ن)',
+    '2) فسّر الظاهرة. (4 ن)',
+    'التمرين الثاني: (06 نقاط)',
+    '1) اذكر ثلاث خصائص. (3 ن)',
+    '2) علّل الإجابة. (3 ن)',
+    'الوضعية الإدماجية: (08 نقاط)',
+    '1) حلل الوثيقة. (4 ن)',
+    '2) استنتج النتيجة. (4 ن)',
+  ].join('\n');
+  const file = new File([text], 'sujet.txt', { type: 'text/plain' });
+  const dataUrl = `data:text/plain;base64,${Buffer.from(text).toString('base64')}`;
+
+  const outcome = await importCorrectionFile({ file, dataUrl, examType: 'اختبار', current: createDefaultCorrectionMemo('اختبار') });
+  assert.equal(outcome.data.exercises.length, 2);
+  assert.equal(outcome.data.examType, 'اختبار');
+  assert.equal(outcome.data.part1DeclaredPoints, '12');
+  const filledCriteria = outcome.data.integration.criteria.filter(criterion => criterion.indicators.some(indicator => indicator.text.trim()));
+  assert.equal(filledCriteria.length, 2);
+  assert.ok(outcome.data.integration.criteria[0].indicators[0].text.includes('حلل الوثيقة'));
+});
+
+test('a فرض import keeps exercises only and never adds an integration block', async () => {
+  const { importCorrectionFile } = await import('../src/services/correctionMemoImport');
+  const text = [
+    'التمرين الأول:',
+    '1) عرّف التنفس. (2 ن)',
+    'الوضعية الإدماجية:',
+    '1) حلل السند. (4 ن)',
+  ].join('\n');
+  const file = new File([text], 'devoir.txt', { type: 'text/plain' });
+  const dataUrl = `data:text/plain;base64,${Buffer.from(text).toString('base64')}`;
+
+  const outcome = await importCorrectionFile({ file, dataUrl, examType: 'فرض', current: createDefaultCorrectionMemo('فرض') });
+  assert.equal(outcome.data.examType, 'فرض');
+  assert.equal(outcome.data.part1DeclaredPoints, '20');
+  assert.equal(outcome.data.exercises.length, 1);
+  assert.equal(outcome.data.integration.criteria.some(criterion => criterion.indicators.some(indicator => indicator.text.trim())), false);
 });
 
 test('the sheet renders the reference sections and computed totals', async () => {

@@ -119,6 +119,8 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
   const handleResetSession = () => {
     if (confirm('هل ترغب في مسح بيانات الجلسة الحالية واسترجاع القيم الافتراضية؟')) {
       try {
+        // التطبيق يحفظ نسخة الجلسة في المفتاح v3؛ مسح المفتاح القديم وحده كان يترك البيانات تُستعاد بعد إعادة التحميل.
+        sessionStorage.removeItem('algeria_sciences_session_config_v3');
         sessionStorage.removeItem('algeria_sciences_session_config');
         localStorage.removeItem('algeria_sciences_config');
       } catch {

@@ -34,20 +34,7 @@ import {
   type PrepareDocxFontsOptions,
 } from "./docxFontEmbed";
 
-const base64ToUint8Array = (base64: string) => {
-  const binaryString = typeof atob === 'function'
-    ? atob(base64)
-    : typeof window !== 'undefined' && typeof window.atob === 'function'
-    ? window.atob(base64)
-    : typeof Buffer !== 'undefined'
-    ? Buffer.from(base64, 'base64').toString('binary')
-    : '';
-  const bytes = new Uint8Array(binaryString.length);
-  for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
-  return bytes;
-};
-
-const FALLBACK_1X1_PNG = base64ToUint8Array("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=");
+import { FALLBACK_1X1_PNG, base64ToUint8Array } from './exportDom';
 
 const imageDataUrlToPng = async (dataUrl: string): Promise<Uint8Array> => {
   try {

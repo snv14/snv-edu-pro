@@ -18,15 +18,15 @@ export const PageTemplateSwitcher: React.FC<{ className?: string }> = ({ classNa
   const { template, setTemplate } = usePageTemplate();
   return (
     <label
-      className={`no-print print:hidden inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-2.5 py-1.5 text-[11.5px] font-bold text-slate-800 shadow-2xs ${className}`}
+      className={`no-print print:hidden inline-flex items-center gap-1.5 rounded-xl border border-[#e2e8e5] bg-white px-2.5 py-1.5 text-[11.5px] font-bold text-[#0b1f1c] shadow-[0_1px_2px_rgba(11,31,28,0.04)] ${className}`}
     >
-      <span className="text-slate-600 whitespace-nowrap">نمط الصفحة:</span>
+      <span className="text-[#6b7d78] whitespace-nowrap">نمط الصفحة:</span>
       <select
         aria-label="نمط الصفحة"
         data-page-template-select="true"
         value={template}
         onChange={(e) => setTemplate(e.target.value as PageTemplate)}
-        className="bg-transparent font-extrabold text-slate-900 outline-none cursor-pointer focus-visible:outline-2 focus-visible:outline-teal-700"
+        className="bg-transparent font-extrabold text-[#0b1f1c] outline-none cursor-pointer focus-visible:outline-2 focus-visible:outline-[#0e7a68]"
       >
         {PAGE_TEMPLATE_OPTIONS.map((opt) => (
           <option key={opt.value} value={opt.value}>
@@ -39,7 +39,7 @@ export const PageTemplateSwitcher: React.FC<{ className?: string }> = ({ classNa
 };
 
 /** Groups secondary actions without changing their handlers. Native details keeps keyboard access. */
-export const ActionMenu: React.FC<{ label: string; items: ActionMenuItem[] }> = ({ label, items }) => {
+export const ActionMenu: React.FC<{ label: string; compactLabel?: string; items: ActionMenuItem[] }> = ({ label, compactLabel, items }) => {
   const details = useRef<HTMLDetailsElement>(null);
   useEffect(() => {
     const onOutsideClick = (event: MouseEvent) => {
@@ -61,15 +61,23 @@ export const ActionMenu: React.FC<{ label: string; items: ActionMenuItem[] }> = 
 
   return (
     <details ref={details} className="relative no-print print:hidden">
-      <summary className="list-none flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-emerald-200 bg-white text-emerald-900 text-xs font-bold shadow-xs cursor-pointer hover:bg-emerald-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 [&::-webkit-details-marker]:hidden">
-        {label}<ChevronDown className="w-4 h-4" aria-hidden="true" />
+      <summary className="list-none flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-[#cfe3dc] bg-white text-[#0a5f51] text-xs font-bold shadow-[0_1px_2px_rgba(11,31,28,0.04)] cursor-pointer hover:bg-[#eef5f2] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0e7a68] [&::-webkit-details-marker]:hidden">
+        {compactLabel && compactLabel !== label ? (
+          <>
+            <span className="hidden sm:inline">{label}</span>
+            <span className="sm:hidden">{compactLabel}</span>
+          </>
+        ) : (
+          label
+        )}
+        <ChevronDown className="w-4 h-4" aria-hidden="true" />
       </summary>
-      <div className="absolute left-0 top-full mt-1 z-50 min-w-[180px] max-w-[90vw] rounded-xl border border-gray-200 bg-white p-1 shadow-xl">
+      <div className="absolute left-0 top-full mt-1 z-50 min-w-[180px] max-w-[90vw] rounded-xl border border-[#e2e8e5] bg-white p-1 shadow-xl">
         {items.map((item) => (
           <button key={item.label} id={item.id} type="button" title={item.title} onClick={() => {
             if (details.current) details.current.open = false;
             item.onSelect();
-          }} className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-right text-xs font-bold text-gray-700 hover:bg-emerald-50 hover:text-emerald-900 focus-visible:outline-2 focus-visible:outline-emerald-700 cursor-pointer">
+          }} className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-right text-xs font-bold text-[#334842] hover:bg-[#eef5f2] hover:text-[#0a5f51] focus-visible:outline-2 focus-visible:outline-[#0e7a68] cursor-pointer">
             {item.icon}<span>{item.label}</span>
           </button>
         ))}
