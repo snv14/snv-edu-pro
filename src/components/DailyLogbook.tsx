@@ -11,7 +11,6 @@ import {
   Eye,
   FileStack,
   FileText,
-  Grid3x3,
   Moon,
   Plus,
   RotateCcw,
@@ -23,18 +22,14 @@ import {
   ZoomOut,
   Printer,
   CheckCircle2,
-  Filter,
   GraduationCap,
   Layers,
   ListFilter,
-  Check,
-  ChevronDown,
-  Info,
   Save,
   Download,
   PenTool,
 } from 'lucide-react';
-import { LessonMemo, MemoConfig, Activity } from '../types';
+import { MemoConfig } from '../types';
 import { TeacherOfficialStamp } from './TeacherOfficialStamp';
 import { LogbookPrintBook } from './LogbookPrintBook';
 import {
@@ -68,7 +63,6 @@ interface DailyLogbookProps {
   config: MemoConfig;
   setConfig?: React.Dispatch<React.SetStateAction<MemoConfig>>;
   showToast: (msg: string) => void;
-  curriculumLessons?: LessonMemo[];
   initialOpenTimetable?: boolean;
 }
 
@@ -220,7 +214,9 @@ export const AUTO_FILLED_TIMETABLE_ROWS: TimetableGridRow[] = [
   { id: 'r8', time: '16:30 - 17:30', cells: createEmptyDayCells() },
 ];
 
-const LOGBOOK_DATA_VERSION = '2026-11-17-progression-pdfs-v20';
+// رُفعت النسخة بعد إصلاح تكرار آخر حصة على خانات السنة المتبقية؛ فتُعاد
+// الحصص المنهجية عند التحميل وتُحفظ الصفوف اليدوية كما هي.
+const LOGBOOK_DATA_VERSION = '2026-11-21-no-repeat-after-plan-end-v21';
 const getPageDimensions = (orientation: 'portrait' | 'landscape') => orientation === 'landscape' ? { w: 297, h: 210 } : { w: 210, h: 297 };
 const PAGE_INNER_PADDING = '12px';
 
@@ -814,9 +810,10 @@ const auditGeneratedDailyLogbook = (
 };
 
 
-export function buildCurriculumDatabase(
-  _curriculumLessons?: LessonMemo[]
-): Record<'1م' | '2م' | '3م' | '4م', CurriculumResourceItem[]> {
+export function buildCurriculumDatabase(): Record<
+  '1م' | '2م' | '3م' | '4م',
+  CurriculumResourceItem[]
+> {
   // يعتمد الدفتر الرقمي للأستاذ حصراً على ملفات التدرج البيداغوجي الأربعة المرفقة فقط
   return {
     '1م': LOGBOOK_PROGRESSIONS['1am'].map((u) => ({

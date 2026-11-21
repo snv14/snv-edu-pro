@@ -485,10 +485,12 @@ export function generateLogbookEntries({
       // If no pedagogical progression exists for this year and it's not an exam, do not invent lessons
       if (sequence.length === 0 && !first.exam) continue;
 
-      const step = sequence.length > 0 ? sequence[Math.min(index, sequence.length - 1)] : undefined;
-      if (!first.exam && sequence.length > 0) {
-        cursor[first.base] = Math.min(index + 1, sequence.length - 1);
-      }
+      // نهاية التدرج: لا تُعاد آخر حصة على بقية خانات السنة. الخانات بعد آخر
+      // نشاط منهجي تبقى بلا صف بدل تكرار آخر درس، والحصص التقويمية تبقى كما هي.
+      if (!first.exam && index >= sequence.length) continue;
+
+      const step = first.exam ? undefined : sequence[index];
+      if (!first.exam) cursor[first.base] = index + 1;
 
       const visible = jobSlots.filter((slot) => slot.date >= startDate);
       if (!visible.length) continue;
