@@ -28,6 +28,7 @@ import {
   Save,
   Download,
   PenTool,
+  Trash2,
 } from 'lucide-react';
 import { MemoConfig } from '../types';
 import { TeacherOfficialStamp } from './TeacherOfficialStamp';
@@ -950,7 +951,12 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
   const [sequenceStartDate, setSequenceStartDate] = useState<string>(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('daftar_table_v2027') || '{}');
-      if (typeof saved.sequenceStartDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(saved.sequenceStartDate)) {
+      if (
+        typeof saved.sequenceStartDate === 'string' &&
+        /^\d{4}-\d{2}-\d{2}$/.test(saved.sequenceStartDate) &&
+        typeof saved.startDate === 'string' &&
+        saved.sequenceStartDate === saved.startDate
+      ) {
         return saved.sequenceStartDate;
       }
       if (typeof saved.startDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(saved.startDate)) {
@@ -1003,9 +1009,19 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
     setRows(current => current.map(row => row.id === rowId ? { ...row, ...updates, manualEdited: true } : row));
   };
 
+  /** حذف حصة يدوية أضافها الأستاذ فقط؛ الحصص المولّدة من التدرج لا تُحذف حفاظاً على التسلسل. */
+  const handleDeleteManualLesson = (rowId: string) => {
+    const target = rows.find((row) => row.id === rowId);
+    if (!target) return;
+    setRows((current) => current.filter((row) => row.id !== rowId));
+    showToast('تم حذف الحصة اليدوية من الدفتر.');
+  };
+
   // Modals & UI States
   const [isAddLessonModalOpen, setIsAddLessonModalOpen] = useState(false);
   const [manualLessonDate, setManualLessonDate] = useState(startDate || getDefaultNotebookStartDate(config.schoolYear || '2026-2027'));
+  // أزرار إضافة/حذف الفترات مخفية افتراضياً؛ تُظهر عند الحاجة فقط لتبقى الشبكة نظيفة.
+  const [isPeriodsEditable, setIsPeriodsEditable] = useState(false);
   const [manualLessonTime, setManualLessonTime] = useState(ALL_PERIODS[0]);
   const [manualLessonSection, setManualLessonSection] = useState('');
   const [manualLessonStatus, setManualLessonStatus] = useState<'normal' | 'changed' | 'teacher_absent' | 'students_absent' | 'not_completed'>('normal');
@@ -1164,13 +1180,16 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
           typeof parsed.startDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(parsed.startDate)
             ? parsed.startDate
             : startDate;
+        // تاريخ بداية الدفتر يحكم تسلسل الحصص: أي مرجع تسلسل محفوظ يخالفه
+        // يُصحَّح إليه، فلا تُولَّد الصفحات من تاريخ الدخول المدرسي بعد اختيار تاريخ آخر.
         const restoredSequenceStartDate =
           typeof parsed.sequenceStartDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(parsed.sequenceStartDate)
             ? parsed.sequenceStartDate
             : restoredStartDate;
+        const alignedSequenceStartDate = restoredSequenceStartDate === restoredStartDate ? restoredSequenceStartDate : restoredStartDate;
 
         setStartDate(restoredStartDate);
-        setSequenceStartDate(restoredSequenceStartDate);
+        setSequenceStartDate(alignedSequenceStartDate);
         if (Array.isArray(parsed.archivedRows)) setArchivedRows(parsed.archivedRows);
         if (parsed.period) setPeriod(parsed.period);
         if (parsed.orientation === 'portrait' || parsed.orientation === 'landscape') setOrientation(parsed.orientation);
@@ -1215,7 +1234,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
 
           const generatedRows = generateLogbookEntries({
             startDate: restoredStartDate,
-            sequenceStartDate: restoredSequenceStartDate,
+            sequenceStartDate: alignedSequenceStartDate,
             gridRows: targetGrid,
             period: parsed.period || period || 'شهر',
             holidays: parsed.holidays || holidays,
@@ -1536,7 +1555,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       holidays,
       sessionsPerActivity: targetSessionsPerActivity,
       unitSessionsMap: targetUnitSessionsMap,
-    });
+    }).filter((row) => isLogbookRowOnOrAfter(row.dateStr || '', targetStartDate));
 
     const archive = collectPreservedRows(archivedRows, rows);
     setArchivedRows(archive);
@@ -2629,151 +2648,6 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
   );
 
 
-  const renderFrontPage = (isPreview = false) => {
-    return (
-      <div
-        key="front-page"
-        className={
-          isPreview
-            ? "print-page page-sheet page-sheet--logbook-front-preview overflow-hidden shrink-0 flex flex-col"
-            : "print-page page-sheet page-sheet--logbook-front overflow-hidden mx-auto mb-8 flex flex-col"
-        }
-        style={{
-          width: `${pageDimensions.w}mm`,
-          minHeight: `${pageDimensions.h}mm`,
-          maxWidth: isPreview ? undefined : '100%',
-          // الصفحة الأولى بدون مربعات صغيرة؛ شبكة الكتابة تُستخدم فقط في الصفحات الداخلية.
-        }}
-      >
-        <div style={{ padding: PAGE_INNER_PADDING }} className="h-full flex flex-col">
-          <div className="w-full border-b border-zinc-200 mb-8">
-            <div className="h-1 flex">
-              <div className="flex-1 bg-[#006233]" />
-              <div className="flex-1 bg-[#D21034]" />
-            </div>
-            <div className="px-5 py-4 text-center space-y-1">
-              <div className="font-bold text-[12px] flex items-center justify-center gap-1 text-zinc-900">
-                <span>🇩🇿</span> الجمهورية الجزائرية الديمقراطية الشعبية
-              </div>
-              <div className="text-zinc-700 font-medium text-[12px]">وزارة التربية الوطنية</div>
-            </div>
-          </div>
-          
-          <div className="flex-1 flex flex-col items-center">
-            <div className="text-[26px] font-extrabold text-zinc-900 mb-8 flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-[#006233] text-white grid place-items-center"><BookOpen className="w-4 h-4" /></div>
-              الدفتر اليومي
-              <div className="w-8 h-8 rounded-full bg-[#D21034] text-white grid place-items-center"><Calendar className="w-4 h-4" /></div>
-            </div>
-
-            <div className="w-full max-w-3xl text-[12px] mb-10 flex flex-wrap justify-center gap-x-6 gap-y-3 bg-[#f5fbf9] p-4 border border-zinc-200 rounded-[2px]">
-              <span className="flex items-center gap-1.5"><span className="text-zinc-500 font-medium">الأستاذ(ة):</span> <span className="font-bold text-zinc-900">{teacher || '—'}</span></span>
-              <span className="flex items-center gap-1.5"><span className="text-zinc-500 font-medium">المادة:</span> <span className="font-bold text-zinc-900">{subject || '—'}</span></span>
-              <span className="flex items-center gap-1.5"><span className="text-zinc-500 font-medium">المتوسطة:</span> <span className="font-bold text-zinc-900">{school || '—'}</span></span>
-              <span className="flex items-center gap-1.5"><span className="text-zinc-500 font-medium">السنة الدراسية:</span> <span className="font-bold text-zinc-900">{config.schoolYear || ''}</span></span>
-              <span className="flex items-center gap-1.5"><span className="text-zinc-500 font-medium">المستويات المسندة:</span> <span className="font-bold text-zinc-900" dir="ltr">{assignedLevels.join(' ، ')}</span></span>
-            </div>
-
-            <div className="w-full mb-8">
-              <div className="text-[13px] font-bold text-[#064e3b] mb-3 flex items-center gap-2">
-                <div className="w-1.5 h-1.5 bg-[#006233] rounded-full" />
-                جدول استعمال الزمن
-              </div>
-              <table className="w-full border-collapse border border-zinc-200">
-                <thead>
-                  <tr>
-                    <th className="border border-zinc-200 px-2 py-2 text-center w-[80px] bg-[#f0fdf4] font-bold text-[#064e3b] text-[11px]">اليوم \ التوقيت</th>
-                    {gridRows.map(r => (
-                      <th key={r.id} className="border border-zinc-200 px-2 py-2 text-center font-bold text-[10px] text-zinc-700 bg-[#f9faf6] font-mono">{r.time}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {WEEK_DAYS.map((day, idx) => (
-                    <tr key={day} className={idx % 2 === 0 ? 'bg-white' : 'bg-[#f9faf6]'}>
-                      <td className="border border-zinc-200 px-2 py-2 text-center font-bold text-[11px] text-zinc-900 w-[80px]">{day}</td>
-                      {gridRows.map(r => {
-                        const cellVal = r.cells[day] || '';
-                        const lvl = detectLevelFromSection(cellVal);
-                        return (
-                          <td key={r.id} className="border border-zinc-200 px-1 py-1 text-center font-bold">
-                            {cellVal ? (
-                              <span
-                                className={`inline-block px-1.5 py-0.5 rounded text-[10px] border ${
-                                  lvl === '4م'
-                                    ? 'bg-red-50 text-red-800 border-red-200'
-                                    : lvl === '3م'
-                                    ? 'bg-amber-50 text-amber-800 border-amber-200'
-                                    : lvl === '2م'
-                                    ? 'bg-blue-50 text-blue-800 border-blue-200'
-                                    : 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                                }`}
-                              >
-                                {cellVal}
-                              </span>
-                            ) : ''}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {holidays.length > 0 && (
-              <div className="w-full max-w-3xl mx-auto">
-                <div className="text-[13px] font-bold text-[#a34f6b] mb-3 flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 bg-[#D21034] rounded-full" />
-                  جدول العطل
-                </div>
-                <table className="w-full border-collapse border border-zinc-200">
-                  <thead>
-                    <tr>
-                      <th className="border border-zinc-200 px-2 py-2 text-center bg-[#fff0f5] font-bold text-[#991b1b] text-[11px] w-[50%]">العطلة</th>
-                      <th className="border border-zinc-200 px-2 py-2 text-center bg-[#f9faf6] font-bold text-zinc-700 text-[11px] w-[25%]">من</th>
-                      <th className="border border-zinc-200 px-2 py-2 text-center bg-[#f9faf6] font-bold text-zinc-700 text-[11px] w-[25%]">إلى</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {holidays.map((h, idx) => (
-                      <tr key={h.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-[#f9faf6]'}>
-                        <td className="border border-zinc-200 px-2 py-1.5 text-center font-bold text-[11px] text-zinc-900">{h.label}</td>
-                        <td className="border border-zinc-200 px-2 py-1.5 text-center font-mono font-medium text-[10px] text-zinc-700" dir="ltr">{h.startDate}</td>
-                        <td className="border border-zinc-200 px-2 py-1.5 text-center font-mono font-medium text-[10px] text-zinc-700" dir="ltr">{h.endDate || h.startDate}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          {/* ختم الأستاذ + توقيع في الصفحة الأولى — لضمان أن كل صفحة تحتوي الختم */}
-          <div className="mt-auto pt-3 border-t border-zinc-200 flex items-end justify-between gap-6 text-[10px]">
-            <div className="text-center min-w-[140px]">
-              <div className="font-bold text-zinc-800">توقيع الأستاذ(ة)</div>
-              <div className="mt-5 border-t border-dashed border-zinc-400 h-7" />
-            </div>
-            <div className="text-center">
-              <div className="font-bold text-zinc-800 mb-1">ختم الأستاذ(ة)</div>
-              <div className="flex justify-center">
-                <TeacherOfficialStamp config={config} size="sm" />
-              </div>
-            </div>
-            <div className="text-center min-w-[140px]">
-              <div className="font-bold text-zinc-800">تأشيرة المؤسسة</div>
-              <div className="mt-5 border-t border-dashed border-zinc-400 h-7" />
-            </div>
-            <div className="font-bold text-zinc-700 whitespace-nowrap">
-              الغلاف
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
   const { settings: hwStyle } = useHandwritingStyle();
   const { template: pageStyleTemplate } = usePageTemplate();
   const [isHwPanelOpen, setIsHwPanelOpen] = useState(false);
@@ -3196,14 +3070,16 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                       <Sun className="w-4 h-4 text-amber-600" />
                       <span>☀️ الفترة الصباحية (08:00-12:00)</span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleAddMorningRow}
-                      className="inline-flex items-center gap-1 bg-amber-600 hover:bg-amber-700 text-white px-3 py-1 rounded-full text-[10px] font-bold shadow-sm cursor-pointer"
-                    >
-                      <Plus className="w-3 h-3" />
-                      <span>إضافة صباح</span>
-                    </button>
+                    {isPeriodsEditable && (
+                      <button
+                        type="button"
+                        onClick={handleAddMorningRow}
+                        className="inline-flex items-center gap-1 bg-amber-600 hover:bg-amber-700 text-white px-3 py-1 rounded-full text-[10px] font-bold shadow-sm cursor-pointer"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>إضافة صباح</span>
+                      </button>
+                    )}
                   </div>
 
                   <div className="overflow-auto">
@@ -3221,13 +3097,13 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                               {day}
                             </th>
                           ))}
-                          <th className="border border-[#78350f] w-[28px]" />
+                          {isPeriodsEditable && <th className="border border-[#78350f] w-[28px]" />}
                         </tr>
                       </thead>
                       <tbody>
                         {morningRows.length === 0 && (
                           <tr>
-                            <td colSpan={8} className="text-center py-3 text-[11px] text-zinc-400">
+                            <td colSpan={isPeriodsEditable ? 8 : 7} className="text-center py-3 text-[11px] text-zinc-400">
                               لا توجد حصص صباحية - اضغط إضافة صباح
                             </td>
                           </tr>
@@ -3269,15 +3145,17 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                                 </td>
                               );
                             })}
-                            <td className="border border-zinc-200 p-0.5 text-center">
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteGridRow(row.id)}
-                                className="w-6 h-6 grid place-items-center rounded hover:bg-white text-zinc-400 hover:text-red-600 transition cursor-pointer"
-                              >
-                                <X className="w-3.5 h-3.5" />
-                              </button>
-                            </td>
+                            {isPeriodsEditable && (
+                              <td className="border border-zinc-200 p-0.5 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteGridRow(row.id)}
+                                  className="w-6 h-6 grid place-items-center rounded hover:bg-white text-zinc-400 hover:text-red-600 transition cursor-pointer"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </td>
+                            )}
                           </tr>
                         ))}
                       </tbody>
@@ -3301,14 +3179,16 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                       <Moon className="w-4 h-4 text-indigo-600" />
                       <span>🌙 الفترة المسائية (13:30-17:30)</span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleAddAfternoonRow}
-                      className="inline-flex items-center gap-1 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded-full text-[10px] font-bold shadow-sm cursor-pointer"
-                    >
-                      <Plus className="w-3 h-3" />
-                      <span>إضافة مساء</span>
-                    </button>
+                    {isPeriodsEditable && (
+                      <button
+                        type="button"
+                        onClick={handleAddAfternoonRow}
+                        className="inline-flex items-center gap-1 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded-full text-[10px] font-bold shadow-sm cursor-pointer"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>إضافة مساء</span>
+                      </button>
+                    )}
                   </div>
 
                   <div className="overflow-auto">
@@ -3326,13 +3206,13 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                               {day}
                             </th>
                           ))}
-                          <th className="border border-[#1e1b4b] w-[28px]" />
+                          {isPeriodsEditable && <th className="border border-[#1e1b4b] w-[28px]" />}
                         </tr>
                       </thead>
                       <tbody>
                         {afternoonRows.length === 0 && (
                           <tr>
-                            <td colSpan={8} className="text-center py-3 text-[11px] text-zinc-400">
+                            <td colSpan={isPeriodsEditable ? 8 : 7} className="text-center py-3 text-[11px] text-zinc-400">
                               لا توجد حصص مسائية - اضغط إضافة مساء
                             </td>
                           </tr>
@@ -3374,15 +3254,17 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                                 </td>
                               );
                             })}
-                            <td className="border border-zinc-200 p-0.5 text-center">
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteGridRow(row.id)}
-                                className="w-6 h-6 grid place-items-center rounded hover:bg-white text-zinc-400 hover:text-red-600 transition cursor-pointer"
-                              >
-                                <X className="w-3.5 h-3.5" />
-                              </button>
-                            </td>
+                            {isPeriodsEditable && (
+                              <td className="border border-zinc-200 p-0.5 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteGridRow(row.id)}
+                                  className="w-6 h-6 grid place-items-center rounded hover:bg-white text-zinc-400 hover:text-red-600 transition cursor-pointer"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </td>
+                            )}
                           </tr>
                         ))}
                       </tbody>
@@ -3599,17 +3481,6 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-[10px] font-bold text-zinc-700 mb-1">مرجع حساب التسلسل البيداغوجي (اختياري)</label>
-                  <input
-                    type="date"
-                    value={sequenceStartDate}
-                    onChange={(e) => setSequenceStartDate(e.target.value)}
-                    className="w-full border border-zinc-200 rounded-lg px-2 py-2 text-[12px] bg-white outline-none"
-                  />
-                  <p className="text-[10px] text-zinc-500 mt-1">يطابق تاريخ بداية الدفتر افتراضياً؛ عدّله فقط إن أردت تقدير التقدم انطلاقاً من تاريخ سابق.</p>
-                </div>
-
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="block text-[10px] font-bold text-zinc-700 mb-1">
@@ -3620,17 +3491,17 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                       value={startDate}
                       onChange={(e) => {
                         const selectedDate = e.target.value;
-                        const wasAligned = !sequenceStartDate || sequenceStartDate === startDate;
-                        const nextSequenceStart = wasAligned ? selectedDate : sequenceStartDate;
                         setStartDate(selectedDate);
-                        if (wasAligned) setSequenceStartDate(selectedDate);
+                        // التاريخ المختار هو مرجع التسلسل أيضاً، فلا تبدأ الصفحات
+                        // من تاريخ الدخول المدرسي ولا تُستهلك دروس من أسابيع سابقة.
+                        setSequenceStartDate(selectedDate);
                         if (selectedDate) {
                           const fresh = generateAndApplyLogbook(
                             selectedDate,
                             period,
                             sessionsPerActivity,
                             gridRows,
-                            nextSequenceStart,
+                            selectedDate,
                             unitSessionsMap
                           );
                           if (fresh.length > 0) {
@@ -3704,16 +3575,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                   {/* Secondary Tools: Add manual, Merge labs, Split labs, Clear */}
                   <details className="border-t border-zinc-100 pt-2">
                     <summary className="cursor-pointer text-[11px] font-bold text-emerald-800 hover:text-emerald-950 focus-visible:outline-2 focus-visible:outline-emerald-700">أدوات إضافية للدفتر</summary>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-2 text-[11px]">
-                      <button
-                        type="button"
-                        onClick={() => { setManualLessonDate(startDate || getDefaultNotebookStartDate(config.schoolYear || '2026-2027')); setIsAddLessonModalOpen(true); }}
-                        className="bg-zinc-50 hover:bg-emerald-50 text-zinc-700 hover:text-emerald-900 border border-zinc-200 rounded-lg py-1.5 px-2 font-bold flex items-center justify-center gap-1 transition cursor-pointer"
-                        title="إضافة حصة يدوية أو تسجيل غياب الأستاذ أو تغيير"
-                      >
-                        <Plus className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                        <span>+ حصة / غياب</span>
-                      </button>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 pt-2 text-[11px]">
                       <button
                         type="button"
                         onClick={() => {
@@ -3836,8 +3698,19 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                 </span>
               </summary>
               <div className="p-3 border-t border-emerald-100 max-h-[340px] overflow-auto space-y-2">
-                <div className="text-[11px] text-zinc-600 bg-zinc-50 border border-zinc-200 rounded-lg px-3 py-1.5">
-                  يمكنك تأشير إنجاز أي حصة، أو تمديد درس بحصة إضافية (+1)، أو تأجيل حصة لترحيل الحصص اللاحقة تلقائياً داخل خانات استعمال الزمن الأسبوعي دون المساس بترتيب التدرج الرسمي.
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex-1 min-w-[220px] text-[11px] text-zinc-600 bg-zinc-50 border border-zinc-200 rounded-lg px-3 py-1.5">
+                    يمكنك تأشير إنجاز أي حصة، أو تمديد درس بحصة إضافية (+1)، أو تأجيل حصة لترحيل الحصص اللاحقة تلقائياً داخل خانات استعمال الزمن الأسبوعي دون المساس بترتيب التدرج الرسمي.
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setManualLessonDate(startDate || getDefaultNotebookStartDate(config.schoolYear || '2026-2027')); setIsAddLessonModalOpen(true); }}
+                    className="shrink-0 inline-flex items-center gap-1.5 bg-[#064e3b] hover:bg-[#042f24] text-white rounded-lg px-3 py-1.5 text-[11px] font-black shadow-xs transition cursor-pointer"
+                    title="إضافة حصة يدوية أو تسجيل غياب الأستاذ أو تغيير"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>إضافة حصة / حذف</span>
+                  </button>
                 </div>
                 <div className="divide-y divide-zinc-100 border border-zinc-200 rounded-lg overflow-hidden">
                   {orderedRows.slice(0, 40).map((r) => (
@@ -3908,6 +3781,17 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                             موارد الأرشيف (1م)
                           </button>
                         )}
+                        {String(r.id).startsWith('manual-') && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteManualLesson(r.id)}
+                            className="inline-flex items-center gap-1 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-md px-2 py-1 text-[10.5px] font-bold cursor-pointer"
+                            title="حذف الحصة اليدوية من الدفتر"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            <span>حذف</span>
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -3973,16 +3857,9 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                 })}
               </div>
 
-              <div className="mt-5 flex flex-wrap gap-3 justify-center">
-                <button
-                  type="button"
-                  onClick={handleGenerateSmartLogbook}
-                  className="bg-gradient-to-r from-[#064e3b] to-emerald-700 hover:from-[#042f24] hover:to-emerald-800 text-white rounded-xl py-3 px-6 text-[13px] font-black flex items-center gap-2.5 shadow-md transition cursor-pointer"
-                >
-                  <Sparkles className="w-4 h-4 text-emerald-300" />
-                  <span>توليد الدفتر اليومي الذكي</span>
-                </button>
-              </div>
+              <p className="mt-4 text-[11px] font-bold text-[#064e3b]">
+                زر التوليد موجود مرة واحدة في لوحة التحكم — لا حاجة لتكراره هنا.
+              </p>
             </div>
           )}
 
@@ -4401,6 +4278,15 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
             </div>
 
             <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsPeriodsEditable((v) => !v)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold shadow-sm transition cursor-pointer border ${isPeriodsEditable ? 'bg-amber-500 hover:bg-amber-400 text-zinc-900 border-amber-300' : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border-zinc-600'}`}
+                title="إظهار أو إخفاء أزرار إضافة وحذف الفترات"
+              >
+                <TableIcon className="w-3.5 h-3.5" />
+                <span>{isPeriodsEditable ? 'إنهاء تعديل الفترات' : 'تعديل الفترات'}</span>
+              </button>
               <button
                 type="button"
                 onClick={handleSaveTimetable}
