@@ -208,17 +208,31 @@ const splitTotal = (total: number, weights: number[], step: number): number[] =>
 
 const weightOf = (text: string): number => Math.max(1, Math.min(8, Math.round((text || '').trim().length / 40) + 1));
 
-export function buildPointSuggestion(data: CorrectionMemoData): PointSuggestion {
-  const structure = examStructure(data.examType);
+/** توزيع بديل يختاره الأستاذ (مثل 6+6+8) قبل اعتماد الاقتراح. */
+export interface PointSuggestionOptions {
+  exercisePoints?: number[];
+  integrationPoints?: number;
+}
+
+export function buildPointSuggestion(data: CorrectionMemoData, options: PointSuggestionOptions = {}): PointSuggestion {
   const exercises = data.exercises.filter(exercise => exercise.part === 1);
+  const structure = examStructure(data.examType, exercises.length);
   const exerciseWeights = exercises.map(exercise =>
     exercise.questions.reduce((acc, question) => acc + weightOf(question.text), 0)
   );
-  const exerciseTotals = splitTotal(structure.part1Points, exerciseWeights, 1);
+  // الأولوية لتوزيع الأستاذ، ثم توزيع النوع المعتمد (6+6 للاختبار، 10+10 أو 7+7+6 للفرض)،
+  // ثم التوزيع الموزون حسب حجم الأسئلة عندما يختلف عدد التمارين عن التوزيع المعتمد.
+  const exerciseTotals = options.exercisePoints && options.exercisePoints.length === exercises.length
+    ? options.exercisePoints.map(value => Math.max(0.5, Number(value) || 0))
+    : structure.exercisePoints.length === exercises.length
+      ? [...structure.exercisePoints]
+      : splitTotal(structure.part1Points, exerciseWeights, 1);
+  const part1Points = Math.round(exerciseTotals.reduce((sum, value) => sum + value, 0) * 100) / 100;
+  const integrationPoints = options.integrationPoints ?? (structure.integration ? structure.integrationPoints : 0);
 
   const suggestion: PointSuggestion = {
     examType: data.examType,
-    part1DeclaredPoints: String(structure.part1Points),
+    part1DeclaredPoints: String(part1Points),
     exercises: exercises.map((exercise, index) => {
       const total = exerciseTotals[index] ?? 1;
       const questionWeights = exercise.questions.map(question => weightOf(question.text));
@@ -234,13 +248,13 @@ export function buildPointSuggestion(data: CorrectionMemoData): PointSuggestion 
         })),
       };
     }),
-    integrationDeclaredPoints: structure.integration ? String(structure.integrationPoints) : '',
+    integrationDeclaredPoints: integrationPoints ? String(integrationPoints) : '',
     criteria: [],
-    total: structure.total,
+    total: Math.round((part1Points + integrationPoints) * 100) / 100,
   };
 
-  if (structure.integration) {
-    const criterionTotalPoints = structure.integrationPoints / INTEGRATION_CRITERIA.length;
+  if (integrationPoints > 0) {
+    const criterionTotalPoints = integrationPoints / INTEGRATION_CRITERIA.length;
     suggestion.criteria = data.integration.criteria.map(criterion => {
       const weighted = criterion.indicators.map(indicator => (indicator.text.trim() ? 1 : 0));
       const usable = weighted.some(weight => weight > 0) ? weighted : criterion.indicators.map((_, index) => (index === 0 ? 1 : 0));

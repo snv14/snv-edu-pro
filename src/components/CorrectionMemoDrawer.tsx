@@ -16,6 +16,7 @@ import { importCorrectionFile, isSupportedCorrectionFile, readFileAsDataUrl } fr
 import { applyCorrectionSuggestions, suggestAnswersForExercises, CorrectionSuggestionsResult } from '../services/correctionMemoAi';
 import { exportCorrectionMemoDataToDocx, exportCorrectionMemoToPdf, printCorrectionMemo } from '../utils/correctionMemoExport';
 import { CorrectionMemoSheet, SourceLegend } from './CorrectionMemoSheet';
+import { CorrectionImportRecovery, RecoveryPreset, RecoveryStatus, RecoverySummary } from './CorrectionImportRecovery';
 import { PageTemplateSwitcher } from './ActionMenu';
 import { DocxFontFallbackModal, useDocxFontFallbackDialog } from './DocxFontFallbackModal';
 import { DocxFontEmbedError } from '../utils/docxFontEmbed';
@@ -27,6 +28,45 @@ export interface CorrectionMeta {
 }
 
 const STORAGE_KEY = 'correction_memo_v2';
+
+/** صفحة الاسترداد: حالة القراءة الآلية وتعبئة القالب قبل اعتماد الأستاذ. */
+interface RecoveryState {
+  status: RecoveryStatus;
+  fileName: string;
+  fileSize: number;
+  summary?: RecoverySummary;
+  filled: string[];
+  matchedLabel?: string;
+  exercises: Array<{ label: string; questionCount: number }>;
+  presets: RecoveryPreset[];
+  activePreset: number;
+  data?: CorrectionMemoData;
+  failedStep?: RecoveryStatus;
+  error?: string;
+}
+
+/** توزيعات تنقيط جاهزة: اختبار 6+6+8، فرض 10+10 أو 7+7+6، مع بدائل للتغيير. */
+const recoveryPresets = (examType: 'فرض' | 'اختبار', exerciseCount: number): RecoveryPreset[] => {
+  if (examType === 'اختبار') {
+    return [
+      { label: '6 + 6 + وضعية 8', exercisePoints: [6, 6], integrationPoints: 8 },
+      { label: '8 + 4 + وضعية 8', exercisePoints: [8, 4], integrationPoints: 8 },
+      { label: '5 + 5 + وضعية 10', exercisePoints: [5, 5], integrationPoints: 10 },
+    ];
+  }
+  if (exerciseCount >= 3) {
+    return [
+      { label: '7 + 7 + 6', exercisePoints: [7, 7, 6], integrationPoints: 0 },
+      { label: '6 + 7 + 7', exercisePoints: [6, 7, 7], integrationPoints: 0 },
+      { label: '8 + 6 + 6', exercisePoints: [8, 6, 6], integrationPoints: 0 },
+    ];
+  }
+  return [
+    { label: '10 + 10', exercisePoints: [10, 10], integrationPoints: 0 },
+    { label: '12 + 8', exercisePoints: [12, 8], integrationPoints: 0 },
+    { label: '8 + 12', exercisePoints: [8, 12], integrationPoints: 0 },
+  ];
+};
 
 const loadStored = (): CorrectionMemoData => {
   try {
@@ -82,6 +122,7 @@ export const CorrectionMemoDrawer: React.FC<{
   const [aiResult, setAiResult] = useState<CorrectionSuggestionsResult | null>(null);
   const [aiTarget, setAiTarget] = useState<string>('all');
   const [pointSuggestion, setPointSuggestion] = useState<PointSuggestion | null>(null);
+  const [recovery, setRecovery] = useState<RecoveryState | null>(null);
   const [showPreview, setShowPreview] = useState(true);
   const sheetRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -124,12 +165,26 @@ export const CorrectionMemoDrawer: React.FC<{
 
   const changeExamType = (examType: 'فرض' | 'اختبار') => {
     if (examType === data.examType) return;
-    setData(applyExamStructure(data, examType));
+    const count = data.exercises.filter(exercise => exercise.part === 1).length;
+    setData(applyExamStructure(data, examType, count));
     setAiResult(null);
     setPointSuggestion(null);
     setNotice(examType === 'فرض'
-      ? 'تحوّلت الورقة إلى فرض: تمارين فقط بلا وضعية إدماجية، والجزء الأول من 20.'
-      : 'تحوّلت الورقة إلى اختبار: تمرينان ووضعية إدماجية من 8 نقاط.');
+      ? 'تحوّلت الورقة إلى فرض: تمارين فقط بلا وضعية إدماجية، والمجموع من 20.'
+      : 'تحوّلت الورقة إلى اختبار: تمرينان (6+6) ووضعية إدماجية من 8 نقاط.');
+  };
+
+  /** الفرض يُنجز بتمرينين أو ثلاثة؛ التبديل يضيف/يحذف تمرينًا فارغًا ويضبط التنقيط. */
+  const changeDevoirCount = (count: 2 | 3) => {
+    const current = data.exercises.filter(exercise => exercise.part === 1).length;
+    if (current === count) return;
+    const next = applyExamStructure(data, 'فرض', count);
+    setData(next);
+    setPointSuggestion(null);
+    const updated = next.exercises.filter(exercise => exercise.part === 1);
+    setNotice(updated.length === count
+      ? `الفرض الآن ${count} تمارين بتوزيع ${examStructure('فرض', count).exercisePoints.join(' + ')} نقطة.`
+      : `بقي التمرين الزائد لأن به محتوى؛ احذفه يدويًا من «تحرير التمارين» إن أردت.`);
   };
 
   const enrichFromDb = () => {
@@ -179,30 +234,80 @@ export const CorrectionMemoDrawer: React.FC<{
       setError('حجم الملف يتجاوز 20 ميغابايت.');
       return;
     }
+    const shell = { fileName: file.name, fileSize: file.size, filled: [] as string[], exercises: [] as Array<{ label: string; questionCount: number }>, presets: [] as RecoveryPreset[], activePreset: 0 };
+    setRecovery({ status: 'reading', ...shell });
     setBusy('import');
+    let phase: RecoveryStatus = 'reading';
     try {
       const dataUrl = await readFileAsDataUrl(file);
+      phase = 'analyzing';
+      setRecovery(previous => previous ? { ...previous, status: 'analyzing' } : previous);
       const outcome = await importCorrectionFile({ file, dataUrl, examType: data.examType, current: data, lesson: currentLesson, config });
-      const enriched = enrichCorrectionMemoFromDb(outcome.data, { lesson: currentLesson, curriculum: curriculumLessons });
-      setData(enriched.data);
-      setPointSuggestion(enriched.data.exercises.some(exercise => exercise.questions.length)
-        ? buildPointSuggestion(enriched.data)
-        : null);
-      setImportMeta({ exercises: outcome.extractedExercises, questions: outcome.extractedQuestions, points: outcome.extractedPoints, usedAI: outcome.usedAI, missing: outcome.missing });
-      setNotice([
-        outcome.notice,
-        enriched.filled.length
-          ? `وعُبّئت ${enriched.filled.length} خانة من قاعدة المناهج (${enriched.matched?.mawrid || enriched.matched?.maqta || 'الدرس المطابق'}).`
-          : '',
-        enriched.data.exercises.some(exercise => exercise.questions.some(question => question.text.trim()))
-          ? 'واقتراح التنقيط جاهز للمراجعة أسفل الشريط.'
-          : '',
-      ].filter(Boolean).join(' '));
+      phase = 'enriching';
+      setRecovery(previous => previous ? { ...previous, status: 'enriching' } : previous);
+      const platformFilled = fillFromPlatform(outcome.data, { config, lesson: currentLesson, curriculum: curriculumLessons, level: currentLesson?.level });
+      const enriched = enrichCorrectionMemoFromDb(platformFilled.data, { lesson: currentLesson, curriculum: curriculumLessons });
+      const part1 = enriched.data.exercises.filter(exercise => exercise.part === 1);
+      setRecovery({
+        status: 'ready',
+        fileName: file.name,
+        fileSize: file.size,
+        summary: {
+          exercises: outcome.extractedExercises,
+          questions: outcome.extractedQuestions,
+          points: outcome.extractedPoints,
+          usedAI: outcome.usedAI,
+          missing: outcome.missing,
+          notice: outcome.notice,
+        },
+        filled: [...platformFilled.filled, ...enriched.filled],
+        matchedLabel: enriched.matched ? [enriched.matched.mawrid, enriched.matched.maqta].filter(Boolean).join(' — ') : undefined,
+        exercises: part1.map(exercise => ({
+          label: exercise.label,
+          questionCount: exercise.questions.filter(question => question.text.trim()).length,
+        })),
+        presets: recoveryPresets(enriched.data.examType, part1.length),
+        activePreset: 0,
+        data: enriched.data,
+      });
     } catch {
-      setError('تعذر استرداد الملف. أعد المحاولة أو أدخل التمارين يدويًا.');
+      setRecovery(previous => previous
+        ? { ...previous, status: 'error', failedStep: phase, error: 'تعذر استرداد الملف. يمكنك إعادة المحاولة أو إدخال التمارين يدويًا.' }
+        : previous);
     } finally {
       setBusy(null);
     }
+  };
+
+  /** اعتماد نتيجة الاسترداد: تطبيق التنقيط المقترح على الخانات الفارغة ثم فتح المذكرة. */
+  const confirmRecovery = () => {
+    if (!recovery?.data) return;
+    const preset = recovery.presets[recovery.activePreset];
+    const suggestion = preset
+      ? buildPointSuggestion(recovery.data, { exercisePoints: preset.exercisePoints, integrationPoints: preset.integrationPoints })
+      : buildPointSuggestion(recovery.data);
+    const applied = applyPointSuggestion(recovery.data, suggestion);
+    const next = deepClone(applied.data);
+    // لا نمنح نقطة لسؤال فارغ لم يُقرأ من الورقة.
+    next.exercises.forEach(exercise => {
+      exercise.questions.forEach(question => { if (!question.text.trim()) question.points = ''; });
+    });
+    next.integration.criteria.forEach(criterion => {
+      criterion.indicators.forEach(indicator => { if (!indicator.text.trim()) indicator.points = ''; });
+    });
+    setData(next);
+    setFilledFromPlatform(recovery.filled);
+    setSkippedFromPlatform([]);
+    setPointSuggestion(null);
+    setImportMeta({
+      exercises: recovery.summary?.exercises || 0,
+      questions: recovery.summary?.questions || 0,
+      points: recovery.summary?.points || 0,
+      usedAI: Boolean(recovery.summary?.usedAI),
+      missing: recovery.summary?.missing || [],
+    });
+    setRecovery(null);
+    setNotice('اعتُمدت الورقة المستوردة وبيانات المنصة. راجع الإجابة النموذجية، ثم «توليد آلي لعناصر الإجابة» أو اكتبها يدويًا قبل المعاينة والتصدير.');
   };
 
   const targetedExercises = (): CorrectionExercise[] => {
@@ -245,7 +350,7 @@ export const CorrectionMemoDrawer: React.FC<{
   };
 
   const resetAll = () => {
-    const fresh = createDefaultCorrectionMemo(data.examType);
+    const fresh = createDefaultCorrectionMemo(data.examType, data.exercises.filter(exercise => exercise.part === 1).length);
     const filled = fillFromPlatform(fresh, { config, lesson: currentLesson, curriculum: curriculumLessons, level: currentLesson?.level });
     setData(filled.data);
     setFilledFromPlatform(filled.filled);
@@ -295,7 +400,7 @@ export const CorrectionMemoDrawer: React.FC<{
   return (
     <div className="fixed inset-0 z-[60] bg-black/45 flex justify-end no-print-shell" onClick={onClose}>
       <aside
-        className="w-full max-w-6xl h-full page-desk page-desk--correction shadow-2xl overflow-y-auto cm-print-root"
+        className="relative w-full max-w-6xl h-full page-desk page-desk--correction shadow-2xl overflow-y-auto cm-print-root"
         dir="rtl"
         onClick={event => event.stopPropagation()}
         aria-label="مذكرة التصحيح"
@@ -329,10 +434,28 @@ export const CorrectionMemoDrawer: React.FC<{
                 {type === 'فرض' ? 'فرض — تمارين فقط' : 'اختبار — تمرينان ووضعية إدماجية'}
               </button>
             ))}
+            {data.examType === 'فرض' && (
+              <span className="inline-flex items-center gap-1 rounded-xl bg-slate-100 px-1.5 py-0.5">
+                <span className="text-[10.5px] font-black text-slate-600 px-1">عدد التمارين</span>
+                {([2, 3] as const).map(count => (
+                  <button
+                    key={count}
+                    type="button"
+                    onClick={() => changeDevoirCount(count)}
+                    aria-pressed={data.exercises.filter(exercise => exercise.part === 1).length === count}
+                    className={`px-2 py-0.5 rounded-lg text-[11px] font-black border transition ${data.exercises.filter(exercise => exercise.part === 1).length === count
+                      ? 'bg-slate-900 text-white border-slate-900'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
+                  >
+                    {count}
+                  </button>
+                ))}
+              </span>
+            )}
             <span className="text-[10px] text-slate-500 font-bold">
               {data.examType === 'فرض'
-                ? `${examStructure('فرض').exercises} تمارين · المجموع 20 ن بلا وضعية إدماجية`
-                : `${examStructure('اختبار').exercises} تمارين (${examStructure('اختبار').part1Points} ن) + وضعية إدماجية (${examStructure('اختبار').integrationPoints} ن)`}
+                ? `${examStructure('فرض', data.exercises.filter(exercise => exercise.part === 1).length).exercisePoints.join(' + ')} = 20 ن بلا وضعية إدماجية`
+                : `${examStructure('اختبار').exercisePoints.join(' + ')} = ${examStructure('اختبار').part1Points} ن + وضعية إدماجية ${examStructure('اختبار').integrationPoints} ن`}
             </span>
           </div>
 
@@ -581,6 +704,31 @@ export const CorrectionMemoDrawer: React.FC<{
           <div className="font-bold">الرموز الملونة: أخضر = من المنصة · أزرق = مستورد من الورقة · برتقالي = اقتراح AI · رمادي داكن = محرَّر يدويًا.</div>
           <div>الأولوية: ما أكده الأستاذ ← الورقة الأصلية ← قاعدة المنصة ← مقترح AI. لا يُستبدل أي نص كتبته يدويًا. القالب الفارغ لا يُملأ بالتخمين.</div>
         </div>
+        {recovery && (
+          <CorrectionImportRecovery
+            status={recovery.status}
+            failedStep={recovery.failedStep}
+            fileName={recovery.fileName}
+            fileSize={recovery.fileSize}
+            summary={recovery.summary}
+            filled={recovery.filled}
+            matchedLabel={recovery.matchedLabel}
+            exercises={recovery.exercises}
+            presets={recovery.presets.length ? recovery.presets : recoveryPresets(data.examType, data.exercises.filter(exercise => exercise.part === 1).length)}
+            activePreset={recovery.activePreset}
+            suggestedTotal={(() => {
+              const presets = recovery.presets.length ? recovery.presets : recoveryPresets(data.examType, 2);
+              const chosen = presets[recovery.activePreset] || presets[0];
+              return chosen ? chosen.exercisePoints.reduce((sum, value) => sum + value, 0) + chosen.integrationPoints : 0;
+            })()}
+            totalTarget={20}
+            error={recovery.error}
+            onPreset={index => setRecovery(previous => previous ? { ...previous, activePreset: index } : previous)}
+            onConfirm={confirmRecovery}
+            onRetry={() => fileRef.current?.click()}
+            onCancel={() => setRecovery(null)}
+          />
+        )}
       </aside>
       <DocxFontFallbackModal
         error={pendingWordFontError}

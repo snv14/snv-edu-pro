@@ -181,26 +181,50 @@ const emptyResource = (exerciseLabel: string): ResourceRow => ({
 });
 
 /**
- * بنية ورقة التقييم: الفرض تمارين فقط، والاختبار تمرينان ووضعية إدماجية.
- * الاعتماد عليها يمنع ظهور أقسام لا تنتمي لنوع الورقة.
+ * بنية ورقة التقييم: الفرض تمرينان أو ثلاثة تمارين بلا وضعية إدماجية،
+ * والاختبار تمرينان ووضعية إدماجية. الاعتماد عليها يمنع ظهور أقسام
+ * لا تنتمي لنوع الورقة، ويضبط التنقيط الافتراضي على 20 نقطة.
  */
 export interface ExamStructure {
   exercises: number;
+  /** توزيع الجزء الأول على التمارين، مثل 6+6 في الاختبار. */
+  exercisePoints: number[];
   integration: boolean;
   part1Points: number;
   integrationPoints: number;
   total: number;
 }
 
-export const examStructure = (examType: 'فرض' | 'اختبار'): ExamStructure => (examType === 'اختبار'
-  ? { exercises: 2, integration: true, part1Points: 12, integrationPoints: 8, total: 20 }
-  : { exercises: 2, integration: false, part1Points: 20, integrationPoints: 0, total: 20 });
+/** توزيعات التنقيط المعتمدة؛ الأستاذ يستطيع تغييرها يدويًا داخل المذكرة. */
+export const EXAM_POINT_PRESETS: Record<'فرض' | 'اختبار', Record<2 | 3, number[]>> = {
+  'اختبار': { 2: [6, 6], 3: [6, 6, 8] },
+  'فرض': { 2: [10, 10], 3: [7, 7, 6] },
+};
 
-export function createDefaultCorrectionMemo(examType: 'فرض' | 'اختبار' = 'اختبار'): CorrectionMemoData {
-  const structure = examStructure(examType);
-  const first = emptyExercise(1, 'التمرين الأول');
-  const second = emptyExercise(1, 'التمرين الثاني');
-  const exercises = [first, second].slice(0, structure.exercises);
+const EXERCISE_LABELS = ['التمرين الأول', 'التمرين الثاني', 'التمرين الثالث'];
+
+export const examStructure = (examType: 'فرض' | 'اختبار', exerciseCount = 2): ExamStructure => {
+  // الاختبار تمرينان دائمًا + وضعية إدماجية؛ الفرض تمرينان أو ثلاثة.
+  const count: 2 | 3 = examType === 'اختبار' ? 2 : (exerciseCount === 3 ? 3 : 2);
+  const exercisePoints = EXAM_POINT_PRESETS[examType][count];
+  const integrationPoints = examType === 'اختبار' ? 8 : 0;
+  return {
+    exercises: count,
+    exercisePoints,
+    integration: integrationPoints > 0,
+    part1Points: exercisePoints.reduce((sum, value) => sum + value, 0),
+    integrationPoints,
+    total: 20,
+  };
+};
+
+export function createDefaultCorrectionMemo(examType: 'فرض' | 'اختبار' = 'اختبار', exerciseCount = 2): CorrectionMemoData {
+  const structure = examStructure(examType, exerciseCount);
+  const exercises = structure.exercisePoints.map((points, index) => {
+    const exercise = emptyExercise(1, EXERCISE_LABELS[index] || `التمرين ${index + 1}`);
+    exercise.declaredPoints = String(points);
+    return exercise;
+  });
   return {
     version: 1,
     examType,
@@ -246,10 +270,20 @@ export function createDefaultCorrectionMemo(examType: 'فرض' | 'اختبار' 
  * الفرض يُخفي الوضعية الإدماجية ويجعل الجزء الأول من 20، والاختبار يضمن
  * تمرينين ووضعية إدماجية من 8. القيم التي عدّلها الأستاذ لا تُستبدل.
  */
-export function applyExamStructure(data: CorrectionMemoData, examType: 'فرض' | 'اختبار'): CorrectionMemoData {
+/** التمرين فارغ إذا لم يحتو أي سؤال؛ النقطة الافتراضية وحدها لا تحفظه. */
+const isBlankExercise = (exercise: CorrectionExercise): boolean =>
+  exercise.questions.every(question => !question.text.trim() && !question.expected.trim() && !question.points.trim());
+
+export function applyExamStructure(
+  data: CorrectionMemoData,
+  examType: 'فرض' | 'اختبار',
+  exerciseCount?: number
+): CorrectionMemoData {
   const next: CorrectionMemoData = structuredClone(data);
-  const previous = examStructure(next.examType);
-  const structure = examStructure(examType);
+  const currentCount = next.exercises.filter(exercise => exercise.part === 1).length || 2;
+  const wantedCount = exerciseCount ?? currentCount;
+  const previous = examStructure(next.examType, currentCount);
+  const structure = examStructure(examType, wantedCount);
   next.examType = examType;
 
   if (!next.part1DeclaredPoints.trim() || toNumber(next.part1DeclaredPoints) === previous.part1Points) {
@@ -259,14 +293,39 @@ export function applyExamStructure(data: CorrectionMemoData, examType: 'فرض' 
     next.integration.declaredPoints = structure.integration ? String(structure.integrationPoints) : '';
   }
 
-  for (let index = next.exercises.length; index < structure.exercises; index += 1) {
-    const exercise = emptyExercise(1, index === 0 ? 'التمرين الأول' : index === 1 ? 'التمرين الثاني' : `التمرين ${index + 1}`);
+  // إضافة التمارين الناقصة بالتسمية والنقطة الافتراضية.
+  for (let index = next.exercises.filter(exercise => exercise.part === 1).length; index < structure.exercises; index += 1) {
+    const exercise = emptyExercise(1, EXERCISE_LABELS[index] || `التمرين ${index + 1}`);
+    exercise.declaredPoints = String(structure.exercisePoints[index] ?? '');
     next.exercises.push(exercise);
     next.resources.push(emptyResource(exercise.label));
   }
 
+  // تقليل العدد لا يحذف إلا التمارين الفارغة، حفاظًا على ما كتبه الأستاذ.
+  let partOneCount = next.exercises.filter(exercise => exercise.part === 1).length;
+  while (partOneCount > structure.exercises) {
+    const last = [...next.exercises].reverse().find(exercise => exercise.part === 1);
+    if (!last || !isBlankExercise(last)) break;
+    next.exercises = next.exercises.filter(exercise => exercise.id !== last.id);
+    next.resources = next.resources.filter(row => row.exerciseLabel !== last.label);
+    partOneCount -= 1;
+  }
+
+  // ضبط نقطة كل تمرين على التوزيع الجديد فقط إن كانت فارغة أو مطابقة للتوزيع السابق.
+  next.exercises.filter(exercise => exercise.part === 1).forEach((exercise, index) => {
+    const previousPoints = previous.exercisePoints[index];
+    const declared = toNumber(exercise.declaredPoints);
+    if (!exercise.declaredPoints.trim() || (previousPoints !== undefined && declared === previousPoints)) {
+      const target = structure.exercisePoints[index];
+      if (target !== undefined) exercise.declaredPoints = String(target);
+    }
+  });
+
   if (structure.integration && !next.resources.some(row => row.exerciseLabel.includes('الإدماجية'))) {
     next.resources.push(emptyResource('الوضعية الإدماجية'));
+  }
+  if (!structure.integration) {
+    next.resources = next.resources.filter(row => !row.exerciseLabel.includes('الإدماجية'));
   }
 
   next.updatedAt = new Date().toISOString();
@@ -326,7 +385,8 @@ export function validateCorrectionMemo(data: CorrectionMemoData, expectedTotal =
   data.exercises.forEach(exercise => {
     const declared = toNumber(exercise.declaredPoints);
     const computed = exerciseTotal(exercise);
-    if (declared !== null && computed !== declared) {
+    // نقطة معلنة بلا أسئلة منقّطة ليست خطأً؛ القالب الجديد يبقى بلا تنبيهات مانعة.
+    if (computed > 0 && declared !== null && computed !== declared) {
       warnings.push({
         message: `${exercise.label}: مجموع الأسئلة ${formatPoints(computed)} ن لا يطابق النقطة المعلنة ${formatPoints(declared)} ن.`,
         blocking: true,
