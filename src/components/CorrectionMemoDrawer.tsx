@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AlertTriangle, Calculator, CheckCircle2, Database, FileDown, FileUp, Loader2, Printer, Plus, RotateCcw,
+  AlertTriangle, Calculator, CheckCircle2, Database, FileDown, FileSearch, FileUp, Loader2, Printer, Plus, RotateCcw,
   Sparkles, Trash2, Wand2, X,
 } from 'lucide-react';
 import { LessonMemo, MemoConfig } from '../types';
@@ -126,6 +126,7 @@ export const CorrectionMemoDrawer: React.FC<{
   const [showPreview, setShowPreview] = useState(true);
   const sheetRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const viaAgentRef = useRef(false);
   const [savedAt, setSavedAt] = useState<string>('');
   const {
     pendingError: pendingWordFontError,
@@ -223,7 +224,7 @@ export const CorrectionMemoDrawer: React.FC<{
       : 'لا توجد خانات فارغة يمكن تعبئتها من المنصة حاليًا.');
   };
 
-  const handleImport = async (file: File) => {
+  const handleImport = async (file: File, viaAgent = false) => {
     setError('');
     setNotice('');
     if (!isSupportedCorrectionFile(file)) {
@@ -242,7 +243,7 @@ export const CorrectionMemoDrawer: React.FC<{
       const dataUrl = await readFileAsDataUrl(file);
       phase = 'analyzing';
       setRecovery(previous => previous ? { ...previous, status: 'analyzing' } : previous);
-      const outcome = await importCorrectionFile({ file, dataUrl, examType: data.examType, current: data, lesson: currentLesson, config });
+      const outcome = await importCorrectionFile({ file, dataUrl, examType: data.examType, current: data, lesson: currentLesson, config, viaAgent });
       phase = 'enriching';
       setRecovery(previous => previous ? { ...previous, status: 'enriching' } : previous);
       const platformFilled = fillFromPlatform(outcome.data, { config, lesson: currentLesson, curriculum: curriculumLessons, level: currentLesson?.level });
@@ -461,18 +462,28 @@ export const CorrectionMemoDrawer: React.FC<{
 
           <div className="flex flex-wrap items-center gap-1.5 bg-white rounded-2xl border border-teal-100 p-2.5">
             <span className="text-[11px] font-black text-slate-500 px-1">استرداد الملف</span>
-            <button type="button" onClick={() => fileRef.current?.click()} disabled={busy !== null} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-700 text-white text-[11.5px] font-black disabled:opacity-50">
+            <button type="button" onClick={() => { viaAgentRef.current = false; fileRef.current?.click(); }} disabled={busy !== null} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-700 text-white text-[11.5px] font-black disabled:opacity-50">
               {busy === 'import' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileUp className="w-3.5 h-3.5" />}
               استيراد ورقة الفرض/الاختبار
+            </button>
+            <button type="button" onClick={() => { viaAgentRef.current = true; fileRef.current?.click(); }} disabled={busy !== null} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-teal-300 text-teal-900 text-[11.5px] font-black disabled:opacity-50">
+              {busy === 'import' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileSearch className="w-3.5 h-3.5" />}
+              وكيل المستندات يقرأ ويعبّئ القالب
             </button>
             <input
               ref={fileRef}
               type="file"
               accept=".pdf,.txt,.docx,.doc,image/jpeg,image/png,image/webp,image/gif"
               hidden
-              onChange={event => { const file = event.target.files?.[0]; if (file) void handleImport(file); event.target.value = ''; }}
+              onChange={event => {
+                const file = event.target.files?.[0];
+                const viaAgent = viaAgentRef.current;
+                viaAgentRef.current = false;
+                if (file) void handleImport(file, viaAgent);
+                event.target.value = '';
+              }}
             />
-            <span className="text-[10px] text-slate-500 font-bold">صورة أو PDF أو Word (.docx) — يقرأ الملف ويعبّئ القالب، وTXT بقراءة محلية</span>
+            <span className="text-[10px] text-slate-500 font-bold">صورة أو PDF أو Word (.docx) — الوكيل يقرأ ويحلّل ويعبّئ القالب من قاعدة المنصة، وTXT بقراءة محلية</span>
             <span className="flex-1" />
             <button type="button" onClick={refillFromPlatform} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-teal-200 text-teal-900 text-[11.5px] font-black">
               <Wand2 className="w-3.5 h-3.5" /> تعبئة من المنصة

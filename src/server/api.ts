@@ -20,6 +20,10 @@ import {
 } from '../services/knowledgeBase';
 import { KNOWLEDGE_FACET_LABELS, KNOWLEDGE_KIND_LABELS, type TeacherKnowledgeDoc } from '../types/knowledge';
 import { getOfficialSourcesManifest, loadOfficialSources } from '../services/knowledgeOfficialSources';
+import { readDocument, measureText, type DocumentReadResult } from './documentReader';
+import { analyzeDocumentLocally, buildAgentKnowledgeQuery } from '../services/documentAgent';
+import { buildLocalCorrectionSource } from '../services/correctionMemoLocal';
+import { getOfficialCurriculumDatabase } from '../data/memos/curriculumDb';
 import { PLATFORM_DATABASE, familyPriorityOf } from '../data/platform';
 
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
@@ -700,11 +704,8 @@ apiApp.get('/api/gemini/knowledge-status', (_req, res) => {
 });
 
 // تحليل ورقة الفرض/الاختبار قبل بناء مذكرة التصحيح
-apiApp.post('/api/gemini/analyze-correction-source', async (req, res) => {
+apiApp.post('/api/correction/analyze-source', async (req, res) => {
   try {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) return res.status(503).json({ error: 'GEMINI_API_KEY is not configured on server' });
-
     const { examType, examText = '', attachments = [] } = req.body;
     if (!examType || (!String(examText).trim() && (!Array.isArray(attachments) || attachments.length === 0))) {
       return res.status(400).json({ error: 'مصدر التصحيح مطلوب' });
@@ -719,9 +720,9 @@ apiApp.post('/api/gemini/analyze-correction-source', async (req, res) => {
       return res.status(400).json({ error: 'عدد المرفقات غير مسموح' });
     }
 
-    const attachmentInputs: Array<{ mimeType: string; base64: string; displayName: string }> = [];
     const documentTexts: string[] = [];
     let totalLength = 0;
+    let attachmentIndex = 0;
     for (const item of attachments) {
       if (!item || !allowedTypes.has(item.mimeType)) return res.status(400).json({ error: 'نوع مرفق غير مسموح' });
       const dataUrl = String(item.dataUrl || '');
@@ -730,9 +731,10 @@ apiApp.post('/api/gemini/analyze-correction-source', async (req, res) => {
         return res.status(400).json({ error: 'مرفق غير صالح أو كبير جداً' });
       }
       totalLength += dataUrl.length;
+      attachmentIndex += 1;
       if (totalLength > 32_000_000) return res.status(400).json({ error: 'إجمالي المرفقات كبير جداً' });
 
-      const name = String(item.name || `correction-analysis-${attachmentInputs.length + 1}`);
+      const name = String(item.name || `correction-analysis-${attachmentIndex}`);
       const isDocx = item.mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || /\.docx$/i.test(name);
       const isLegacyDoc = item.mimeType === 'application/msword' || (/\.doc$/i.test(name) && !isDocx);
       if (isLegacyDoc && !isDocx) {
@@ -747,60 +749,38 @@ apiApp.post('/api/gemini/analyze-correction-source', async (req, res) => {
         continue;
       }
 
-      attachmentInputs.push({
-        mimeType: item.mimeType,
-        base64: dataUrl.slice(prefix.length),
-        displayName: name,
-      });
-    }
-
-    const ai = new GoogleGenAI({ apiKey, httpOptions: { headers: { 'User-Agent': 'aistudio-build' } } });
-    const uploadedFiles: any[] = [];
-    try {
-      for (const item of attachmentInputs) {
-        const file = await ai.files.upload({
-          file: new Blob([Buffer.from(item.base64, 'base64')], { type: item.mimeType }),
-          config: { mimeType: item.mimeType, displayName: item.displayName },
+      // PDF ذو طبقة نصية يُقرأ محليًا، ولا يُرسل إلى أي مزوّد.
+      if (item.mimeType === 'application/pdf' || /\.pdf$/i.test(name)) {
+        const parsedPdf = readDocument({
+          buffer: Buffer.from(dataUrl.slice(prefix.length), 'base64'),
+          name,
+          mime: 'application/pdf',
         });
-        let info = file;
-        for (let attempt = 0; attempt < 20 && info.state === 'PROCESSING'; attempt++) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          info = await ai.files.get({ name: file.name });
+        if (parsedPdf.text.trim().length >= 80 && !parsedPdf.quality.flags.includes('garbled')) {
+          documentTexts.push(`ملف PDF «${name}»:\n${parsedPdf.text.slice(0, 40_000)}`);
+          continue;
         }
-        if (info.state === 'FAILED') throw new Error(`فشل تجهيز المرفق: ${item.displayName}`);
-        uploadedFiles.push(info);
       }
-
-      const fileParts = uploadedFiles.map((file) => createPartFromUri(file.uri, file.mimeType));
-      const model = getValidGeminiModel();
-      const response = await ai.models.generateContent({
-        model,
-        contents: [{
-          role: 'user',
-          parts: [{
-            text: [
-              'حلل ورقة التقييم التالية كمصدر فقط ولا تحل الأسئلة.',
-              'استخرج ما يمكن قراءته حرفياً من الورقة، مع الحفاظ على الترتيب.',
-              'أعد JSON فقط بالشكل: {title, meta:{level, midan, maqta, kafaa, mawrid, term, duration}, exercises:[{number, kind:"exercise"|"integration", title, questions:[{number,text,points,expected,documentRefs}]}], totalPoints, documents:[{id,description}], ambiguities:[], pointsSuggestion:[{questionRef,points}]}.',
-              'قواعد إلزامية:',
-              '- في meta عبّئ ما تدل عليه الورقة فقط (المستوى، الميدان، المقطع، الكفاءة الختامية، المورد، الفصل، المدة)؛ اترك ما لا تعرفه فارغاً ولا تخترعه.',
-              '- إذا كانت الورقة اختباراً فاجعل أول تمرينين kind="exercise" والوضعية الإدماجية kind="integration". وإذا كانت فرضاً فلا تضف وضعية إدماجية.',
-              '- expected: عناصر الإجابة النموذجية الموجزة لكل سؤال. اتركه فارغاً إذا كان السؤال غير مقروء.',
-              '- points: انقل النقطة المكتوبة في الورقة حرفياً. إن لم تكن مكتوبة فاقترح توزيعاً في pointsSuggestion دون تغيير نص السؤال.',
-              '- لا تخترع سؤالاً أو نقطة أو معياراً. أضف غير المقروء إلى ambiguities.',
-              'إذا لم تستطع قراءة عنصر اتركه فارغاً وأضفه إلى ambiguities. لا تخترع أي سؤال أو نقطة.',
-              `نوع التقييم: ${examType}`,
-              documentTexts.length ? `نص ملفات Word المرفقة:\n${documentTexts.join('\n\n')}` : '',
-              `النص المتاح: ${String(examText).slice(0, 30000)}`,
-            ].join('\\n'),
-          }, ...fileParts],
-        }],
-        config: { responseMimeType: 'application/json' },
-      });
-      return res.json({ json: response.text || '' });
-    } finally {
-      await Promise.allSettled(uploadedFiles.map((file) => ai.files.delete({ name: file.name })));
     }
+
+    // قراءة محلية أولًا: PDF النصي وWord والتقييم النصي لا تحتاج أي مفتاح.
+    const localSource = buildLocalCorrectionSource(
+      [...documentTexts, String(examText)].filter(Boolean).join('\n\n'),
+      String(examType),
+      String(attachments[0]?.name || ''),
+    );
+    if (localSource) {
+      return res.json({ json: JSON.stringify(localSource), provider: 'local', usedWeb: false });
+    }
+
+    const readableText = [...documentTexts, String(examText)].filter(Boolean).join('\n\n').trim();
+    if (!readableText) {
+      return res.status(503).json({
+        error: 'لم أقرأ نصًا من هذا الملف. الصور والوثائق المصوّرة تحتاج OCR أو إدخال النص يدويًا؛ أما PDF النصي وWord فيُقرآن محليًا داخل المنصة.',
+        code: 'LOCAL_READER_NO_TEXT',
+      });
+    }
+    return res.status(422).json({ error: 'لم أستخرج تمارين مرقّمة من النص المقروء؛ راجع الورقة أو أدخل التمارين يدويًا.' });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('[Correction source analysis error]:', message);
@@ -951,5 +931,154 @@ apiApp.post('/api/gemini/generate-pedagogical-note', async (req, res) => {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('[Gemini Pedagogical Note Server Error]:', message);
     return res.status(500).json({ error: message });
+  }
+});
+
+/* ───────────────────────── وكيل المستندات المحلي ───────────────────────── */
+
+interface AgentMemoryHint {
+  id?: string;
+  title?: string;
+  level?: string;
+  examType?: string;
+  points?: number | null;
+  keywords?: string[];
+}
+
+const agentMemoryRecall = (keywords: string[], memory: AgentMemoryHint[]) => {
+  const mine = new Set(keywords.map(token => token.toLowerCase()));
+  if (!mine.size) return [];
+  return memory
+    .map(entry => {
+      const theirs = new Set((entry.keywords || []).map(token => String(token).toLowerCase()));
+      const shared = Array.from(mine).filter(token => theirs.has(token));
+      const union = new Set([...mine, ...theirs]).size;
+      return {
+        id: String(entry.id || ''),
+        title: String(entry.title || 'مستند سابق').slice(0, 160),
+        level: String(entry.level || ''),
+        examType: String(entry.examType || ''),
+        points: typeof entry.points === 'number' ? entry.points : null,
+        similarity: union ? Number((shared.length / union).toFixed(2)) : 0,
+        shared: shared.slice(0, 6),
+      };
+    })
+    .filter(item => item.similarity >= 0.12)
+    .sort((a, b) => b.similarity - a.similarity)
+    .slice(0, 3);
+};
+
+// حالة الوكيل: ما يقرأه محليًا، وما يحتاج مزوّد رؤية، وحجم قاعدة المنصة.
+apiApp.get('/api/agent/status', async (_req, res) => {
+  let lessons = 0;
+  try {
+    lessons = getOfficialCurriculumDatabase().length;
+  } catch {
+    lessons = 0;
+  }
+  res.json({
+    ready: true,
+    name: 'وكيل المستندات',
+    localReader: true,
+    localFormats: ['pdf', 'docx', 'txt', 'md', 'csv', 'html'],
+    visionFormats: [],
+    visionConfigured: false,
+    platformDatabase: {
+      lessons,
+      officialDocuments: getOfficialSourcesManifest().length,
+      families: PLATFORM_DATABASE.families.length,
+    },
+    message: 'الوكيل يقرأ PDF النصي وWord وTXT وHTML محليًا دون أي مفتاح أو مزوّد خارجي. الصور والوثائق المصوّرة تحتاج إدخال نصها يدويًا لأن الوكيل لا يستعمل قارئًا بصريًا خارجيًا.',
+  });
+});
+
+// قراءة ملف وتحليله: استخراج محلي + مطابقة قاعدة المنصة + استشهادات + استدعاء ذاكرة الوكيل.
+apiApp.post('/api/agent/read', async (req, res) => {
+  try {
+    const name = String(req.body?.name || 'document').slice(0, 200);
+    const mimeType = String(req.body?.mimeType || '');
+    const dataUrl = String(req.body?.dataUrl || '');
+    const examType = String(req.body?.examType || '');
+    const level = String(req.body?.level || '');
+    const memory: AgentMemoryHint[] = Array.isArray(req.body?.memory)
+      ? req.body.memory.slice(0, 30).map((item: any) => ({
+        id: String(item?.id || ''),
+        title: String(item?.title || '').slice(0, 160),
+        level: String(item?.level || ''),
+        examType: String(item?.examType || ''),
+        points: Number.isFinite(Number(item?.points)) ? Number(item.points) : null,
+        keywords: Array.isArray(item?.keywords) ? item.keywords.slice(0, 30).map(String) : [],
+      }))
+      : [];
+
+    const inlineText = String(req.body?.text || '').slice(0, 120_000);
+    if (!inlineText.trim() && !dataUrl.startsWith('data:')) return res.status(400).json({ error: 'الملف غير صالح (dataUrl مطلوب).' });
+    if (dataUrl.length > 28_000_000) return res.status(413).json({ error: 'حجم الملف كبير جدًا (الحد 20 ميغابايت).' });
+    const base64 = dataUrl.split(',')[1] || '';
+    if (!inlineText.trim() && !base64) return res.status(400).json({ error: 'لا توجد بيانات في الملف.' });
+
+    const read: DocumentReadResult = inlineText.trim()
+      ? {
+        format: 'text',
+        text: inlineText,
+        chars: inlineText.length,
+        quality: measureText(inlineText),
+        needsVision: false,
+        notes: ['نص أُدخل يدويًا بدل القراءة البصرية؛ حلّله الوكيل محليًا.'],
+      }
+      : readDocument({ buffer: Buffer.from(base64, 'base64'), name, mime: mimeType });
+    if (read.needsVision) {
+      read.notes = [...read.notes, 'لا يوجد قارئ OCR محلي؛ الصور والوثائق المصوّرة تحتاج إدخال نصها يدويًا قبل التحليل.'];
+    }
+
+    const analysis = analyzeDocumentLocally(read.text, {
+      examType: examType === 'فرض' || examType === 'اختبار' ? examType : '',
+      level,
+      fileName: name,
+    });
+
+    let citations: Array<{ title: string; label: string; page?: number; snippet: string; kind: string }> = [];
+    try {
+      const query = buildAgentKnowledgeQuery(analysis, read.text);
+      if (query.trim()) {
+        const hits = searchKnowledge(query, {
+          level: analysis.level || undefined,
+          officialDocs: await loadOfficialSources(),
+          teacherDocs: sanitizeTeacherDocs(req.body?.teacherDocs),
+          topK: 6,
+          minScore: 0.8,
+        });
+        citations = hits.map(hit => ({
+          title: hit.chunk.documentTitle,
+          label: hit.sourceLabel,
+          page: hit.chunk.page,
+          snippet: hit.snippet,
+          kind: hit.chunk.kind,
+        }));
+      }
+    } catch (error) {
+      console.warn('[agent] knowledge citation error:', error instanceof Error ? error.message : error);
+    }
+
+    res.json({
+      read: {
+        format: read.format,
+        chars: read.chars,
+        pages: read.pages,
+        quality: read.quality,
+        needsVision: read.needsVision,
+        notes: read.notes,
+        text: read.text,
+        image: read.image,
+      },
+      analysis,
+      citations,
+      recalled: agentMemoryRecall(analysis.keywords, memory),
+      provider: null,
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'تعذر قراءة الملف';
+    console.error('[Document agent error]:', message);
+    res.status(500).json({ error: message });
   }
 });

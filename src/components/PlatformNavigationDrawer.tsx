@@ -6,7 +6,9 @@ import {
   Clock,
   Database,
   Dna,
+  FileSearch,
   Globe2,
+  GraduationCap,
   HelpCircle,
   Home,
   Info,
@@ -27,7 +29,7 @@ interface PlatformNavigationDrawerProps {
   onNavigate: (section: string) => void;
   onOpenTimetable?: () => void;
   onOpenInfoModal: (tab: 'about' | 'contact' | 'guide') => void;
-  onOpenTool: (tool: 'assistant' | 'correction') => void;
+  onOpenTool: (tool: 'assistant' | 'correction' | 'agent' | 'grading') => void;
   config: MemoConfig;
 }
 
@@ -241,12 +243,36 @@ export const PlatformNavigationDrawer: React.FC<PlatformNavigationDrawerProps> =
 
             <button
               type="button"
+              onClick={() => { onOpenTool('grading'); onClose(); }}
+              className={`${rowBase} ${rowIdle}`}
+            >
+              <span className="flex items-center gap-2.5">
+                <GraduationCap className="w-4 h-4 text-[#0e7a68]" />
+                <span>المساعد التربوي: التصحيح والدرجات</span>
+              </span>
+              <ChevronLeft className="w-4 h-4 opacity-40" />
+            </button>
+
+            <button
+              type="button"
               onClick={() => { onOpenTool('assistant'); onClose(); }}
               className={`${rowBase} ${rowIdle}`}
             >
               <span className="flex items-center gap-2.5">
                 <MessagesSquare className="w-4 h-4 text-[#0d6f8f]" />
                 <span>المساعد الذكي</span>
+              </span>
+              <ChevronLeft className="w-4 h-4 opacity-40" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => { onOpenTool('agent'); onClose(); }}
+              className={`${rowBase} ${rowIdle}`}
+            >
+              <span className="flex items-center gap-2.5">
+                <FileSearch className="w-4 h-4 text-[#a06a12]" />
+                <span>وكيل المستندات (قراءة وتحليل الملفات)</span>
               </span>
               <ChevronLeft className="w-4 h-4 opacity-40" />
             </button>

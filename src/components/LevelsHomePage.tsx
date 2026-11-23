@@ -9,6 +9,7 @@ import {
   Clock,
   Database,
   Dna,
+  FileSearch,
   FileText,
   FlaskConical,
   Globe2,
@@ -38,7 +39,7 @@ interface LevelsHomePageProps {
   onOpenLogbook: () => void;
   onOpenTimetable: () => void;
   onOpenDatabase: () => void;
-  onOpenTool: (tool: 'assistant' | 'correction') => void;
+  onOpenTool: (tool: 'assistant' | 'correction' | 'agent') => void;
   onOpenInfoModal?: (tab: 'about' | 'guide' | 'contact') => void;
   config: MemoConfig;
   curriculumLessons?: LessonMemo[];
@@ -220,7 +221,7 @@ export const LevelsHomePage: React.FC<LevelsHomePageProps> = ({
     {
       id: 'group-eval-ai',
       title: 'التقويم والمساعد الذكي',
-      subtitle: 'مذكرات التصحيح والمساعدة التربوية الفورية',
+      subtitle: 'مذكرات التصحيح والمساعدة التربوية وقراءة الملفات',
       items: [
         {
           id: 'service-assessment',
@@ -235,6 +236,13 @@ export const LevelsHomePage: React.FC<LevelsHomePageProps> = ({
           description: 'محادثة بيداغوجية تفاعلية مستندة إلى المنهاج والوثائق المرافقة.',
           icon: MessagesSquare,
           onClick: () => onOpenTool('assistant'),
+        },
+        {
+          id: 'service-document-agent',
+          title: 'وكيل المستندات',
+          description: 'قراءة PDF وWord والصور وتحليلها محليًا، مع تعلّم من قاعدة بيانات المنصة.',
+          icon: FileSearch,
+          onClick: () => onOpenTool('agent'),
         },
       ],
     },

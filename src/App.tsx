@@ -43,6 +43,8 @@ import heroScienceLabImg from './assets/images/hero_science_lab.jpg';
 
 const AIAssistantChat = lazy(() => import('./components/AIAssistantChat').then(module => ({ default: module.AIAssistantDrawer })));
 const CorrectionMemoDrawer = lazy(() => import('./components/CorrectionMemoDrawer').then(module => ({ default: module.CorrectionMemoDrawer })));
+const DocumentAgentDrawer = lazy(() => import('./components/DocumentAgentDrawer').then(module => ({ default: module.DocumentAgentDrawer })));
+const TeacherAssistantDrawer = lazy(() => import('./components/TeacherAssistantDrawer').then(module => ({ default: module.TeacherAssistantDrawer })));
 
 const AnnualDistribution = lazy(() => import('./components/AnnualDistribution').then(module => ({ default: module.AnnualDistribution })));
 const DailyLogbook = lazy(() => import('./components/DailyLogbook').then(module => ({ default: module.DailyLogbook })));
@@ -70,7 +72,7 @@ export const App: React.FC = () => {
 
   // Drawers and Modals
   const [isNavDrawerOpen, setIsNavDrawerOpen] = useState<boolean>(false);
-  const [activeTool, setActiveTool] = useState<'assistant' | 'correction' | null>(null);
+  const [activeTool, setActiveTool] = useState<'assistant' | 'correction' | 'agent' | 'grading' | null>(null);
   const [infoModalTab, setInfoModalTab] = useState<'about' | 'contact' | 'guide' | null>(null);
   const [logbookInitialTimetable, setLogbookInitialTimetable] = useState<boolean>(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState<boolean>(false);
@@ -1174,6 +1176,17 @@ export const App: React.FC = () => {
           isOpen onClose={() => setActiveTool(null)}
           currentLesson={isYearSection ? currentLesson : null}
           curriculumLessons={curriculumLessons} config={config}
+        />}
+        {activeTool === 'agent' && <DocumentAgentDrawer
+          isOpen onClose={() => setActiveTool(null)}
+          selectedLevel={isYearSection ? selectedLevel : undefined}
+          showToast={showToast}
+        />}
+        {activeTool === 'grading' && <TeacherAssistantDrawer
+          isOpen onClose={() => setActiveTool(null)}
+          config={config}
+          selectedLevel={isYearSection ? selectedLevel : undefined}
+          showToast={showToast}
         />}
       </Suspense>
 

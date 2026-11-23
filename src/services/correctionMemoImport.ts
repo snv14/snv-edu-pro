@@ -1,5 +1,6 @@
 import { CorrectionMemoData, INTEGRATION_CRITERIA, examStructure, fillFromPlatform, uid } from './correctionMemoModel';
 import { LessonMemo, MemoConfig } from '../types';
+import type { AgentAnalysis, AgentReadResponse } from './documentAgent';
 
 export interface MappedQuestion {
   number: string;
@@ -231,6 +232,43 @@ export interface ImportCorrectionArgs {
   current: CorrectionMemoData;
   lesson?: LessonMemo | null;
   config?: MemoConfig;
+  /** قراءة عبر وكيل المستندات المحلي بدل مسار التحليل العادي. */
+  viaAgent?: boolean;
+}
+
+/** تحويل تحليل وكيل المستندات إلى صيغة المصدر التي يستهلكها قالب التصحيح. */
+export function correctionMappingFromAgentAnalysis(
+  analysis: AgentAnalysis,
+  fileName: string,
+): CorrectionSourceMapping | null {
+  if (!analysis.exercises.length) return null;
+  const best = analysis.matches[0];
+  const baseName = fileName ? fileName.replace(/\.[^.]+$/, '') : analysis.title;
+  return {
+    title: baseName,
+    meta: {
+      level: analysis.levelLabel,
+      midan: best?.midan || '',
+      maqta: best?.maqta || '',
+      kafaa: best?.kafaa || '',
+      mawrid: best?.mawrid || '',
+      term: '',
+      duration: '',
+      title: baseName,
+    },
+    exercises: analysis.exercises.map(exercise => ({
+      number: exercise.number,
+      title: exercise.title,
+      kind: exercise.kind,
+      questions: exercise.questions.map(question => ({
+        number: question.number,
+        text: question.text,
+        points: question.points === null ? undefined : question.points,
+      })),
+    })),
+    totalPoints: analysis.totalPoints ?? (analysis.pointsSum > 0 ? analysis.pointsSum : undefined),
+    source: 'file',
+  };
 }
 
 /**
@@ -239,7 +277,7 @@ export interface ImportCorrectionArgs {
  * نوع الورقة. أي فشل يُعلن صراحة، ولا تُملأ خانات بالظن.
  */
 export async function importCorrectionFile(args: ImportCorrectionArgs): Promise<ExtractionOutcome> {
-  const { file, dataUrl, examType, current, lesson, config } = args;
+  const { file, dataUrl, examType, current, lesson, config, viaAgent = false } = args;
   const base = fillFromPlatform(current, { config, lesson, level: lesson?.level }).data;
   let mapping: CorrectionSourceMapping | null = null;
   let notice = '';
@@ -252,9 +290,37 @@ export async function importCorrectionFile(args: ImportCorrectionArgs): Promise<
     if (!mapping) {
       notice = 'لم أتعرف على تمارين مرقّمة في الملف النصي. حرّر التمارين يدويًا.';
     }
+  } else if (viaAgent) {
+    try {
+      const response = await fetch('/api/agent/read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: file.name,
+          mimeType: file.type,
+          dataUrl,
+          examType,
+          level: lesson?.level || '',
+        }),
+      });
+      const payload = await response.json().catch(() => ({} as AgentReadResponse));
+      if (!response.ok) {
+        notice = typeof (payload as any)?.error === 'string'
+          ? `تعذر على وكيل المستندات قراءة الملف: ${(payload as any).error}. أدخل التمارين يدويًا.`
+          : 'تعذر على وكيل المستندات قراءة الملف. أدخل التمارين يدويًا.';
+      } else if ((payload as AgentReadResponse)?.read?.needsVision) {
+        notice = 'وكيل المستندات قرأ الملف لكن الصور والوثائق المصوّرة تحتاج OCR أو إدخال النص يدويًا. لم يُملأ القالب.';
+      } else {
+        const agentAnalysis = (payload as AgentReadResponse)?.analysis;
+        mapping = agentAnalysis ? correctionMappingFromAgentAnalysis(agentAnalysis, file.name) : null;
+        if (!mapping) notice = 'لم يستخرج وكيل المستندات تمارين مرقّمة من الملف. أدخل التمارين يدويًا أو الصق النص.';
+      }
+    } catch {
+      notice = 'تعذر الاتصال بوكيل المستندات. أدخل التمارين يدويًا.';
+    }
   } else {
     try {
-      const response = await fetch('/api/gemini/analyze-correction-source', {
+      const response = await fetch('/api/correction/analyze-source', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -274,9 +340,9 @@ export async function importCorrectionFile(args: ImportCorrectionArgs): Promise<
               meta: normalizeMeta(parsed),
               exercises,
               totalPoints: parsed?.totalPoints,
-              source: 'ai',
+              source: payload?.provider === 'local' ? 'file' : 'ai',
             };
-            usedAI = true;
+            usedAI = payload?.provider !== 'local';
           } else {
             notice = 'لم أستخرج أسئلة قابلة للاعتماد من الملف. أدخل التمارين يدويًا.';
           }
@@ -287,7 +353,7 @@ export async function importCorrectionFile(args: ImportCorrectionArgs): Promise<
         const body = await response.json().catch(() => ({}));
         providerError = typeof body?.error === 'string' ? body.error : '';
         if (response.status === 503) {
-          notice = 'قراءة الصور وPDF وWord تحتاج مزوّد ذكاء اصطناعي مضبوطًا على الخادم (GEMINI_API_KEY)، وهو غير متوفر حاليًا. يمكنك إدخال التمارين يدويًا ثم استعمال «تعبئة من قاعدة البيانات» و«اقتراح التنقيط».';
+          notice = 'لم أقرأ تمارين من هذا الملف. الصور والوثائق المصوّرة تحتاج OCR أو نصًا بديلًا يدويًا، أما PDF النصي وWord فيُقرآن محليًا. أدخل التمارين يدويًا أو الصق النص ثم استعمل «تعبئة من قاعدة البيانات» و«اقتراح التنقيط».';
         } else if (/\.doc$/i.test(file.name)) {
           notice = 'صيغة .doc القديمة غير مدعومة. احفظ الملف بصيغة .docx أو PDF ثم أعد الاستيراد.';
         } else {
@@ -396,9 +462,11 @@ export async function importCorrectionFile(args: ImportCorrectionArgs): Promise<
     });
   }
 
-  const summary = usedAI
-    ? 'قُرئ الملف عبر خدمة التحليل، وعُبّئت الحقول التربوية المتاحة. راجع كل سؤال ونقطة قبل الاعتماد.'
-    : 'استُخرجت التمارين من الملف النصي؛ راجعها قبل الاعتماد.';
+  const summary = viaAgent
+    ? 'قرأ وكيل المستندات الملف محليًا وعبّأ قالب التصحيح من قاعدة المنصة. راجع كل سؤال ونقطة قبل الاعتماد.'
+    : usedAI
+      ? 'قُرئ الملف عبر خدمة التحليل، وعُبّئت الحقول التربوية المتاحة. راجع كل سؤال ونقطة قبل الاعتماد.'
+      : 'قُرئ الملف محليًا داخل المنصة، واستُخرجت التمارين والنقاط دون مزوّد خارجي. راجعها قبل الاعتماد.';
 
   return {
     data,

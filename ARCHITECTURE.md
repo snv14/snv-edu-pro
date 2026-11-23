@@ -32,8 +32,8 @@
 ```
 
 ## الملفات
-- **components**: `AIAssistantChat.tsx`, `KnowledgeBasePanel.tsx`, `AccountSettings.tsx`, `AnnualDistribution.tsx`, `Auth.tsx`, `CalendarAdjustmentModal.tsx`, `CorrectionMemoDrawer.tsx`, `CurriculumDatabaseManager.tsx`, `DailyLogSheetTemplate.tsx`, `DailyLogbook.tsx`, `ErrorBoundary.tsx`, `FirebaseDataSync.tsx`, `InteractiveMaqta1.tsx`, `LevelsHomePage.tsx`, `MemoSheet.tsx`, `OfficialAnnualDistribution.tsx`, `PedagogicalNoteModal.tsx`, `PlatformInfoModal.tsx`, `PlatformNavigationDrawer.tsx`, `PreviewModal.tsx`, `SidebarControls.tsx`, `SourceMemo1AMViewer.tsx`, `TeacherOfficialStamp.tsx`, `UserProfile.tsx`
-- **services**: `aiProviderRegistry.ts`, `aiSourcePriority.ts`, `conversationHistory.ts`, `correctionMemoAi.ts`, `correctionMemoImport.ts`, `correctionMemoModel.ts`, `expertLabStore.ts`, `geminiPedagogicalService.ts`, `geminiPrompts.ts`, `knowledgeBase.ts`, `knowledgeLibraryStore.ts`, `knowledgeOfficialSources.ts`, `knowledgeQuickTasks.ts`, `knowledgeSupplements.ts`, `memoAttachmentStore.ts`, `memoLearningStore.ts`, `memoSuggestionEngine.ts`, `officialPedagogicalSources.ts`, `scienceMemoModelLibrary.ts`, `smartAi.ts`
+- **components**: `AIAssistantChat.tsx`, `TeacherAssistantDrawer.tsx`, `KnowledgeBasePanel.tsx`, `AccountSettings.tsx`, `AnnualDistribution.tsx`, `Auth.tsx`, `CalendarAdjustmentModal.tsx`, `CorrectionMemoDrawer.tsx`, `CurriculumDatabaseManager.tsx`, `DailyLogSheetTemplate.tsx`, `DailyLogbook.tsx`, `ErrorBoundary.tsx`, `FirebaseDataSync.tsx`, `InteractiveMaqta1.tsx`, `LevelsHomePage.tsx`, `MemoSheet.tsx`, `OfficialAnnualDistribution.tsx`, `PedagogicalNoteModal.tsx`, `PlatformInfoModal.tsx`, `PlatformNavigationDrawer.tsx`, `PreviewModal.tsx`, `SidebarControls.tsx`, `SourceMemo1AMViewer.tsx`, `TeacherOfficialStamp.tsx`, `UserProfile.tsx`
+- **services**: `aiProviderRegistry.ts`, `aiSourcePriority.ts`, `conversationHistory.ts`, `teacherAssistantStore.ts`, `teacherAssistantTools.ts`, `teacherAssistantEngine.ts`, `correctionMemoAi.ts`, `correctionMemoImport.ts`, `correctionMemoModel.ts`, `expertLabStore.ts`, `geminiPedagogicalService.ts`, `geminiPrompts.ts`, `knowledgeBase.ts`, `knowledgeLibraryStore.ts`, `knowledgeOfficialSources.ts`, `knowledgeQuickTasks.ts`, `knowledgeSupplements.ts`, `memoAttachmentStore.ts`, `memoLearningStore.ts`, `memoSuggestionEngine.ts`, `officialPedagogicalSources.ts`, `scienceMemoModelLibrary.ts`, `smartAi.ts`
 - **types**: `pedagogicalNote.ts`, `knowledge.ts` (عائلات المصادر، أنواع المعلومة، نتائج الاستخراج)
 - **data (القاعدة الموحدة)**: `platform/index.ts` (العائلات الأربع بالترتيب + التغطية + الفجوات) · `curriculum/` (التدرجات السنوية الرسمية) · `memos/` (قاعدة المذكرات: `curriculumDb.ts` و`lessons*.ts` و`official_*.ts` و`diagrams*.ts` و`schema.ts`) · `official/` (مُولَّد بـ `scripts/ingest_official_pdfs.py`: `types.ts` + `index.ts` فيه `OFFICIAL_SOURCES_MANIFEST` و`OFFICIAL_SOURCE_LOADERS` بمحمِّلات `import()` كسولة + 11 وحدة صفحات حرفية) · `knowledgeBaseCorpus.ts` (الملخصات المنهجية للوثيقة المرافقة ودليل الأستاذ وبنية المذكرة)
 - **data (قاعدة الدفتر الخاصة)**: `logbook/` — `dailyLogbookProgram1am…4am.ts` و`dailyLogData.ts` و`index.ts` الذي يصرّح بما يملكه الدفتر وما يشاركه مع القاعدة الموحدة
@@ -67,12 +67,35 @@
 |---|---|
 | `POST /api/gemini/generate` | توليد المذكرة البيداغوجية (JSON) |
 | `POST /api/gemini/smart-assistant` | المساعد الخبير (نص + مرفقات + بحث ويب + قاعدة المعرفة) |
-| `POST /api/gemini/analyze-correction-source` | تحليل ورقة الفرض/الاختبار |
+| `POST /api/correction/analyze-source` | تحليل ورقة الفرض/الاختبار محليًا (PDF نصي/Word/نص) دون مزوّد |
 | `POST /api/gemini/generate-pedagogical-note` | توليد المذكرة عبر المزودات الاحتياطية |
 | `GET /api/gemini/assistant-status` · `GET /api/gemini/knowledge-status` · `GET /api/ai/providers` | حالات المزودات ولقطة المعرفة |
 | `GET /api/knowledge/status` | أحجام فهرس قاعدة المعرفة ووثائقه + كتلة `officialSources` (بيان الوثائق الرسمية وصفحاتها وجودتها) |
 | `POST /api/knowledge/search` | بحث حر في قاعدة المعرفة |
 | `POST /api/knowledge/extract` | استخراج موجه يعيد عدة احتمالات موثقة |
+
+## المساعد التربوي (التصحيح والدرجات)
+
+وكيل محلي داخل المنصة يقرأ طلبات الأستاذ بالعربية ويستدعي أدوات محدودة على سجلات محلية
+(`src/services/teacherAssistantStore.ts` في localforage)، بلا أي مزوّد ذكاء اصطناعي وبلا مخالطة
+لبقية قاعدة البيانات:
+
+| الأداة | الوظيفة |
+|---|---|
+| `getUserRole` | التحقق من دور المستخدم قبل أي عملية حساسة |
+| `searchStudent` | البحث بالاسم أو رقم القيد، مع تصفية القسم |
+| `getAssignment` · `getRubric` | الفرض وأسئلته، وسلّم تصحيح من عناصر الأستاذ (أو سلّم مقترح **غير معتمد**) |
+| `getSubmission` | إجابة الطالب المسجّلة ونصّها |
+| `proposeGrade` | اقتراح درجات لكل سؤال مع تعليل إلزامي، بحالة «بانتظار المراجعة» |
+| `getReviewStatus` | حالة الاقتراح والدرجة النهائية |
+| `finalizeGrade` | تثبيت نهائي **فقط** بعد اعتماد الأستاذ وتأكيد صريح وهوية الأستاذ نفسه |
+| `sendNotification` | تنبيه إلى حساب موجود في المنصة |
+
+الاقتراح يُحسب بمطابقة نص الإجابة مع عناصر السلّم المعتمدة (كل عنصر بنقطة جزئية)، ويُعلن ما غاب
+بدل التخمين؛ وكل ما لا يوجد في السجل يُصرَّح بعدم توفره. المحرّك `src/services/teacherAssistantEngine.ts`
+يفهم أوامر مثل «صحح سليم في الفرض الأول» و«الحالة» و«اعتمد» و«ثبّت» و«نبّهني»، والواجهة
+`src/components/TeacherAssistantDrawer.tsx` (محادثة + جدول تصحيح قابل للتعديل + اعتماد/رفض/تثبيت +
+إدخال الطلبة والفروض والإجابات). الاختبارات: `tests/teacherAssistant.test.ts`.
 
 ## القاعدة الموحدة للمنصة وقاعدة الدفتر الخاصة
 

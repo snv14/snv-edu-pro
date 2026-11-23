@@ -202,7 +202,7 @@ export interface CorrectionSourceAnalysis {
 
 export async function analyzeCorrectionSource(request: CorrectionMemoRequest): Promise<CorrectionSourceAnalysis | null> {
   try {
-    const response = await fetch('/api/gemini/analyze-correction-source', {
+    const response = await fetch('/api/correction/analyze-source', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
