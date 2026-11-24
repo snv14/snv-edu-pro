@@ -461,7 +461,7 @@ export const KnowledgeBasePanel: React.FC<Props> = ({
               </span>
               {document.url ? (
                 <a href={document.url} target="_blank" rel="noreferrer" className="shrink-0 inline-flex items-center gap-1 text-[9.5px] text-blue-700 hover:underline">
-                  المصدر <ExternalLink className="w-3 h-3" />
+                  المصدر <ExternalLink className="w-3.5 h-3.5" />
                 </a>
               ) : (
                 <span className="shrink-0 text-[9.5px] text-slate-400">{document.chunkCount} مقطع</span>

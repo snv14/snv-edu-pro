@@ -29,6 +29,8 @@ import {
   Download,
   PenTool,
   Trash2,
+  MoreVertical,
+  Archive,
 } from 'lucide-react';
 import { MemoConfig } from '../types';
 import { TeacherOfficialStamp } from './TeacherOfficialStamp';
@@ -53,7 +55,8 @@ import { SelectionPenStrip } from './HandwrittenText';
 import { HandwritingStylePanel } from './HandwritingStylePanel';
 import { recallActivityBundle } from '../data/archive1am';
 import type { ActivityRecallBundle } from '../data/memos/archiveSchema';
-import { PageTemplateSwitcher } from './ActionMenu';
+import { ActionMenu, PageTemplateSwitcher } from './ActionMenu';
+import { FlagRibbon } from './FlagRibbon';
 import { usePageTemplate } from '../hooks/usePageTemplate';
 import { DocxFontFallbackModal, useDocxFontFallbackDialog } from './DocxFontFallbackModal';
 import { DocxFontEmbedError } from '../utils/docxFontEmbed';
@@ -2281,10 +2284,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       >
         <div>
           {/* Top Algerian Flag Ribbon */}
-          <div className="h-1.5 flex shrink-0">
-            <div className="flex-1 bg-[#006233]" />
-            <div className="flex-1 bg-[#D21034]" />
-          </div>
+          <FlagRibbon className="h-1.5" />
 
           <div className="px-6 sm:px-8 pt-3.5">
             {/* Header with Science Graphics and Official Republic text */}
@@ -2510,7 +2510,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
           <div className="rounded-lg border border-[#bae6fd] overflow-hidden mb-1.5">
             <div className="bg-[#0284c7] text-white px-2.5 py-1 flex items-center justify-between text-[10px] font-bold">
               <span className="flex items-center gap-1.5">
-                <TableIcon className="w-3 h-3" />
+                <TableIcon className="w-3.5 h-3.5" />
                 جدول استعمال الزمن الأسبوعي للأستاذ (الأحد — الخميس)
               </span>
               <span className="text-[9px] bg-white/20 px-2 py-0 rounded-full font-bold">
@@ -2873,10 +2873,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
       `}</style>
 
       {/* Algerian Flag Ribbon at Top */}
-      <div className="w-full h-1 flex no-print">
-        <div className="flex-1 bg-[#006233]" />
-        <div className="flex-1 bg-[#D21034]" />
-      </div>
+      <FlagRibbon />
 
       {/* Header Banner */}
       <header className="bg-white border-b border-zinc-200">
@@ -3076,7 +3073,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                         onClick={handleAddMorningRow}
                         className="inline-flex items-center gap-1 bg-amber-600 hover:bg-amber-700 text-white px-3 py-1 rounded-full text-[10px] font-bold shadow-sm cursor-pointer"
                       >
-                        <Plus className="w-3 h-3" />
+                        <Plus className="w-3.5 h-3.5" />
                         <span>إضافة صباح</span>
                       </button>
                     )}
@@ -3087,7 +3084,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                       <thead>
                         <tr className="bg-[#c7832e] text-white">
                           <th className="border border-[#a86b24] px-2 py-1.5 font-bold w-[115px] sticky right-0 bg-[#92400e] z-10">
-                            <Clock className="w-3 h-3 inline ml-1" /> التوقيت
+                            <Clock className="w-3.5 h-3.5 inline ml-1" /> التوقيت
                           </th>
                           {WEEK_DAYS.map((day) => (
                             <th
@@ -3185,7 +3182,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                         onClick={handleAddAfternoonRow}
                         className="inline-flex items-center gap-1 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded-full text-[10px] font-bold shadow-sm cursor-pointer"
                       >
-                        <Plus className="w-3 h-3" />
+                        <Plus className="w-3.5 h-3.5" />
                         <span>إضافة مساء</span>
                       </button>
                     )}
@@ -3196,7 +3193,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                       <thead>
                         <tr className="bg-[#5b6fb5] text-white">
                           <th className="border border-[#465995] px-2 py-1.5 font-bold w-[115px] sticky right-0 bg-[#312e81] z-10">
-                            <Clock className="w-3 h-3 inline ml-1" /> التوقيت
+                            <Clock className="w-3.5 h-3.5 inline ml-1" /> التوقيت
                           </th>
                           {WEEK_DAYS.map((day) => (
                             <th
@@ -3371,7 +3368,7 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                       onClick={() => setHolidays((prev) => prev.filter((_, i) => i !== idx))}
                       className="p-1 text-zinc-400 hover:text-red-600 cursor-pointer"
                     >
-                      <X className="w-3 h-3" />
+                      <X className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 ))}
@@ -3751,46 +3748,49 @@ export const DailyLogbook: React.FC<DailyLogbookProps> = ({
                           <option value="completed">منجزة</option>
                           <option value="postponed">مؤجلة (ترحيل)</option>
                         </select>
-                        {r.progressionUnitId && (
-                          <button
-                            type="button"
-                            onClick={() => handleReorganizeRow(r.id, { extraSessionsForUnit: 1, newStatus: 'in_progress' })}
-                            className="bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 rounded-md px-2 py-1 text-[10.5px] font-bold cursor-pointer"
-                            title="تمديد هذا الدرس بحصة إضافية وإعادة جدولة الحصص اللاحقة تلقائياً"
-                          >
-                            +1 حصة وترحيل اللاحق
-                          </button>
-                        )}
-                        {r.level === '1م' && (r.sourceActivityId || r.sourceLearningUnitId) && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const bundle =
-                                (r.sourceActivityId && recallActivityBundle(r.sourceActivityId)) ||
-                                (r.sourceLearningUnitId && recallActivityBundle(r.sourceLearningUnitId)) ||
-                                null;
-                              if (bundle) {
-                                setRecalled1amBundle(bundle);
-                              } else {
-                                showToast('لا تتوفر حزمة أرشيف مطابقة لهذه الحصة حالياً');
-                              }
-                            }}
-                            className="bg-sky-50 hover:bg-sky-100 text-sky-900 border border-sky-300 rounded-md px-2 py-1 text-[10.5px] font-bold cursor-pointer"
-                            title="استدعاء التجارب والصور الأصلية والجداول والتقويم من أرشيف السنة الأولى متوسط"
-                          >
-                            موارد الأرشيف (1م)
-                          </button>
-                        )}
-                        {String(r.id).startsWith('manual-') && (
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteManualLesson(r.id)}
-                            className="inline-flex items-center gap-1 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-md px-2 py-1 text-[10.5px] font-bold cursor-pointer"
-                            title="حذف الحصة اليدوية من الدفتر"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                            <span>حذف</span>
-                          </button>
+                        {(r.progressionUnitId ||
+                          (r.level === '1م' && (r.sourceActivityId || r.sourceLearningUnitId)) ||
+                          String(r.id).startsWith('manual-')) && (
+                          <ActionMenu
+                            label={`إجراءات الحصة ${r.dateStr}`}
+                            triggerIcon={<MoreVertical className="w-4 h-4" aria-hidden="true" />}
+                            items={[
+                              ...(r.progressionUnitId
+                                ? [{
+                                    label: '+1 حصة وترحيل اللاحق',
+                                    title: 'تمديد هذا الدرس بحصة إضافية وإعادة جدولة الحصص اللاحقة تلقائياً',
+                                    icon: <Plus className="w-4 h-4 text-emerald-700" aria-hidden="true" />,
+                                    onSelect: () => handleReorganizeRow(r.id, { extraSessionsForUnit: 1, newStatus: 'in_progress' }),
+                                  }]
+                                : []),
+                              ...(r.level === '1م' && (r.sourceActivityId || r.sourceLearningUnitId)
+                                ? [{
+                                    label: 'موارد الأرشيف (1م)',
+                                    title: 'استدعاء التجارب والصور الأصلية والجداول والتقويم من أرشيف السنة الأولى متوسط',
+                                    icon: <Archive className="w-4 h-4 text-sky-700" aria-hidden="true" />,
+                                    onSelect: () => {
+                                      const bundle =
+                                        (r.sourceActivityId && recallActivityBundle(r.sourceActivityId)) ||
+                                        (r.sourceLearningUnitId && recallActivityBundle(r.sourceLearningUnitId)) ||
+                                        null;
+                                      if (bundle) {
+                                        setRecalled1amBundle(bundle);
+                                      } else {
+                                        showToast('لا تتوفر حزمة أرشيف مطابقة لهذه الحصة حالياً');
+                                      }
+                                    },
+                                  }]
+                                : []),
+                              ...(String(r.id).startsWith('manual-')
+                                ? [{
+                                    label: 'حذف',
+                                    title: 'حذف الحصة اليدوية من الدفتر',
+                                    icon: <Trash2 className="w-4 h-4 text-[#D21034]" aria-hidden="true" />,
+                                    onSelect: () => handleDeleteManualLesson(r.id),
+                                  }]
+                                : []),
+                            ]}
+                          />
                         )}
                       </div>
                     </div>

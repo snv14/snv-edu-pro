@@ -380,21 +380,23 @@ export const PedagogicalNoteModal: React.FC<Props> = ({
                 <div className="text-[10px] text-slate-600">{suggestionReport?.verificationStatus === 'verified' ? 'المصادر متوافقة في البيانات المتاحة.' : 'توجد عناصر تحتاج مراجعة؛ لا يتم تعديل البيانات الرسمية تلقائياً.'}</div>
               </div>
             </div>
-            {suggestionReport?.suggestions.length ? <div className="bg-white rounded-xl border p-3 space-y-2">
-              <div className="font-black text-xs">مقترحات قابلة للتعلم من قرار الأستاذ</div>
+            {suggestionReport?.suggestions.length ? <details className="bg-white rounded-2xl border p-3">
+              <summary className="cursor-pointer font-black text-xs text-emerald-800 hover:text-emerald-950 focus-visible:outline-2 focus-visible:outline-emerald-700">اقتراحات الذكاء الاصطناعي — مقترحات قابلة للتعلم من قرار الأستاذ ({suggestionReport.suggestions.length})</summary>
+              <div className="space-y-2 pt-2">
               {suggestionReport.suggestions.map((item: MemoSuggestion) => <div key={item.id} className="border rounded-lg p-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div><div className="text-[10px] font-black text-slate-900">{item.title}</div><div className="text-[10px] text-slate-600">{item.description}</div></div>
                   <span className="text-[9px] bg-slate-100 rounded px-1.5 py-0.5">{item.sourceLabel}</span>
                 </div>
                 <div className="text-[9px] text-slate-500 mt-1">لماذا؟ {item.reason}</div>
-                <div className="flex gap-1 mt-2">
+                <div className="flex gap-2 mt-2">
                   <button type="button" onClick={async()=>{await recordSuggestionDecision({suggestionId:item.id,category:item.category,decision:'accepted',gradeLevel:selectedGrade,topic:topic.trim(),sourceType:item.sourceType});showToast('تم تسجيل اعتماد الاقتراح؛ لم يتم تعديل المصدر الرسمي تلقائياً.');}} className="px-2 py-1 rounded bg-emerald-700 text-white text-[9px] font-black">اعتماد</button>
                   <button type="button" onClick={async()=>{await recordSuggestionDecision({suggestionId:item.id,category:item.category,decision:'rejected',gradeLevel:selectedGrade,topic:topic.trim(),sourceType:item.sourceType});showToast('تم تسجيل رفض الاقتراح للتعلم المستقبلي.');}} className="px-2 py-1 rounded bg-white border text-slate-700 text-[9px] font-black">رفض</button>
                   <button type="button" onClick={async()=>{const edited=window.prompt('اكتب التعديل المقترح:',item.description);if(edited!==null){await recordSuggestionDecision({suggestionId:item.id,category:item.category,decision:'edited',gradeLevel:selectedGrade,topic:topic.trim(),sourceType:item.sourceType,editedText:edited});showToast('تم تسجيل تعديلك كتعلم للمقترحات القادمة.');}}} className="px-2 py-1 rounded bg-amber-50 border border-amber-200 text-amber-800 text-[9px] font-black">تعديل</button>
                 </div>
               </div>)}
-            </div> : null}
+              </div>
+            </details> : null}
           </div>}
         </div>
 
@@ -454,16 +456,19 @@ export const PedagogicalNoteModal: React.FC<Props> = ({
             </div>
           </div>
 
-          <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-3 print:hidden">
-            <div className="flex items-center justify-between gap-2">
+          <details className="rounded-2xl border border-emerald-100 bg-white p-3 print:hidden">
+            <summary className="cursor-pointer text-[11px] font-bold text-emerald-800 hover:text-emerald-950 focus-visible:outline-2 focus-visible:outline-emerald-700">مكتبة النماذج</summary>
+            <div className="flex items-center justify-between gap-2 pt-2">
               <div><div className="text-xs font-black text-blue-950">مكتبة نماذج مذكرات علوم الطبيعة والحياة</div><div className="text-[10px] text-blue-800">نماذج استرشادية منفصلة عن المصادر الرسمية.</div></div>
               <button type="button" onClick={() => setShowModelLibrary(v => !v)} className="px-2.5 py-1 rounded-lg bg-blue-700 text-white text-[10px] font-black">فتح المكتبة</button>
             </div>
             {showModelLibrary && <div className="mt-3 space-y-2"><div className="relative"><Search size={13} className="absolute right-2 top-2.5 text-gray-400"/><input value={modelQuery} onChange={e => setModelQuery(e.target.value)} placeholder="ابحث عن نموذج..." className="w-full border border-blue-200 rounded-lg py-2 pr-7 pl-2 text-[11px] outline-none"/></div><div className="max-h-48 overflow-y-auto space-y-1.5">{getScienceMemoModels(selectedGrade).filter((m: ScienceMemoModel) => !modelQuery || (m.title + m.sections.join(' ')).includes(modelQuery)).map((m: ScienceMemoModel) => <button key={m.id} type="button" onClick={() => { setSelectedModel(m); setTopic(m.title); setShowModelLibrary(false); showToast('تم اختيار النموذج الاسترشادي. أدخل المورد الفعلي من التدرج قبل التوليد.'); }} className="w-full text-right p-2 rounded-lg bg-white border border-blue-100 hover:border-blue-300"><div className="text-[10px] font-black text-gray-800">{m.title}</div><div className="text-[9px] text-blue-700 mt-0.5">{getMemoModelStatusLabel(m.status)} • {m.sections.length} عناصر</div></button>)}</div></div>}
-          </div>
+          </details>
 
           {/* مصادر المذكرة: ملفات، صور، لصق من الحافظة، واسترداد محلي */}
-          <div className={`rounded-xl border p-3 space-y-2 ${isDragging ? 'border-emerald-500 bg-emerald-100/70' : 'border-gray-200 bg-white'}`}>
+          <details className={`rounded-2xl border p-3 ${isDragging ? 'border-emerald-500 bg-emerald-100/70' : 'border-emerald-100 bg-white'}`}>
+            <summary className="cursor-pointer text-[11px] font-bold text-emerald-800 hover:text-emerald-950 focus-visible:outline-2 focus-visible:outline-emerald-700">المرفقات{attachments.length > 0 ? ` (${attachments.length})` : ''}</summary>
+            <div className="space-y-2 pt-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <Paperclip size={15} className="text-emerald-700" />
@@ -530,7 +535,8 @@ export const PedagogicalNoteModal: React.FC<Props> = ({
                 </div>
               </details>
             )}
-          </div>
+            </div>
+          </details>
 
           {/* Tab Selector & Actions */}
           {note && (

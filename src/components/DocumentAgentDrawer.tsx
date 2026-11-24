@@ -298,7 +298,7 @@ export const DocumentAgentDrawer: React.FC<DocumentAgentDrawerProps> = ({
                         aria-label={`حذف ${record.title} من ذاكرة الوكيل`}
                         className="shrink-0 rounded p-0.5 text-slate-300 hover:bg-rose-50 hover:text-rose-600"
                       >
-                        <Trash2 className="w-3 h-3" />
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                     <p className="text-[9px] font-bold text-slate-400">

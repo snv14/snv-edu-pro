@@ -326,7 +326,7 @@ export const SourceGuide2AMViewer: React.FC<Props> = ({ lessons }) => {
               <span>وزارة التربية الوطنية — المفتشية العامة للتربية الوطنية / مديرية التعليم المتوسط</span>
             </div>
             <h1 className="text-xl md:text-2xl font-black flex items-center gap-2.5 text-white">
-              <BookOpen className="w-6 h-6 text-emerald-400 shrink-0" />
+              <BookOpen className="w-5 h-5 text-emerald-400 shrink-0" />
               <span>المخططات السنوية ودليل بناء التعلمات — السنة الثانية متوسط</span>
               <span className="text-xs px-2.5 py-1 rounded-full bg-emerald-500 text-slate-950 font-black">
                 وثيقة 2022/2023 الرسمية (13 صفحة)
@@ -518,11 +518,11 @@ export const SourceGuide2AMViewer: React.FC<Props> = ({ lessons }) => {
                               {seq.title}
                             </h2>
                             <span className="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
-                              <Calendar className="w-3 h-3" />
+                              <Calendar className="w-3.5 h-3.5" />
                               {seq.weeks} أسابيع
                             </span>
                             <span className="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200">
-                              <Clock className="w-3 h-3" />
+                              <Clock className="w-3.5 h-3.5" />
                               {seq.hours} ساعة
                             </span>
                           </div>

@@ -388,7 +388,7 @@ export const SourceGuide4AMViewer: React.FC<Props> = ({ lessons }) => {
               <span>مخططات سبتمبر 2022 الرسمية</span>
             </div>
             <h1 className="text-xl md:text-2xl font-black flex items-center gap-2.5 text-white">
-              <Award className="w-6 h-6 text-indigo-400 shrink-0" />
+              <Award className="w-5 h-5 text-indigo-400 shrink-0" />
               <span>المخططات السنوية ودليل بناء التعلمات — السنة الرابعة متوسط (4AM)</span>
               <span className="text-xs px-2.5 py-1 rounded-full bg-indigo-500 text-white font-black shadow">
                 المرجع الوزاري لشهادة BEM (13 صفحة)
@@ -594,11 +594,11 @@ export const SourceGuide4AMViewer: React.FC<Props> = ({ lessons }) => {
                               {seq.title}
                             </h2>
                             <span className="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-800 border border-indigo-200">
-                              <Clock className="w-3 h-3" />
+                              <Clock className="w-3.5 h-3.5" />
                               {seq.hours} ساعة
                             </span>
                             <span className="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
-                              <Calendar className="w-3 h-3" />
+                              <Calendar className="w-3.5 h-3.5" />
                               {seq.weeks}
                             </span>
                             <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
@@ -684,7 +684,7 @@ export const SourceGuide4AMViewer: React.FC<Props> = ({ lessons }) => {
                                         key={idx}
                                         className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-900 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-md"
                                       >
-                                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                                         <span>{crit}</span>
                                       </span>
                                     ))}

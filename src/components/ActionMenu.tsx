@@ -39,7 +39,7 @@ export const PageTemplateSwitcher: React.FC<{ className?: string }> = ({ classNa
 };
 
 /** Groups secondary actions without changing their handlers. Native details keeps keyboard access. */
-export const ActionMenu: React.FC<{ label: string; compactLabel?: string; items: ActionMenuItem[] }> = ({ label, compactLabel, items }) => {
+export const ActionMenu: React.FC<{ label: string; compactLabel?: string; items: ActionMenuItem[]; triggerIcon?: React.ReactNode }> = ({ label, compactLabel, items, triggerIcon }) => {
   const details = useRef<HTMLDetailsElement>(null);
   useEffect(() => {
     const onOutsideClick = (event: MouseEvent) => {
@@ -61,7 +61,16 @@ export const ActionMenu: React.FC<{ label: string; compactLabel?: string; items:
 
   return (
     <details ref={details} className="relative no-print print:hidden">
-      <summary className="list-none flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-[#cfe3dc] bg-white text-[#0a5f51] text-xs font-bold shadow-[0_1px_2px_rgba(11,31,28,0.04)] cursor-pointer hover:bg-[#eef5f2] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0e7a68] [&::-webkit-details-marker]:hidden">
+      {triggerIcon ? (
+        <summary
+          aria-label={label}
+          title={label}
+          className="list-none flex items-center justify-center w-8 h-8 rounded-full border border-[#cfe3dc] bg-white text-zinc-600 shadow-[0_1px_2px_rgba(11,31,28,0.04)] cursor-pointer hover:bg-[#eef5f2] hover:text-[#064e3b] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0e7a68] [&::-webkit-details-marker]:hidden"
+        >
+          {triggerIcon}
+        </summary>
+      ) : (
+      <summary className="list-none flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-[#cfe3dc] bg-white text-[#0a5f51] text-xs font-bold shadow-[0_1px_2px_rgba(11,31,28,0.04)] cursor-pointer hover:bg-[#eef5f2] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0e7a68] [&::-webkit-details-marker]:hidden">
         {compactLabel && compactLabel !== label ? (
           <>
             <span className="hidden sm:inline">{label}</span>
@@ -72,6 +81,7 @@ export const ActionMenu: React.FC<{ label: string; compactLabel?: string; items:
         )}
         <ChevronDown className="w-4 h-4" aria-hidden="true" />
       </summary>
+      )}
       <div className="absolute left-0 top-full mt-1 z-50 min-w-[180px] max-w-[90vw] rounded-xl border border-[#e2e8e5] bg-white p-1 shadow-xl">
         {items.map((item) => (
           <button key={item.label} id={item.id} type="button" title={item.title} onClick={() => {

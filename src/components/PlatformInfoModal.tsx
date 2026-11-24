@@ -198,7 +198,7 @@ export const PlatformInfoModal: React.FC<PlatformInfoModalProps> = ({
                       htmlFor="upload-designer-photo-modal"
                       className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-100/80 hover:bg-emerald-200 text-emerald-900 text-[11px] font-extrabold border border-emerald-300/60 cursor-pointer transition shadow-2xs"
                     >
-                      <Upload className="w-3 h-3" />
+                      <Upload className="w-3.5 h-3.5" />
                       <span>تحديث / رفع الصورة الأصلية</span>
                     </label>
                   </div>
@@ -278,7 +278,7 @@ export const PlatformInfoModal: React.FC<PlatformInfoModalProps> = ({
             <div className="space-y-4">
               {isSubmitted ? (
                 <div className="p-6 rounded-2xl bg-emerald-50 border border-emerald-200 text-center space-y-2">
-                  <CheckCircle2 className="w-10 h-10 text-emerald-600 mx-auto" />
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 mx-auto" />
                   <h4 className="font-black text-emerald-950 text-[16px]">تم إرسال رسالتكم بنجاح!</h4>
                   <p className="text-emerald-800 text-[13px]">
                     شكراً لتواصلكم زميلنا الأستاذ. سيتم أخذ مقترحكم بعين الاعتبار في التحديثات البيداغوجية القادمة.

@@ -36,6 +36,7 @@ import { ActionMenu, PageTemplateSwitcher } from './components/ActionMenu';
 import { PlatformInfoModal } from './components/PlatformInfoModal';
 import { UserProfile } from './components/UserProfile';
 import { FirebaseDataSync } from './components/FirebaseDataSync';
+import { FlagRibbon } from './components/FlagRibbon';
 import { useAuth } from './components/Auth';
 import { getFirebaseConfigStatus } from './firebase';
 import { loadCurriculumDatabase } from './data/memos/curriculumDb';
@@ -535,6 +536,7 @@ export const App: React.FC = () => {
 
       {/* Main Streamlined Sticky Header */}
       <header className="app-header sticky top-0 z-30">
+        <FlagRibbon />
         <div className="px-3 sm:px-4 md:px-6 min-h-14 sm:h-16 py-2 sm:py-0 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 sm:gap-4 max-w-[1400px] mx-auto w-full">
           {/* Right Section: Drawer Trigger + Brand or Active Context */}
           <div className="flex flex-1 items-center gap-2 sm:gap-3 min-w-0 overflow-hidden">

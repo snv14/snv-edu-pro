@@ -527,7 +527,7 @@ export const HandwritingStylePanel: React.FC<HandwritingStylePanelProps> = ({
                       className="text-slate-400 hover:text-red-600 cursor-pointer"
                       aria-label={`حذف ${preset.name}`}
                     >
-                      <Trash2 className="w-3 h-3" />
+                      <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 ))}

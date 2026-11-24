@@ -592,7 +592,7 @@ export const CorrectionMemoDrawer: React.FC<{
               </div>
               <div className="flex flex-wrap items-center gap-1.5">
                 <button type="button" onClick={applyPoints} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-700 text-white text-[10.5px] font-black">
-                  <CheckCircle2 className="w-3 h-3" /> تطبيق التنقيط على الخانات الفارغة
+                  <CheckCircle2 className="w-3.5 h-3.5" /> تطبيق التنقيط على الخانات الفارغة
                 </button>
                 <button type="button" onClick={() => setPointSuggestion(null)} className="text-[10px] font-black text-slate-500 hover:text-slate-800">تجاهل</button>
               </div>
@@ -683,7 +683,7 @@ export const CorrectionMemoDrawer: React.FC<{
                       draft.exercises = draft.exercises.filter(item => item.id !== exercise.id);
                       draft.resources = draft.resources.filter(item => item.exerciseLabel !== exercise.label);
                     })} className="px-2 py-1 rounded-lg bg-red-50 text-red-700 text-[10.5px] font-black inline-flex items-center gap-1">
-                      <Trash2 className="w-3 h-3" /> حذف التمرين
+                      <Trash2 className="w-3.5 h-3.5" /> حذف التمرين
                     </button>
                   </div>
                   {exercise.questions.map(question => (
@@ -691,11 +691,11 @@ export const CorrectionMemoDrawer: React.FC<{
                       <input value={question.number} onChange={event => mutate(draft => { const target = draft.exercises.find(item => item.id === exercise.id)?.questions.find(item => item.id === question.id); if (target) target.number = event.target.value; })} className="w-12 border border-slate-200 rounded-lg px-1.5 py-1 text-[11px] text-center" />
                       <input value={question.text} onChange={event => mutate(draft => { const target = draft.exercises.find(item => item.id === exercise.id)?.questions.find(item => item.id === question.id); if (target) target.text = event.target.value; })} className="flex-1 min-w-[180px] border border-slate-200 rounded-lg px-2 py-1 text-[11px]" placeholder="نص السؤال كما ورد في الورقة" />
                       <input value={question.points} onChange={event => mutate(draft => { const target = draft.exercises.find(item => item.id === exercise.id)?.questions.find(item => item.id === question.id); if (target) target.points = event.target.value; })} className="w-16 border border-slate-200 rounded-lg px-1.5 py-1 text-[11px] text-center" placeholder="ن" />
-                      <button type="button" onClick={() => mutate(draft => { const target = draft.exercises.find(item => item.id === exercise.id); if (target) target.questions = target.questions.filter(item => item.id !== question.id); })} aria-label="حذف السؤال" className="p-1.5 rounded-lg text-red-500 hover:bg-red-50"><Trash2 className="w-3 h-3" /></button>
+                      <button type="button" onClick={() => mutate(draft => { const target = draft.exercises.find(item => item.id === exercise.id); if (target) target.questions = target.questions.filter(item => item.id !== question.id); })} aria-label="حذف السؤال" className="p-1.5 rounded-lg text-red-500 hover:bg-red-50"><Trash2 className="w-3.5 h-3.5" /></button>
                     </div>
                   ))}
                   <button type="button" onClick={() => mutate(draft => { const target = draft.exercises.find(item => item.id === exercise.id); if (target) target.questions.push({ id: uid('q'), number: String(target.questions.length + 1), text: '', points: '', expected: '', source: 'template', needsReview: false }); })} className="inline-flex items-center gap-1 text-[10.5px] font-black text-emerald-800">
-                    <Plus className="w-3 h-3" /> إضافة سؤال
+                    <Plus className="w-3.5 h-3.5" /> إضافة سؤال
                   </button>
                 </div>
               </details>
