@@ -17,6 +17,11 @@
 @import "@fontsource/tajawal/800.css";
 @import "tailwindcss";
 
+@theme {
+  --font-sans: "Cairo", "Tajawal", "Noto Sans Arabic", "Segoe UI", Tahoma, Arial, sans-serif;
+  --font-serif: "Lateef", "Harmattan", "Noto Naskh Arabic", serif;
+}
+
 :root {
   --platform-ink: #0f172a;
   --platform-teal: #0f766e;
