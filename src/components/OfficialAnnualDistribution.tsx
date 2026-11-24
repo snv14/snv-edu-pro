@@ -573,7 +573,7 @@ export const OfficialAnnualDistribution: React.FC<Props> = ({ level, config, set
       `}</style>
 
       {pages.map((page, pageIndex) => (
-        <div key={pageIndex} className={`print-document annual-export-page page-sheet page-sheet--distribution relative z-10 p-[10mm] mb-8 print:bg-white print:border-none print:shadow-none print:m-0 ${orientation === 'portrait' ? 'w-[210mm] min-h-[297mm]' : 'w-[297mm] min-h-[210mm]'}`} style={{ pageBreakAfter: pageIndex < pages.length - 1 ? 'always' : 'auto' }}>
+        <div key={pageIndex} className={`print-document annual-export-page page-sheet page-sheet--distribution relative z-10 p-[10mm] mb-8 print:bg-white print:border-none print:shadow-none print:m-0 w-full max-w-full ${orientation === 'portrait' ? 'print:w-[210mm] print:max-w-none print:min-h-[297mm]' : 'print:w-[297mm] print:max-w-none print:min-h-[210mm]'}`} style={{ pageBreakAfter: pageIndex < pages.length - 1 ? 'always' : 'auto' }}>
           
           {/* Header */}
           <div className="text-center mb-3">

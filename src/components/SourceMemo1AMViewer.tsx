@@ -368,7 +368,7 @@ export const SourceMemo1AMViewer: React.FC<Props> = ({
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="p-3 rounded-2xl bg-emerald-600 text-white shadow-md shadow-emerald-200">
-                <Microscope className="w-6 h-6" />
+                <Microscope className="w-5 h-5" />
               </div>
               <div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -625,12 +625,12 @@ export const SourceMemo1AMViewer: React.FC<Props> = ({
                             </span>
                             {tableCount > 0 && (
                               <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-purple-50 text-purple-800 inline-flex items-center gap-1">
-                                <Table2 className="w-3 h-3" /> {tableCount} جدول
+                                <Table2 className="w-3.5 h-3.5" /> {tableCount} جدول
                               </span>
                             )}
                             {lessonMedia.length > 0 && (
                               <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-cyan-50 text-cyan-800 inline-flex items-center gap-1">
-                                <ImageIcon className="w-3 h-3" /> {lessonMedia.length} صورة أصلية
+                                <ImageIcon className="w-3.5 h-3.5" /> {lessonMedia.length} صورة أصلية
                               </span>
                             )}
                           </div>

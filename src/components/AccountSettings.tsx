@@ -473,7 +473,7 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
                   onClick={handleResetDesignerPhoto}
                   className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-700 text-[11.5px] font-bold hover:bg-slate-50 transition cursor-pointer"
                 >
-                  <RotateCcw className="w-3 h-3" />
+                  <RotateCcw className="w-3.5 h-3.5" />
                   <span>استعادة</span>
                 </button>
               </div>

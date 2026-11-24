@@ -470,7 +470,7 @@ export const SourceGuide3AMViewer: React.FC<Props> = ({ lessons }) => {
               <span>إشراف أ.د. فريدة خمار وتأليف مفتشي وأساتذة التعليم المتوسط</span>
             </div>
             <h1 className="text-xl md:text-2xl font-black flex items-center gap-2.5 text-white">
-              <BookOpen className="w-6 h-6 text-amber-400 shrink-0" />
+              <BookOpen className="w-5 h-5 text-amber-400 shrink-0" />
               <span>دليل استعمال الكتاب المدرسي ودليل الأستاذ — السنة الثالثة متوسط</span>
               <span className="text-xs px-2.5 py-1 rounded-full bg-amber-500 text-slate-950 font-black">
                 المرجع الوزاري الكامل (96 صفحة)
@@ -676,11 +676,11 @@ export const SourceGuide3AMViewer: React.FC<Props> = ({ lessons }) => {
                               {seq.title}
                             </h2>
                             <span className="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
-                              <Clock className="w-3 h-3" />
+                              <Clock className="w-3.5 h-3.5" />
                               {seq.hours} ساعة
                             </span>
                             <span className="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
-                              <Calendar className="w-3 h-3" />
+                              <Calendar className="w-3.5 h-3.5" />
                               {seq.weeks}
                             </span>
                           </div>

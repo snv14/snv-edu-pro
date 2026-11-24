@@ -627,7 +627,7 @@ export const AIAssistantDrawer: React.FC<{
                         : <p className="whitespace-pre-line leading-relaxed">{entry.text}</p>}
                       {entry.fromKnowledgeBase && (
                         <p className="mt-2 inline-flex items-center gap-1 text-[10px] font-black text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-1">
-                          <Database className="w-3 h-3" />
+                          <Database className="w-3.5 h-3.5" />
                           استخراج مباشر من قاعدة المعرفة (دون مزود ذكاء اصطناعي)
                         </p>
                       )}
@@ -663,7 +663,7 @@ export const AIAssistantDrawer: React.FC<{
                           aria-label="نسخ الرد"
                           className="inline-flex items-center gap-1 text-slate-500 hover:text-slate-800 transition"
                         >
-                          {copiedId === entry.id ? <Check className="w-3 h-3" /> : <Clipboard className="w-3 h-3" />}
+                          {copiedId === entry.id ? <Check className="w-3.5 h-3.5" /> : <Clipboard className="w-3.5 h-3.5" />}
                         </button>
                       )}
                     </div>
@@ -713,7 +713,7 @@ export const AIAssistantDrawer: React.FC<{
                     <span key={file.id} className="inline-flex items-center gap-1 max-w-full rounded-lg bg-teal-50 border border-teal-200 px-2 py-1 text-[10px] text-teal-900">
                       <span className="truncate max-w-[170px]">{file.name}</span>
                       <button type="button" onClick={() => setAttachments(previous => previous.filter(item => item.id !== file.id))} aria-label={`إزالة ${file.name}`}>
-                        <X className="w-3 h-3" />
+                        <X className="w-3.5 h-3.5" />
                       </button>
                     </span>
                   ))}
