@@ -150,7 +150,14 @@ export interface AssessmentHubProps {
   config: MemoConfig;
   curriculumLessons: LessonMemo[];
   initialLevel?: AssessmentLevelCode;
-  onOpenAssistant: (context: { prompt: string; level?: string; maqta?: string; mawrid?: string }) => void;
+  onOpenAssistant: (context: {
+    prompt: string;
+    level?: string;
+    maqta?: string;
+    mawrid?: string;
+    error?: string;
+    successRate?: string | number;
+  }) => void;
   showToast: (message: string) => void;
 }
 
@@ -594,6 +601,8 @@ export const AssessmentHub: React.FC<AssessmentHubProps> = ({
       level: exam.level,
       maqta: examMaqta(exam),
       mawrid: row.resource,
+      error: row.difficulty,
+      successRate: row.achievement,
     });
   };
 

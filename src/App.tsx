@@ -68,6 +68,8 @@ interface AssistantLaunchContext {
   maqta?: string;
   mawrid?: string;
   label?: string;
+  error?: string;
+  successRate?: string | number;
 }
 
 export const App: React.FC = () => {
@@ -1203,6 +1205,8 @@ export const App: React.FC = () => {
               level: context.level || selectedLevel,
               maqta: context.maqta,
               mawrid: context.mawrid,
+              error: context.error,
+              successRate: context.successRate,
               label: [context.level, context.maqta, context.mawrid].filter(Boolean).join(' · ') || 'تحليل التقويم',
             })}
             showToast={showToast}

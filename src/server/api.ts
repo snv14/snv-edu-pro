@@ -968,6 +968,37 @@ const agentMemoryRecall = (keywords: string[], memory: AgentMemoryHint[]) => {
     .slice(0, 3);
 };
 
+// قراءة نص وثيقة فقط (بلا تحليل): تستعملها مساحات معرفة المساعد الذكي.
+apiApp.post('/api/document/read', (req, res) => {
+  try {
+    const name = String(req.body?.name || 'document').slice(0, 200);
+    const mimeType = String(req.body?.mimeType || '');
+    const dataUrl = String(req.body?.dataUrl || '');
+    const inlineText = String(req.body?.text || '').slice(0, 120_000);
+    if (!inlineText.trim() && !dataUrl.startsWith('data:')) return res.status(400).json({ error: 'الملف غير صالح (dataUrl مطلوب).' });
+    if (dataUrl.length > 28_000_000) return res.status(413).json({ error: 'حجم الملف كبير جدًا (الحد 20 ميغابايت).' });
+    const base64 = dataUrl.split(',')[1] || '';
+
+    const read: DocumentReadResult = inlineText.trim()
+      ? { format: 'text', text: inlineText, chars: inlineText.length, quality: measureText(inlineText), needsVision: false, notes: [] }
+      : readDocument({ buffer: Buffer.from(base64, 'base64'), name, mime: mimeType });
+
+    res.json({
+      text: read.text,
+      format: read.format,
+      chars: read.chars,
+      pages: read.pages,
+      quality: read.quality,
+      needsVision: read.needsVision,
+      notes: read.notes,
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'تعذر قراءة الملف';
+    console.error('[Document read error]:', message);
+    res.status(500).json({ error: message });
+  }
+});
+
 // حالة الوكيل: ما يقرأه محليًا، وما يحتاج مزوّد رؤية، وحجم قاعدة المنصة.
 apiApp.get('/api/agent/status', async (_req, res) => {
   let lessons = 0;

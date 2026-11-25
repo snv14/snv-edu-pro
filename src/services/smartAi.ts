@@ -39,6 +39,10 @@ export interface SmartAiKnowledgeOptions {
   topK?: number;
   /** الاعتماد على الاستخراج المباشر من القاعدة دون استدعاء مزود الذكاء الاصطناعي. */
   localOnly?: boolean;
+  /** سياق إضافي من Connector آخر (مثل مساحة معرفة) يُلحق بسياق القاعدة. */
+  extraContext?: string;
+  /** مصادر إضافية تُعرض وتُعتمد في الاستشهادات دون إعادة فهرستها. */
+  extraReferences?: KnowledgeReference[];
 }
 
 export interface SmartAiRequest {
@@ -360,6 +364,15 @@ export async function askSmartAi(request: SmartAiRequest): Promise<SmartAiRespon
     await preloadOfficialSources();
   }
   const knowledge = prepareKnowledge(request);
+  const extraReferences = Array.isArray(request.knowledge?.extraReferences) ? request.knowledge!.extraReferences! : [];
+  const mergeReferences = (primary: KnowledgeReference[] | undefined): KnowledgeReference[] => {
+    const seen = new Set<string>();
+    return [...(primary || []), ...extraReferences].filter(reference => {
+      if (!reference?.id || seen.has(reference.id)) return false;
+      seen.add(reference.id);
+      return true;
+    });
+  };
 
   // وضع الاستخراج المباشر: جواب موثق من القاعدة دون انتظار مزود الذكاء الاصطناعي.
   // المرفقات تحتاج مزوداً يدعم الرؤية، لذلك تتجاوز هذا الوضع.
@@ -374,7 +387,7 @@ export async function askSmartAi(request: SmartAiRequest): Promise<SmartAiRespon
       usedWeb: false,
       usedAttachments: [],
       provider: 'knowledge-base',
-      knowledge: knowledge.references,
+      knowledge: mergeReferences(knowledge.references),
       localAnswer: true,
       extraction: knowledge.summary,
     };
@@ -408,6 +421,14 @@ export async function askSmartAi(request: SmartAiRequest): Promise<SmartAiRespon
       ].join('\n')
       : '';
 
+    const extraBlock = request.knowledge?.extraContext
+      ? [
+        '',
+        'مصادر إضافية من Connector آخر (وثائق الأستاذ في مساحة المعرفة) — استشهد بها كوثائق أستاذ لا كمنهاج رسمي:',
+        request.knowledge.extraContext,
+      ].join('\n')
+      : '';
+
     const prompt = [
       'أنت الآن تعمل كمساعد بيداغوجي خبير في صيغة دردشة تفاعلية (سؤال وجواب Q&A) للأستاذ في علوم الطبيعة والحياة للتعليم المتوسط بالجزائر (1AM–4AM).',
       'مهمتك: إجراء محادثة بيداغوجية تفاعلية حية، تجيب فيها على أي سؤال للأستاذ بدقة بالاستناد إلى جميع مصادر المنصة (ما عدا التدرج المستثنى)، بأسلوب محاورة علمي سلس ومباشر.',
@@ -433,6 +454,7 @@ export async function askSmartAi(request: SmartAiRequest): Promise<SmartAiRespon
       'نمط المهمة الحالي: ' + mode,
       MODE_INSTRUCTIONS[mode],
       knowledgeBlock,
+      extraBlock,
       '',
       'قالب الإجابة الافتراضي:',
       '1) الجواب/النتيجة المباشرة (مع الاحتمالات الموثقة مرقمة إن وُجد أكثر من احتمال).',
@@ -506,7 +528,7 @@ export async function askSmartAi(request: SmartAiRequest): Promise<SmartAiRespon
       usedAttachments: Array.isArray(data.usedAttachments) ? data.usedAttachments : [],
       provider: data.provider,
       fallbackNotice: data.fallbackNotice,
-      knowledge: knowledge?.references.length ? knowledge.references : serverKnowledge,
+      knowledge: mergeReferences(knowledge?.references.length ? knowledge.references : serverKnowledge),
       localAnswer: false,
       extraction: knowledge?.summary,
     };
@@ -525,7 +547,7 @@ export async function askSmartAi(request: SmartAiRequest): Promise<SmartAiRespon
         usedAttachments: [],
         provider: 'knowledge-base',
         fallbackNotice: `تعذر الوصول إلى مزود الذكاء الاصطناعي (${reason})، فعُرِضت نتائج البحث الموثقة في قاعدة المعرفة مباشرة. أعد المحاولة للحصول على تحليل أعمق.`,
-        knowledge: knowledge.references,
+        knowledge: mergeReferences(knowledge.references),
         localAnswer: true,
         extraction: knowledge.summary,
       };
