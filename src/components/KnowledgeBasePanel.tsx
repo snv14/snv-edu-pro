@@ -228,7 +228,10 @@ export const KnowledgeBasePanel: React.FC<Props> = ({
                 {KNOWLEDGE_KIND_LABELS[entry.kind] || entry.kind}
               </span>
               <span className="min-w-0">
-                {entry.title}
+                <a href={entry.url} target="_blank" rel="noreferrer" className="hover:underline" aria-label={`فتح المصدر: ${entry.title}`}>
+                  {entry.title}
+                  <ExternalLink className="inline-block w-3 h-3 mr-1" aria-hidden="true" />
+                </a>
                 <span className="block font-bold text-teal-700">
                   {entry.pages} صفحة · مطابقة {entry.quality}%
                   {entry.level !== 'all' ? ` · ${KNOWLEDGE_LEVEL_LABELS[entry.level as KnowledgeLevel]}` : ''}

@@ -42,6 +42,10 @@ test('the knowledge base panel shows the four source families, their sizes and t
   assert.match(markup, /دليل الأستاذ/);
   assert.match(markup, /المذكرات/);
   assert.match(markup, /التدرج والتوزيع السنوي/);
+  assert.match(markup, /href="\/assets\/official\/learning-plan-1am-2021-2022\.pdf"/);
+  assert.match(markup, /aria-label="فتح المصدر: [^"]*السنة الأولى متوسط \(2021\/2022\)"/);
+  assert.match(markup, /href="\/assets\/official\/learning-plan-3am-2021-2022\.pdf"/);
+  assert.match(markup, /aria-label="فتح المصدر: [^"]*السنة الثالثة متوسط \(2021\/2022\)"/);
   assert.match(markup, /اختبار البحث في القاعدة/);
   assert.match(markup, /إضافة وثيقة/);
   assert.match(markup, /الاستخراج المباشر دون ذكاء اصطناعي/);

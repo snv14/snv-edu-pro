@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { getSourceById } from '../src/services/officialPedagogicalSources';
 import {
   buildKnowledgeIndex,
   extractKnowledge,
@@ -202,6 +204,70 @@ test('المخططات السنوية تُستخرج كتدرج رسمي', () =>
   assert.ok(official.every(candidate => candidate.kind === 'progression'));
   assert.ok(official.every(candidate => typeof candidate.page === 'number'), 'التدرج الرسمي يحمل صفحته');
 });
+
+for (const plan of [
+  {
+    level: '1am', pages: 26,
+    competency: /يحافظ على صحته وصحة غيره/,
+    topic: /التغذية عند الإنسان/,
+    query: 'التغذية عند الإنسان مصدر الأغذية وتركيبها',
+  },
+  {
+    level: '3am', pages: 15,
+    competency: /الظواهر الطبيعية المدمرة/,
+    topic: /الديناميكية الداخلية للكرة الأرضية/,
+    query: 'الزالزل الديناميكية الداخلية للكرة الأرضية',
+  },
+] as const) {
+  test(`مخطط ${plan.level} المرفق مرتبط بملفه الأصلي وصفحاته دون تكرار أو استبدال المخطط الأحدث`, () => {
+    const entries = getOfficialSourcesManifest().filter(entry => entry.id === `learningPlan${plan.level}`);
+    assert.equal(entries.length, 1, 'لا تكرار للوثيقة الموجودة مسبقاً');
+    const entry = entries[0];
+    const source = getSourceById(`men-${plan.level}-learning-plan-2021-2022`);
+    assert.ok(source);
+    assert.equal(source.kind, 'progression');
+    assert.equal(source.status, 'official');
+    assert.equal(source.url, entry.url, 'سجل المصادر والفهرس يفتحان الملف نفسه');
+    assert.equal(source.title, entry.title);
+    assert.match(entry.title, /2021\/2022/);
+    assert.match(entry.role, /نظام التمدرس الاستثنائي/);
+    assert.equal(entry.level, plan.level);
+    assert.equal(entry.pages, plan.pages);
+    assert.equal(entry.url, `/assets/official/learning-plan-${plan.level}-2021-2022.pdf`);
+    const pdf = readFileSync(`public${entry.url}`);
+    assert.equal(pdf.subarray(0, 5).toString(), '%PDF-', 'ملف PDF فعلي وليس رابطاً عاماً');
+
+    const doc = officialDocs.find(item => item.id === `kb-official-learningPlan${plan.level}`);
+    assert.ok(doc);
+    assert.equal(doc.url, entry.url);
+    assert.equal(doc.level, plan.level);
+    assert.deepEqual(doc.pages.map(page => page.page), Array.from({ length: plan.pages }, (_, i) => i + 1));
+    assert.equal(doc.pages.reduce((sum, page) => sum + page.text.length, 0), entry.chars);
+    assert.match(doc.pages[2].text, plan.competency);
+    assert.match(doc.pages[3].text, plan.topic);
+    assert.ok(getOfficialSourcesManifest().some(item => item.id === `annualPlan2023_${plan.level}`), 'يبقى مخطط 2022/2023 مستقلاً');
+  });
+
+  test(`البحث في مخطط ${plan.level} يعيد النص الرسمي ورابط PDF ورقم الصفحة`, () => {
+    const doc = officialDocs.find(item => item.id === `kb-official-learningPlan${plan.level}`)!;
+    const hits = searchKnowledge(plan.query, {
+      lessons: [], officialDocs: [doc], level: plan.level, kinds: ['progression'],
+      includeCorpus: false, includeProgression: false, topK: 6,
+    });
+    assert.ok(hits.length > 0);
+    for (const hit of hits) {
+      assert.equal(hit.chunk.documentId, doc.id);
+      assert.equal(hit.chunk.status, 'official');
+      assert.equal(hit.chunk.level, plan.level);
+      assert.equal(hit.chunk.url, doc.url);
+      assert.ok(hit.chunk.page && hit.chunk.page >= 1 && hit.chunk.page <= plan.pages);
+    }
+    const references = toKnowledgeReferences(hits, 6);
+    assert.ok(references.length > 0);
+    assert.ok(references.every(ref => ref.url === doc.url && typeof ref.page === 'number'));
+  });
+
+}
 
 test('تحديد نوع المعلومة يرجّح الواجهة البنيوية على الذكر العَرَضي', () => {
   // الصفحة تذكر «التقويم» عَرَضاً لكن موضوعها الكفاءة الختامية

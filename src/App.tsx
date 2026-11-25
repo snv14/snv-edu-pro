@@ -49,6 +49,7 @@ const AnnualDistribution = lazy(() => import('./components/AnnualDistribution').
 const DailyLogbook = lazy(() => import('./components/DailyLogbook').then(module => ({ default: module.DailyLogbook })));
 const AccountSettings = lazy(() => import('./components/AccountSettings').then(module => ({ default: module.AccountSettings })));
 const SourceMemo1AMViewer = lazy(() => import('./components/SourceMemo1AMViewer').then(module => ({ default: module.SourceMemo1AMViewer })));
+const SourceContentViewer = lazy(() => import('./components/SourceContentViewer').then(module => ({ default: module.SourceContentViewer })));
 const SourceGuide2AMViewer = lazy(() => import('./components/SourceGuide2AMViewer').then(module => ({ default: module.SourceGuide2AMViewer })));
 const SourceGuide3AMViewer = lazy(() => import('./components/SourceGuide3AMViewer').then(module => ({ default: module.SourceGuide3AMViewer })));
 const SourceGuide4AMViewer = lazy(() => import('./components/SourceGuide4AMViewer').then(module => ({ default: module.SourceGuide4AMViewer })));
@@ -626,7 +627,7 @@ export const App: React.FC = () => {
                         }`}
                       >
                         <BookOpen className="w-3.5 h-3.5" />
-                        <span>{selectedLevel === '1am' ? 'المحتوى المصدري' : selectedLevel === '2am' ? 'دليل الأستاذ والمخطط' : selectedLevel === '3am' ? 'دليل الأستاذ والكتاب' : 'المخطط الرسمي وBEM'}</span>
+                        <span>المحتوى المصدري</span>
                       </button>
 
                       <button
@@ -1078,17 +1079,27 @@ export const App: React.FC = () => {
                 }}
               />
             </Suspense>
-          ) : selectedLevel === '2am' ? (
-            <Suspense fallback={<SectionLoading />}>
-              <SourceGuide2AMViewer lessons={curriculumLessons} />
-            </Suspense>
-          ) : selectedLevel === '3am' ? (
-            <Suspense fallback={<SectionLoading />}>
-              <SourceGuide3AMViewer lessons={curriculumLessons} />
-            </Suspense>
           ) : (
             <Suspense fallback={<SectionLoading />}>
-              <SourceGuide4AMViewer lessons={curriculumLessons} />
+              <SourceContentViewer
+                key={selectedLevel}
+                level={selectedLevel as '2am' | '3am' | '4am'}
+                lessons={curriculumLessons}
+                onOpenMemoUnit={(lesson) => {
+                  setSelectedMaqta(lesson.maqta);
+                  setSelectedMawrid(lesson.mawrid);
+                  setSelectedTa3alom(lesson.ta3alom);
+                  setYearSubTab('memos');
+                  showToast(`تم فتح مذكرة ${lesson.memoNumber || ''}: ${lesson.ta3alom}`);
+                }}
+                guide={
+                  <Suspense fallback={<SectionLoading />}>
+                    {selectedLevel === '2am' ? <SourceGuide2AMViewer lessons={curriculumLessons} />
+                      : selectedLevel === '3am' ? <SourceGuide3AMViewer lessons={curriculumLessons} />
+                      : <SourceGuide4AMViewer lessons={curriculumLessons} />}
+                  </Suspense>
+                }
+              />
             </Suspense>
           )}
         </div>
