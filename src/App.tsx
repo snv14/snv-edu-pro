@@ -40,7 +40,8 @@ import { FirebaseDataSync } from './components/FirebaseDataSync';
 import { FlagRibbon } from './components/FlagRibbon';
 import { useAuth } from './components/Auth';
 import { getFirebaseConfigStatus } from './firebase';
-import { loadCurriculumDatabase } from './data/memos/curriculumDb';
+import { loadCurriculumDatabase, saveCurriculumDatabase } from './data/memos/curriculumDb';
+import { appendAssistantMemoContent } from './services/assistantMemoInsertion';
 import heroScienceLabImg from './assets/images/hero_science_lab.jpg';
 
 const AIAssistantChat = lazy(() => import('./components/AIAssistantChat').then(module => ({ default: module.AIAssistantDrawer })));
@@ -1139,6 +1140,15 @@ export const App: React.FC = () => {
           selectedLevel={isYearSection ? selectedLevel : undefined}
           currentLesson={isYearSection ? currentLesson : null}
           curriculumLessons={curriculumLessons}
+          onInsertMemoContent={(lesson, field, text) => {
+            const index = curriculumLessons.indexOf(lesson);
+            if (index < 0) throw new Error('المذكرة لم تعد متاحة؛ أعد اختيارها قبل الإدراج.');
+            const next = curriculumLessons.map((item, i) => i === index ? appendAssistantMemoContent(item, field, text) : item);
+            saveCurriculumDatabase(next);
+            setCurriculumLessons(next);
+            window.dispatchEvent(new CustomEvent('curriculum-db-updated'));
+            showToast('تمت إضافة المحتوى إلى المذكرة دون حذف محتواها السابق');
+          }}
         />}
         {activeTool === 'correction' && <CorrectionMemoDrawer
           isOpen onClose={() => setActiveTool(null)}

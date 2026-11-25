@@ -1,18 +1,21 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bot, Check, Clipboard, Database, Layers, Loader2, MessageSquarePlus, Paperclip,
-  Send, Sparkles, User, X,
+  Send, Sparkles, X,
 } from 'lucide-react';
 import { LessonMemo } from '../types';
 import type { TeacherKnowledgeDoc } from '../types/knowledge';
 import { askSmartAi, SmartAiMessage, SmartAiSource } from '../services/smartAi';
-import { clearConversation, conversationContext, loadConversation, saveConversation } from '../services/conversationHistory';
-import { loadKnowledgeSettings, saveKnowledgeSettings, type KnowledgeSettings } from '../services/knowledgeLibraryStore';
+import { clearConversation, conversationContext, loadUnifiedConversation, saveConversation } from '../services/conversationHistory';
+import { loadKnowledgeSettings, type KnowledgeSettings } from '../services/knowledgeLibraryStore';
 import { loadOcrSupplement } from '../services/knowledgeSupplements';
 import { preloadOfficialSources } from '../services/knowledgeOfficialSources';
-import { buildQuickTaskPrompt, describeScope, KNOWLEDGE_QUICK_TASKS } from '../services/knowledgeQuickTasks';
+import { KNOWLEDGE_QUICK_TASKS } from '../services/knowledgeQuickTasks';
 import type { KnowledgeReference } from '../services/knowledgeBase';
 import { KnowledgeBasePanel } from './KnowledgeBasePanel';
+import { assistantVisibility, presentAssistantAnswer } from '../services/assistantConversationPolicy';
+import { wantsMemoInsertion, type AssistantMemoField } from '../services/assistantMemoInsertion';
+import { AssistantMemoInsertion } from './AssistantMemoInsertion';
 
 interface ChatAttachment {
   id: string;
@@ -32,6 +35,7 @@ interface ChatEntry {
   knowledge?: KnowledgeReference[];
   scopeLabel?: string;
   fromKnowledgeBase?: boolean;
+  showSources?: boolean;
 }
 
 const MAX_ATTACHMENTS = 4;
@@ -44,10 +48,7 @@ const ACCEPTED_TYPES = new Set([
   'application/msword',
 ]);
 
-const GREETING = [
-  'مرحباً زميلي الأستاذ(ة). أنا مساعدك البيداغوجي في محادثة مباشرة: اسأل كما تشاء أو ارفع صورة/PDF/Word لورقة تقويم.',
-  'أجيب من قاعدة المنصة: المنهاج، الوثيقة المرافقة، دليل الأستاذ، والمذكرات المعتمدة — وأعرض المصادر مع كل جواب.',
-].join('\n');
+const GREETING = 'مرحباً، كيف أساعدك اليوم؟ اكتب ما تريد وسنتابع العمل عليه معاً.';
 
 const makeId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -60,12 +61,12 @@ const readAsDataUrl = (file: File): Promise<string> => new Promise((resolve, rej
   reader.readAsDataURL(file);
 });
 
-const toEntries = (messages: SmartAiMessage[]): ChatEntry[] => messages.map(message => ({
-  id: makeId(),
-  sender: message.role === 'user' ? 'user' : 'ai',
-  text: message.text,
-  time: clock(),
-}));
+const toEntries = (messages: SmartAiMessage[]): ChatEntry[] => messages.map((message, index) => {
+  const question = [...messages.slice(0, index)].reverse().find(item => item.role === 'user')?.text || '';
+  return { id: makeId(), sender: message.role === 'user' ? 'user' : 'ai',
+    text: message.role === 'assistant' ? presentAssistantAnswer(message.text, question) : message.text,
+    time: clock(), showSources: assistantVisibility(question).sources };
+});
 
 /** عرض مبسّط لعناصر Markdown الشائعة داخل فقاعات المحادثة (بلا مكتبات). */
 const renderInline = (text: string, keyPrefix: string): React.ReactNode[] => {
@@ -189,7 +190,8 @@ export const AIAssistantDrawer: React.FC<{
   selectedLevel?: string;
   currentLesson?: LessonMemo | null;
   curriculumLessons?: LessonMemo[];
-}> = ({ isOpen, onClose, selectedLevel, currentLesson, curriculumLessons = [] }) => {
+  onInsertMemoContent?: (lesson: LessonMemo, field: AssistantMemoField, text: string) => void;
+}> = ({ isOpen, onClose, selectedLevel, currentLesson, curriculumLessons = [], onInsertMemoContent }) => {
   const [entries, setEntries] = useState<ChatEntry[]>([]);
   const [draft, setDraft] = useState('');
   const [pending, setPending] = useState(false);
@@ -198,6 +200,9 @@ export const AIAssistantDrawer: React.FC<{
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [showKnowledge, setShowKnowledge] = useState(false);
   const [showTools, setShowTools] = useState(false);
+  const [directExtraction, setDirectExtraction] = useState(false);
+  const [insertionText, setInsertionText] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState('');
   const [knowledgeSettings, setKnowledgeSettings] = useState<KnowledgeSettings>(() => loadKnowledgeSettings());
   const [ocrDocs, setOcrDocs] = useState<TeacherKnowledgeDoc[]>([]);
   const threadRef = useRef<HTMLDivElement>(null);
@@ -207,10 +212,10 @@ export const AIAssistantDrawer: React.FC<{
 
   useEffect(() => {
     if (!isOpen) return;
-    const stored = loadConversation(selectedLevel);
+    const stored = loadUnifiedConversation(selectedLevel);
     const restored = stored ? toEntries(stored.messages) : [];
     setEntries(restored.length ? restored : [{ id: 'greeting', sender: 'ai', text: GREETING, time: clock() }]);
-  }, [isOpen, selectedLevel]);
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -226,7 +231,7 @@ export const AIAssistantDrawer: React.FC<{
   useEffect(() => () => abortRef.current?.abort(), []);
 
   useEffect(() => {
-    if (!isOpen || !knowledgeSettings.includeOcrSupplement) {
+    if (!isOpen) {
       setOcrDocs([]);
       return;
     }
@@ -234,30 +239,18 @@ export const AIAssistantDrawer: React.FC<{
     void loadOcrSupplement().then(doc => { if (active) setOcrDocs(doc ? [doc] : []); });
     void preloadOfficialSources();
     return () => { active = false; };
-  }, [isOpen, knowledgeSettings.includeOcrSupplement]);
-
-  const taskScope = useMemo(() => ({
-    level: selectedLevel || currentLesson?.level,
-    midan: currentLesson?.midan,
-    maqta: currentLesson?.maqta,
-    mawrid: currentLesson?.mawrid,
-    ta3alom: currentLesson?.ta3alom,
-  }), [selectedLevel, currentLesson]);
+  }, [isOpen]);
 
   const useQuickTask = (taskId: string) => {
     const task = KNOWLEDGE_QUICK_TASKS.find(item => item.id === taskId);
     if (!task) return;
-    setDraft(buildQuickTaskPrompt(task, taskScope));
-    setShowKnowledge(false);
-    setShowTools(false);
-    inputRef.current?.focus();
+    const topic = [...entries].reverse().find(entry => entry.sender === 'user')?.text || '';
+    setDraft(`${task.label}${topic ? ' للموضوع الذي نعمل عليه في الحوار' : ' حول: '}`);
+    setShowKnowledge(false); setShowTools(false); inputRef.current?.focus();
   };
-
   const askSolutionFromDb = () => {
-    setDraft(`اقترح حلولاً من قاعدة بيانات المنصة لـ${describeScope(taskScope)}: أسئلة التقويم مع الأجوبة المرتقبة وسلّم تنقيط مختصر. اعتمد على المصادر الموثقة فقط، وضع أي إضافة جديدة تحت وسم «اقتراح تربوي — يحتاج مراجعة الأستاذ».`);
-    setShowKnowledge(false);
-    setShowTools(false);
-    inputRef.current?.focus();
+    setDraft('اقترح حلولاً لأسئلة التقويم مع الأجوبة المرتقبة وسلّم تنقيط مختصر حول الموضوع الذي نعمل عليه.');
+    setShowKnowledge(false); setShowTools(false); inputRef.current?.focus();
   };
 
   const history = useMemo<SmartAiMessage[]>(() => conversationContext(
@@ -272,8 +265,7 @@ export const AIAssistantDrawer: React.FC<{
     saveConversation(
       next
         .filter(entry => entry.id !== 'greeting' && !entry.failed)
-        .map(entry => ({ role: entry.sender === 'user' ? 'user' : 'assistant', text: entry.text })),
-      selectedLevel
+        .map(entry => ({ role: entry.sender === 'user' ? 'user' : 'assistant', text: entry.text }))
     );
   };
 
@@ -288,11 +280,12 @@ export const AIAssistantDrawer: React.FC<{
   const resetConversation = () => {
     abortRef.current?.abort();
     abortRef.current = null;
-    clearConversation(selectedLevel);
+    clearConversation();
     setAttachments([]);
     setFileError('');
     setDraft('');
     setPending(false);
+    setInsertionText(null); setActionNotice('');
     setEntries([{ id: 'greeting', sender: 'ai', text: GREETING, time: clock() }]);
     inputRef.current?.focus();
   };
@@ -322,8 +315,8 @@ export const AIAssistantDrawer: React.FC<{
   };
 
   const send = async () => {
-    const question = draft.trim();
-    if (!question || pending) return;
+    const question = draft.trim() || (attachments.length ? 'حلّل هذا المرفق وساعدني على العمل عليه.' : '');
+    if (!question || pending || abortRef.current) return;
 
     const outgoingAttachments = attachments;
     const previousHistory = history;
@@ -340,11 +333,11 @@ export const AIAssistantDrawer: React.FC<{
     try {
       const reply = await askSmartAi({
         question,
-        lesson: currentLesson,
+        lesson: null,
         curriculum: curriculumLessons,
         attachments: outgoingAttachments.map(({ name, mimeType, dataUrl }) => ({ name, mimeType, dataUrl })),
         useWeb: true,
-        level: selectedLevel,
+        level: 'all',
         expertMode: true,
         history: previousHistory,
         signal: controller.signal,
@@ -353,10 +346,12 @@ export const AIAssistantDrawer: React.FC<{
           settings: knowledgeSettings,
           extraDocs: ocrDocs,
           topK: knowledgeSettings.topK,
+          localOnly: directExtraction,
         },
       });
 
-      const text = (reply?.text || '').trim();
+      if (controller.signal.aborted || abortRef.current !== controller) return;
+      const text = presentAssistantAnswer(reply?.text || '', question);
       if (!text) {
         updateEntries(previous => [...previous, {
           id: makeId(),
@@ -378,17 +373,19 @@ export const AIAssistantDrawer: React.FC<{
         knowledge: reply?.knowledge?.length ? reply.knowledge : undefined,
         scopeLabel: reply?.extraction?.scopeLabel || undefined,
         fromKnowledgeBase: reply?.localAnswer,
+        showSources: assistantVisibility(question).sources,
       }]);
+      if (wantsMemoInsertion(question) && onInsertMemoContent && !reply?.localAnswer) setInsertionText(text);
     } catch (error) {
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted || abortRef.current !== controller) return;
       const message = error instanceof Error && error.message
         ? error.message
         : 'تعذر الحصول على رد الآن. تحقق من اتصال الخادم بمزود الذكاء الاصطناعي.';
       updateEntries(previous => [...previous, { id: makeId(), sender: 'ai', text: message, time: clock(), failed: true }]);
     } finally {
-      if (abortRef.current === controller) abortRef.current = null;
-      setPending(false);
-      inputRef.current?.focus();
+      if (abortRef.current === controller) {
+        abortRef.current = null; setPending(false); inputRef.current?.focus();
+      }
     }
   };
 
@@ -402,12 +399,8 @@ export const AIAssistantDrawer: React.FC<{
     }
   };
 
-  const contextLabel = currentLesson?.ta3alom
-    ? `المورد: ${currentLesson.ta3alom}`
-    : (selectedLevel ? `المستوى: ${selectedLevel}` : 'بدون مورد محدد');
-
   const conversationStarted = entries.some(entry => entry.sender === 'user');
-  const lastEntry = entries[entries.length - 1];
+  const stop = () => { abortRef.current?.abort(); abortRef.current = null; setPending(false); };
 
   const quickTaskList = (
     <div className="space-y-1">
@@ -435,341 +428,63 @@ export const AIAssistantDrawer: React.FC<{
   );
 
   return (
-    <div
-      id="ai-assistant-chat"
-      className="fixed inset-0 z-50 bg-[#eef3f1] flex"
-      dir="rtl"
-      aria-label="محادثة المساعد التربوي"
-    >
-      {/* شريط الأدوات الجانبي (سطح المكتب) */}
-      <aside className="hidden lg:flex w-72 shrink-0 flex-col border-l border-slate-200 bg-white">
-        <div className="px-3 py-3 border-b border-slate-100">
-          <div className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-xl bg-teal-700 text-white flex items-center justify-center"><Bot className="w-5 h-5" /></div>
-            <div className="min-w-0">
-              <p className="text-[13px] font-black text-slate-900">المساعد التربوي</p>
-              <p className="text-[10px] text-slate-500 truncate">دردشة مع قاعدة المنصة</p>
-            </div>
+    <div id="ai-assistant-chat" role="dialog" aria-modal="true" aria-label="محادثة المساعد التربوي" dir="rtl" className="fixed inset-0 z-50 bg-white text-slate-800 flex flex-col">
+      <header className="shrink-0 border-b border-slate-100 px-3 sm:px-6 py-3 flex items-center gap-3">
+        <button type="button" onClick={onClose} aria-label="إغلاق المحادثة" className="rounded-xl p-2 hover:bg-slate-100"><X className="w-5 h-5" /></button>
+        <div className="flex-1"><h2 className="font-black text-sm">المساعد التربوي</h2></div>
+        <button type="button" onClick={resetConversation} aria-label="محادثة جديدة" title="محادثة جديدة" className="rounded-xl p-2 hover:bg-slate-100"><MessageSquarePlus className="w-5 h-5" /></button>
+        <button type="button" onClick={() => setShowTools(value => !value)} aria-label="أدوات المحادثة" aria-expanded={showTools} className="rounded-xl p-2 hover:bg-slate-100"><Layers className="w-5 h-5" /></button>
+      </header>
+      {showTools && <div aria-label="أدوات اختيارية" className="border-b border-slate-100 p-3 max-h-[40vh] overflow-y-auto bg-slate-50">
+        <div className="max-w-3xl mx-auto space-y-2">
+          <p className="text-xs text-slate-500">أدوات اختيارية؛ يمكنك دائماً الاكتفاء بكتابة طلبك.</p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => { setShowKnowledge(value => !value); setShowTools(false); }} className="rounded-xl border bg-white px-3 py-2 text-xs font-bold"><Database className="w-4 h-4 inline ml-1" />قاعدة المعرفة وإدارة الوثائق</button>
+            <button type="button" aria-pressed={directExtraction} onClick={() => setDirectExtraction(value => !value)} className="rounded-xl border bg-white px-3 py-2 text-xs font-bold">استخراج مباشر: {directExtraction ? 'مفعّل لهذه المحادثة' : 'متوقف'}</button>
           </div>
-        </div>
-
-        <div className="p-3 space-y-2">
-          <button
-            type="button"
-            onClick={resetConversation}
-            className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-teal-700 px-3 py-2 text-[12px] font-black text-white hover:bg-teal-800 transition"
-          >
-            <MessageSquarePlus className="w-4 h-4" /> محادثة جديدة
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowKnowledge(open => !open)}
-            aria-expanded={showKnowledge}
-            className={`w-full inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-[12px] font-black transition ${showKnowledge ? 'border-teal-700 bg-teal-700 text-white' : 'border-slate-200 bg-white text-slate-800 hover:bg-slate-50'}`}
-          >
-            <Database className="w-4 h-4" /> قاعدة المعرفة
-          </button>
-        </div>
-
-        <div className="px-3 pb-2">
-          <div className="rounded-xl bg-slate-50 border border-slate-200 px-3 py-2">
-            <p className="text-[10px] font-black text-slate-400">النطاق الحالي</p>
-            <p className="text-[11.5px] font-bold text-slate-800 mt-0.5">{contextLabel}</p>
-            <p className="text-[10px] text-slate-500 mt-0.5">{describeScope(taskScope)}</p>
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-2 py-2">
-          <p className="px-2 pb-1 text-[10px] font-black text-slate-400">مهام سريعة</p>
           {quickTaskList}
         </div>
-
-        <div className="p-3 border-t border-slate-100 space-y-2">
-          <button
-            type="button"
-            onClick={() => setKnowledgeSettings(saveKnowledgeSettings({ localFirst: !knowledgeSettings.localFirst }))}
-            aria-pressed={knowledgeSettings.localFirst}
-            className={`w-full inline-flex items-center justify-between gap-2 rounded-xl border px-2.5 py-2 text-[11px] font-black transition ${knowledgeSettings.localFirst ? 'border-teal-700 bg-teal-50 text-teal-900' : 'border-slate-200 text-slate-600'}`}
-          >
-            <span className="inline-flex items-center gap-1.5"><Database className="w-3.5 h-3.5" /> استخراج مباشر</span>
-            <span className={`h-2 w-2 rounded-full ${knowledgeSettings.localFirst ? 'bg-teal-600' : 'bg-slate-300'}`} />
-          </button>
-          <p className="text-[9.5px] leading-relaxed text-slate-400">
-            المصادر: المنهاج، الوثيقة المرافقة، دليل الأستاذ، والمذكرات. التدرج السنوي مستثنى.
-          </p>
-        </div>
-      </aside>
-
-      {/* عمود المحادثة */}
-      <section className="flex-1 min-w-0 flex flex-col h-full bg-white lg:bg-transparent" aria-label="نافذة الدردشة">
-        <header className="shrink-0 px-2.5 sm:px-5 py-2 bg-white border-b border-slate-200 flex items-center gap-2">
-          <button type="button" onClick={onClose} aria-label="إغلاق المحادثة" className="p-2 rounded-lg text-slate-600 hover:bg-slate-100 transition shrink-0">
-            <X className="w-4 h-4" />
-          </button>
-          <div className="min-w-0 flex-1 text-center sm:text-right">
-            <h2 className="font-black text-[13px] leading-tight text-slate-900 truncate">المحادثة التربوية</h2>
-            <p className="text-[10px] text-slate-500 truncate">{contextLabel}</p>
-          </div>
-          <div className="flex items-center gap-1 shrink-0">
-            <button
-              type="button"
-              onClick={() => setShowTools(open => !open)}
-              title="أدوات المحادثة والمهام السريعة"
-              aria-label="أدوات المحادثة"
-              aria-expanded={showTools}
-              className="lg:hidden p-2 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition"
-            >
-              <Layers className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowKnowledge(open => !open)}
-              title="قاعدة المعرفة: المنهاج، الوثيقة المرافقة، دليل الأستاذ، المذكرات"
-              aria-label="قاعدة المعرفة"
-              aria-pressed={showKnowledge}
-              className={`inline-flex items-center gap-1 px-2 py-2 rounded-lg text-[10.5px] font-bold transition ${showKnowledge ? 'bg-teal-700 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
-            >
-              <Database className="w-4 h-4" /> <span className="hidden sm:inline">القاعدة</span>
-            </button>
-            <button
-              type="button"
-              onClick={resetConversation}
-              title="محادثة جديدة"
-              aria-label="محادثة جديدة"
-              className="inline-flex items-center gap-1 px-2 py-2 rounded-lg text-[10.5px] font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 transition"
-            >
-              <MessageSquarePlus className="w-4 h-4" /> <span className="hidden sm:inline">جديدة</span>
-            </button>
-          </div>
-        </header>
-
-        {showTools && !showKnowledge && (
-          <div className="lg:hidden shrink-0 border-b border-slate-200 bg-white px-3 py-2 space-y-2 max-h-[45vh] overflow-y-auto">
-            <div className="rounded-xl bg-slate-50 border border-slate-200 px-3 py-2">
-              <p className="text-[10px] font-black text-slate-400">النطاق الحالي</p>
-              <p className="text-[11.5px] font-bold text-slate-800">{contextLabel}</p>
-              <p className="text-[10px] text-slate-500">{describeScope(taskScope)}</p>
-            </div>
-            {quickTaskList}
-            <button
-              type="button"
-              onClick={() => setKnowledgeSettings(saveKnowledgeSettings({ localFirst: !knowledgeSettings.localFirst }))}
-              aria-pressed={knowledgeSettings.localFirst}
-              className={`w-full inline-flex items-center gap-2 rounded-xl border px-2.5 py-2 text-[11px] font-black ${knowledgeSettings.localFirst ? 'border-teal-700 bg-teal-50 text-teal-900' : 'border-slate-200 text-slate-600'}`}
-            >
-              <Database className="w-3.5 h-3.5" /> استخراج مباشر
-            </button>
-          </div>
-        )}
-
-        {showKnowledge ? (
-          <div className="flex-1 min-h-0 overflow-y-auto">
-            <KnowledgeBasePanel
-              selectedLevel={selectedLevel || currentLesson?.level}
-              lessons={curriculumLessons}
-              extraDocs={ocrDocs}
-              settings={knowledgeSettings}
-              onSettingsChange={setKnowledgeSettings}
-              onUseQuery={text => {
-                setDraft(text);
-                setShowKnowledge(false);
-                inputRef.current?.focus();
-              }}
-              onClose={() => setShowKnowledge(false)}
-            />
-          </div>
-        ) : (
-          <div ref={threadRef} className="flex-1 min-h-0 overflow-y-auto">
-            <div className="mx-auto w-full max-w-3xl px-3 sm:px-5 py-4 space-y-4">
-              {!conversationStarted && (
-                <div className="rounded-2xl border border-teal-100 bg-gradient-to-l from-teal-50 to-white p-4">
-                  <div className="flex items-center gap-2 text-teal-900">
-                    <Sparkles className="w-4 h-4" />
-                    <p className="text-[13px] font-black">اكتب سؤالك أو اختر مهمة جاهزة</p>
-                  </div>
-                  <p className="mt-1 text-[11.5px] leading-relaxed text-slate-600">
-                    اسأل عن أي مورد أو مقطع، أو ارفع صورة/PDF/Word لورقة تقويم. سأجيب من قاعدة المنصة وأعرض المصادر مع كل جواب.
-                  </p>
-                  <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                    {KNOWLEDGE_QUICK_TASKS.slice(0, 4).map(task => (
-                      <button
-                        key={task.id}
-                        type="button"
-                        onClick={() => useQuickTask(task.id)}
-                        className="text-right rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold text-slate-700 hover:border-teal-300 hover:bg-teal-50 transition"
-                      >
-                        {task.label}
-                        <span className="block text-[9.5px] font-normal text-slate-400 mt-0.5">{task.hint}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {entries.filter(entry => conversationStarted || entry.id !== 'greeting').map(entry => (
-                <article key={entry.id} className={`flex gap-2 ${entry.sender === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${entry.sender === 'user' ? 'bg-slate-800 text-white' : 'bg-teal-700 text-white'}`}>
-                    {entry.sender === 'user' ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
-                  </div>
-                  <div className={`min-w-0 max-w-[86%] ${entry.sender === 'user' ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
-                    <div className={`w-full rounded-2xl px-3.5 py-2.5 text-[13px] shadow-2xs ${
-                      entry.sender === 'user'
-                        ? 'bg-slate-900 text-white rounded-tl-md'
-                        : entry.failed
-                          ? 'bg-amber-50 border border-amber-200 text-amber-900 rounded-tr-md'
-                          : 'bg-white border border-slate-200 text-slate-800 rounded-tr-md'
-                    }`}>
-                      {entry.notice && (
-                        <p className="mb-2 text-[10.5px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1">{entry.notice}</p>
-                      )}
-                      {entry.sender === 'ai' && entry.id !== 'greeting'
-                        ? <ChatRichText text={entry.text} />
-                        : <p className="whitespace-pre-line leading-relaxed">{entry.text}</p>}
-                      {entry.fromKnowledgeBase && (
-                        <p className="mt-2 inline-flex items-center gap-1 text-[10px] font-black text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-1">
-                          <Database className="w-3.5 h-3.5" />
-                          استخراج مباشر من قاعدة المعرفة (دون مزود ذكاء اصطناعي)
-                        </p>
-                      )}
-                      {entry.scopeLabel && (
-                        <p className="mt-1.5 text-[9.5px] font-bold text-slate-500">النطاق: {entry.scopeLabel}</p>
-                      )}
-                      {entry.knowledge && entry.knowledge.length > 0 && (
-                        <div className="mt-2 pt-2 border-t border-emerald-100 space-y-1">
-                          <p className="text-[10px] font-black text-emerald-800">من قاعدة المعرفة ({entry.knowledge.length}):</p>
-                          {entry.knowledge.slice(0, 6).map(reference => (
-                            <SourceChip key={reference.id} reference={reference} />
-                          ))}
-                        </div>
-                      )}
-                      {entry.sources && entry.sources.length > 0 && (
-                        <div className="mt-2 pt-2 border-t border-slate-200 space-y-1">
-                          <p className="text-[10px] font-black text-teal-700">مصادر الويب:</p>
-                          {entry.sources.map(source => (
-                            <a key={source.uri} href={source.uri} target="_blank" rel="noreferrer" className="block text-[10.5px] text-blue-700 hover:underline truncate" title={source.uri}>
-                              {source.title || source.uri}
-                            </a>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 px-1 text-[9.5px] text-slate-400">
-                      <span>{entry.time}</span>
-                      {entry.sender === 'ai' && entry.id !== 'greeting' && (
-                        <button
-                          type="button"
-                          onClick={() => void copyEntry(entry)}
-                          title="نسخ الرد"
-                          aria-label="نسخ الرد"
-                          className="inline-flex items-center gap-1 text-slate-500 hover:text-slate-800 transition"
-                        >
-                          {copiedId === entry.id ? <Check className="w-3.5 h-3.5" /> : <Clipboard className="w-3.5 h-3.5" />}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </article>
-              ))}
-
-              {pending && (
-                <div className="flex items-center gap-2 text-[11px] font-bold text-slate-500 px-1">
-                  <Loader2 className="w-4 h-4 text-teal-700 animate-spin" />
-                  <span>جارٍ كتابة الرد…</span>
-                </div>
-              )}
-
-              {!pending && lastEntry?.sender === 'ai' && lastEntry.id !== 'greeting' && !showKnowledge && (
-                <div className="flex flex-wrap gap-1.5 pr-10">
-                  {KNOWLEDGE_QUICK_TASKS.slice(0, 3).map(task => (
-                    <button
-                      key={task.id}
-                      type="button"
-                      onClick={() => useQuickTask(task.id)}
-                      className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-bold text-slate-600 hover:border-teal-300 hover:text-teal-800 transition"
-                    >
-                      {task.label}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={askSolutionFromDb}
-                    className="rounded-full border border-teal-200 bg-teal-50 px-2.5 py-1 text-[10px] font-bold text-teal-900 hover:bg-teal-100 transition"
-                  >
-                    حلول من قاعدة البيانات
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {!showKnowledge && (
-          <footer className="shrink-0 border-t border-slate-200 bg-white px-3 sm:px-5 py-2.5">
-            <div className="mx-auto w-full max-w-3xl space-y-2">
-              {fileError && <p className="text-[10.5px] font-bold text-red-700">{fileError}</p>}
-              {attachments.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {attachments.map(file => (
-                    <span key={file.id} className="inline-flex items-center gap-1 max-w-full rounded-lg bg-teal-50 border border-teal-200 px-2 py-1 text-[10px] text-teal-900">
-                      <span className="truncate max-w-[170px]">{file.name}</span>
-                      <button type="button" onClick={() => setAttachments(previous => previous.filter(item => item.id !== file.id))} aria-label={`إزالة ${file.name}`}>
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-              <div className="flex items-end gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => fileRef.current?.click()}
-                  disabled={pending || attachments.length >= MAX_ATTACHMENTS}
-                  title="إرفاق صورة أو PDF أو Word"
-                  aria-label="إرفاق ملف"
-                  className="p-2 rounded-xl text-slate-500 hover:text-teal-800 hover:bg-teal-50 disabled:opacity-40 transition"
-                >
-                  <Paperclip className="w-4 h-4" />
-                </button>
-                <input
-                  ref={fileRef}
-                  type="file"
-                  multiple
-                  className="hidden"
-                  accept=".pdf,.doc,.docx,.txt,image/jpeg,image/png,image/webp,image/gif"
-                  onChange={event => { void addFiles(event.target.files); event.target.value = ''; }}
-                />
-                <textarea
-                  ref={inputRef}
-                  value={draft}
-                  rows={1}
-                  onChange={event => setDraft(event.target.value)}
-                  onKeyDown={event => {
-                    if (event.key === 'Enter' && !event.shiftKey) {
-                      event.preventDefault();
-                      void send();
-                    }
-                  }}
-                  placeholder="اكتب رسالتك… (Enter للإرسال، Shift+Enter لسطر جديد)"
-                  className="flex-1 resize-none max-h-32 rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-[13px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:bg-white"
-                />
-                <button
-                  type="button"
-                  onClick={() => void send()}
-                  disabled={!draft.trim() || pending}
-                  aria-label="إرسال"
-                  title="إرسال"
-                  className="p-2 rounded-xl bg-teal-700 text-white hover:bg-teal-800 disabled:opacity-40 transition"
-                >
-                  <Send className="w-4 h-4 rotate-180" />
-                </button>
+      </div>}
+      {showKnowledge ? <div className="flex-1 min-h-0 overflow-y-auto"><KnowledgeBasePanel
+        lessons={curriculumLessons} extraDocs={ocrDocs} settings={knowledgeSettings}
+        onSettingsChange={setKnowledgeSettings} onUseQuery={text => { setDraft(text); setShowKnowledge(false); }}
+        onClose={() => setShowKnowledge(false)} /></div> : <>
+        <main ref={threadRef} role="log" aria-label="رسائل المحادثة" aria-live="polite" aria-busy={pending} className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+          <div className="max-w-3xl w-full mx-auto px-4 sm:px-6 py-8 space-y-7">
+            {!conversationStarted && <div className="py-16 sm:py-24 text-center space-y-4"><Bot className="w-10 h-10 text-teal-700 mx-auto" /><h1 className="text-2xl sm:text-3xl font-black">كيف أساعدك اليوم؟</h1><p className="text-sm text-slate-500 leading-7">اكتب فكرتك، سؤالك أو ما تريد تحضيره، وسنتابع العمل عليه معاً.</p></div>}
+            {entries.filter(entry => entry.id !== 'greeting').map(entry => <article key={entry.id} data-chat-sender={entry.sender} className={`group flex ${entry.sender === 'user' ? 'justify-start' : ''}`}>
+              <div className={`min-w-0 ${entry.sender === 'user' ? 'max-w-[90%] rounded-3xl bg-slate-100 px-5 py-3' : 'w-full py-1'}`}>
+                {entry.sender === 'ai' && <p className="text-xs font-bold text-teal-800 mb-2">المساعد</p>}
+                {entry.failed ? <p role="alert" className="text-sm text-amber-800 leading-7">{entry.text}</p> : entry.sender === 'ai' ? <div className="text-sm leading-8"><ChatRichText text={entry.text} /></div> : <p className="whitespace-pre-wrap text-sm leading-7">{entry.text}</p>}
+                {entry.notice && <p className="mt-2 text-xs leading-6 text-amber-800">{entry.notice}</p>}
+                {entry.showSources && entry.knowledge?.length ? <div className="mt-4 space-y-2" aria-label="المراجع المطلوبة">{entry.knowledge.map(reference => <SourceChip key={reference.id} reference={reference} />)}</div> : null}
+                {entry.showSources && entry.sources?.length ? <div className="mt-3 space-y-1">{entry.sources.map(source => <a key={source.uri} href={source.uri} target="_blank" rel="noreferrer" className="block text-xs text-teal-700 underline break-all">{source.title || source.uri}</a>)}</div> : null}
+                {entry.sender === 'ai' && <div className="mt-2 flex items-center flex-wrap gap-3 text-xs text-slate-500">
+                  <button type="button" onClick={() => void copyEntry(entry)} aria-label="نسخ الرد" className="p-1 hover:text-teal-800">{copiedId === entry.id ? <Check className="w-4 h-4" /> : <Clipboard className="w-4 h-4" />}</button>
+                  {entry.failed ? <button type="button" onClick={() => { const index = entries.indexOf(entry); const previous = [...entries.slice(0, index)].reverse().find(item => item.sender === 'user'); setDraft(previous?.text || ''); inputRef.current?.focus(); }}>إعادة المحاولة</button> : onInsertMemoContent && <button type="button" onClick={() => setInsertionText(entry.text)} className="hover:text-teal-800">تجهيز للإدراج في مذكرة</button>}
+                </div>}
               </div>
-              <p className="text-center text-[9.5px] text-slate-400">
-                كل ما هو من قاعدة المنصة موثّق ومصادره معروضة، والاقتراحات الجديدة تبقى بوسم «يحتاج مراجعة الأستاذ».
-              </p>
+            </article>)}
+            {pending && <div role="status" className="flex items-center gap-2 text-sm text-slate-500"><Loader2 className="w-4 h-4 animate-spin text-teal-700" />جارٍ البحث وإعداد الإجابة…</div>}
+            {actionNotice && <p role="status" className="text-sm text-teal-800">{actionNotice}</p>}
+            {insertionText !== null && onInsertMemoContent && <AssistantMemoInsertion text={insertionText} lessons={curriculumLessons} initialLesson={currentLesson}
+              onCancel={() => setInsertionText(null)} onConfirm={(lesson, field, text) => { onInsertMemoContent(lesson, field, text); setInsertionText(null); setActionNotice('تمت إضافة المحتوى إلى المذكرة بعد تأكيدك.'); }} />}
+          </div>
+        </main>
+        <footer className="shrink-0 bg-white px-3 sm:px-6 pt-2 pb-3" style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}>
+          <div className="max-w-3xl mx-auto space-y-2">
+            {fileError && <p role="alert" className="text-xs text-red-700">{fileError}</p>}
+            {attachments.length > 0 && <div className="flex flex-wrap gap-2">{attachments.map(file => <span key={file.id} className="inline-flex items-center gap-2 max-w-full rounded-xl bg-slate-100 px-3 py-2 text-xs"><span className="truncate max-w-[200px]">{file.name}</span><button type="button" onClick={() => setAttachments(previous => previous.filter(item => item.id !== file.id))} aria-label={`إزالة ${file.name}`}><X className="w-3 h-3" /></button></span>)}</div>}
+            <div className="rounded-3xl border border-slate-200 bg-slate-50 p-2 shadow-sm flex items-end gap-2 focus-within:border-teal-500">
+              <button type="button" onClick={() => fileRef.current?.click()} disabled={pending || attachments.length >= MAX_ATTACHMENTS} aria-label="إرفاق ملف" title="صورة أو PDF أو Word أو نص" className="rounded-full p-2.5 text-slate-500 hover:bg-slate-200 disabled:opacity-40"><Paperclip className="w-5 h-5" /></button>
+              <input ref={fileRef} type="file" multiple className="hidden" accept=".pdf,.doc,.docx,.txt,image/jpeg,image/png,image/webp,image/gif" onChange={event => { void addFiles(event.target.files); event.target.value = ''; }} />
+              <textarea ref={inputRef} value={draft} rows={2} aria-label="رسالتك إلى المساعد" onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); } }} placeholder="اكتب ما تريد…" className="flex-1 min-w-0 resize-none max-h-40 bg-transparent border-0 outline-none px-1 py-2 text-sm leading-7" />
+              {pending ? <button type="button" onClick={stop} aria-label="إيقاف التوليد" className="rounded-full bg-slate-800 text-white p-2.5"><X className="w-5 h-5" /></button> : <button type="button" onClick={() => void send()} disabled={!draft.trim() && !attachments.length} aria-label="إرسال" className="rounded-full bg-teal-700 text-white p-2.5 hover:bg-teal-800 disabled:opacity-30"><Send className="w-5 h-5 rotate-180" /></button>}
             </div>
-          </footer>
-        )}
-      </section>
+            <p className="text-center text-[10px] text-slate-400">قد يخطئ المساعد. راجع المحتوى قبل اعتماده أو إدراجه.</p>
+          </div>
+        </footer>
+      </>}
     </div>
   );
 };
