@@ -7,6 +7,7 @@ import { getYearPlanOutline, getYearPlanTermPages, PLAN_TERM_LABELS, type YearPl
 import { filterYearPlanUnits, getYearPlanMemos, getYearPlanStats } from '../services/yearPlanContent';
 import type { OfficialKnowledgeDoc } from '../types/knowledge';
 import type { LessonMemo } from '../types';
+import { YearPlanUnitFields } from './YearPlanUnitFields';
 
 interface Props {
   level: YearLevel;
@@ -145,6 +146,10 @@ function YearPlansContent({ level, guideMode = false, lessons = [], onOpenMemoUn
                 {unit.resources.length ? <ol className="list-decimal list-inside text-slate-600">{unit.resources.map(resource => <li key={resource}>{resource}</li>)}</ol> : <p className="text-slate-500">الموارد مفصلة في الصفحات الأصلية؛ لم تُلخّص لهذه الطبعة.</p>}
                 <div className="text-emerald-800"><p className="font-bold">{unit.hours !== undefined ? `${unit.hours} ساعة` : 'المدة في المصدر'}</p>{unit.weeksLabel && <p className="text-[11px] text-slate-500">{unit.weeksLabel} حسب الوثيقة</p>}</div>
                 {pageLinks(unit)}
+                <details className="md:col-span-4 border-t border-slate-100 pt-3">
+                  <summary className="cursor-pointer font-black text-emerald-800 py-1">حقول المخطط: هيكلة الموارد، الحجم الزمني، آلية التنفيذ، معايير ومؤشرات التقويم، ملاحظات</summary>
+                  <div className="pt-3"><YearPlanUnitFields planId={selectedId} unit={unit} doc={doc} loading={state === 'loading'} onShowSource={showSource} /></div>
+                </details>
               </article>)}
             </section>;
           })}
@@ -157,8 +162,7 @@ function YearPlansContent({ level, guideMode = false, lessons = [], onOpenMemoUn
             return <article key={unit.id} data-plan-unit={unit.id} className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
               <h3><button type="button" aria-expanded={open} aria-controls={`plan-${level}-${unit.id}`} onClick={() => toggleUnit(unit.id)} className="w-full text-right p-4 flex items-center gap-3 hover:bg-emerald-50/40"><span className="bg-emerald-100 text-emerald-900 w-9 h-9 rounded-xl grid place-items-center font-black shrink-0">{unit.sequence}</span><span className="flex-1"><span className="block text-sm font-black">{unit.title}</span><span className="block text-xs text-slate-500 mt-1">{PLAN_TERM_LABELS[unit.term]} · {unit.hours !== undefined ? `${unit.hours} ساعة` : 'المدة في المصدر'}{unit.weeksLabel ? ` · ${unit.weeksLabel} حسب الوثيقة` : ''}</span></span><ChevronDown className={`w-4 h-4 shrink-0 transition ${open ? 'rotate-180' : ''}`} /></button></h3>
               {open && <div id={`plan-${level}-${unit.id}`} className="border-t border-slate-200 p-4 bg-slate-50/60 space-y-4">
-                <div><h4 className="font-bold text-xs mb-2">الموارد والتعلّمات بالترتيب</h4>{unit.resources.length ? <ol className="grid sm:grid-cols-2 gap-2">{unit.resources.map((resource, index) => <li key={resource} className="bg-white border border-slate-200 rounded-xl p-3 text-xs leading-6"><span className="font-bold text-emerald-700">{index + 1}. </span>{resource}</li>)}</ol> : <p className="text-xs text-slate-500">لم تُلخّص موارد هذه الطبعة؛ استعمل الصفحات الأصلية لقراءة الموارد والتوقيت والتوجيهات دون خلطها بطبعة أخرى.</p>}</div>
-                {pageLinks(unit)}
+                <YearPlanUnitFields planId={selectedId} unit={unit} doc={doc} loading={state === 'loading'} onShowSource={showSource} />
                 {onOpenMemoUnit && memos.length > 0 && <div className="space-y-2 print:hidden"><h4 className="text-xs font-bold">مذكرات الأرشيف المرتبطة بالمقطع (محتوى مستقل عن النص الرسمي)</h4><div className="flex flex-wrap gap-2">{memos.map((memo, index) => <button key={`${memo.memoNumber}-${index}`} type="button" onClick={() => onOpenMemoUnit(memo)} className={`${buttonClass} border border-emerald-200 text-emerald-800 bg-white`}>فتح المذكرة {memo.memoNumber}: {memo.ta3alom}</button>)}</div></div>}
               </div>}
             </article>;
