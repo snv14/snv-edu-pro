@@ -67,6 +67,6 @@ test('App keeps source viewers and routes independent plans and guides for all f
   assert.ok(app.includes('<SourceMemo1AMViewer'));
   assert.ok(app.includes('<SourceContentViewer'));
   assert.ok(app.includes('<YearPlansViewer key={selectedLevel} level={selectedLevel}'));
-  assert.ok(app.includes('level="1am" guideMode'));
+  assert.ok(app.includes('<SourceGuide1AMViewer lessons={curriculumLessons}'));
   for (const level of [2, 3, 4]) assert.ok(app.includes(`<SourceGuide${level}AMViewer`));
 });

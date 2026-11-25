@@ -54,6 +54,7 @@ const AccountSettings = lazy(() => import('./components/AccountSettings').then(m
 const SourceMemo1AMViewer = lazy(() => import('./components/SourceMemo1AMViewer').then(module => ({ default: module.SourceMemo1AMViewer })));
 const YearPlansViewer = lazy(() => import('./components/YearPlansViewer').then(module => ({ default: module.YearPlansViewer })));
 const SourceContentViewer = lazy(() => import('./components/SourceContentViewer').then(module => ({ default: module.SourceContentViewer })));
+const SourceGuide1AMViewer = lazy(() => import('./components/SourceGuide1AMViewer').then(module => ({ default: module.SourceGuide1AMViewer })));
 const SourceGuide2AMViewer = lazy(() => import('./components/SourceGuide2AMViewer').then(module => ({ default: module.SourceGuide2AMViewer })));
 const SourceGuide3AMViewer = lazy(() => import('./components/SourceGuide3AMViewer').then(module => ({ default: module.SourceGuide3AMViewer })));
 const SourceGuide4AMViewer = lazy(() => import('./components/SourceGuide4AMViewer').then(module => ({ default: module.SourceGuide4AMViewer })));
@@ -1014,7 +1015,13 @@ export const App: React.FC = () => {
       {isYearSection && yearSubTab === 'guide' && (
         <div className="flex-1 min-h-0 overflow-hidden">
           <Suspense fallback={<SectionLoading />}>
-            {selectedLevel === '1am' ? <YearPlansViewer key="guide-1am" level="1am" guideMode />
+            {selectedLevel === '1am' ? <SourceGuide1AMViewer lessons={curriculumLessons} onOpenMemoUnit={(lesson) => {
+                setSelectedMaqta(lesson.maqta);
+                setSelectedMawrid(lesson.mawrid);
+                setSelectedTa3alom(lesson.ta3alom);
+                setYearSubTab('memos');
+                showToast(`تم فتح مذكرة ${lesson.memoNumber || ''}: ${lesson.ta3alom}`);
+              }} />
               : selectedLevel === '2am' ? <SourceGuide2AMViewer lessons={curriculumLessons} />
               : selectedLevel === '3am' ? <SourceGuide3AMViewer lessons={curriculumLessons} />
               : <SourceGuide4AMViewer lessons={curriculumLessons} />}
