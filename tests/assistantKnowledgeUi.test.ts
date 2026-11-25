@@ -9,7 +9,7 @@ import { getOfficialCurriculumDatabase } from '../src/data/memos/curriculumDb';
 
 const lessons = getOfficialCurriculumDatabase();
 
-test('the assistant chat exposes the knowledge base and its extraction tasks', () => {
+test('the assistant chat is a free conversation with optional knowledge base access', () => {
   const markup = renderToStaticMarkup(React.createElement(AIAssistantDrawer, {
     isOpen: true,
     onClose: () => {},
@@ -18,12 +18,14 @@ test('the assistant chat exposes the knowledge base and its extraction tasks', (
     curriculumLessons: lessons,
   }));
 
-  assert.match(markup, /قاعدة المعرفة/);
-  assert.match(markup, /استخرج الأنشطة/);
-  assert.match(markup, /المشكلة والفرضية/);
-  assert.match(markup, /إرساء الموارد/);
-  assert.match(markup, /اقترح تمريناً/);
-  assert.match(markup, /استخراج مباشر/);
+  assert.match(markup, /محادثة حرة/);
+  assert.match(markup, /كيف أساعدك اليوم/);
+  assert.match(markup, /اقترح نشاطًا حول الهضم/);
+  assert.doesNotMatch(markup, /إرساء الموارد|KNOWLEDGE_QUICK_TASKS/);
+  assert.match(markup, /تصفح قاعدة المعرفة/);
+  assert.match(markup, /إجابات من المصادر فقط/);
+  assert.match(markup, /placeholder="اكتب سؤالك/);
+  assert.doesNotMatch(markup, /إرساء الموارد|اختر المستوى|استخراج مباشر/);
   assert.match(markup, /aria-label="محادثة المساعد التربوي"/);
 });
 

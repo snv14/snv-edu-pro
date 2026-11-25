@@ -46,6 +46,24 @@ export const CONNECTOR_LABELS: Record<ConnectorId, string> = {
   web: 'Web Search',
 };
 
+export interface AssistantContext {
+  level: string;
+  levelLabel: string;
+  subject: string;
+  topic: string;
+  sequence?: string;
+  competency?: string;
+  resource?: string;
+  questionType: string;
+  requestedAction: string;
+  sourceScope: ConnectorId[];
+}
+
+export interface ContextNode {
+  label: string;
+  value: string;
+}
+
 export interface AssistantPlan {
   intent: AssistantIntent;
   intentLabel: string;
@@ -55,6 +73,25 @@ export interface AssistantPlan {
   webMode: 'off' | 'explicit' | 'fallback';
   webReason?: string;
   stages: string[];
+  context: AssistantContext;
+}
+
+export type EvidenceOrigin = 'official' | 'teacher' | 'web' | 'generated';
+
+/** عنصر من مجموعة الأدلة التي تُبنى قبل الإجابة. */
+export interface EvidenceItem {
+  id: string;
+  origin: EvidenceOrigin;
+  title: string;
+  section: string;
+  page?: number;
+  snippet: string;
+  url?: string;
+  relevance: number;
+  /** سلطة المصدر: 100 رسمي، 60 وثيقة أستاذ، 30 ويب. */
+  authority: number;
+  confidenceLabel: string;
+  referenceId?: string;
 }
 
 export interface SpaceCitation {
@@ -71,6 +108,12 @@ export interface AssistantOutcome {
   spaceCitations: SpaceCitation[];
   webSources: Array<{ title: string; uri: string }>;
   plan: AssistantPlan;
+  evidence: EvidenceItem[];
+  followUps: string[];
+  /** هل طلب الأستاذ صراحةً رؤية المصادر/المراجع. */
+  revealSources: boolean;
+  /** هل طلب الأستاذ صراحةً معرفة المستوى الدراسي. */
+  revealLevel: boolean;
   usedLocal: boolean;
   fallbackNotice?: string;
   provider?: string;

@@ -1,20 +1,17 @@
 import type { LessonMemo } from '../types';
 import type { TeacherKnowledgeDoc, KnowledgeLevel } from '../types/knowledge';
 import {
-  prepareKnowledge,
   askSmartAi,
   type SmartAiAttachment,
   type SmartAiMessage,
-  type SmartAiRequest,
 } from './smartAi';
 import { detectLevel, normalizeArabic, type KnowledgeReference } from './knowledgeBase';
 import { loadKnowledgeSettings, type KnowledgeSettings } from './knowledgeLibraryStore';
 import { preloadOfficialSources } from './knowledgeOfficialSources';
-import {
-  searchSpace,
-  type KnowledgeSpace,
-  type SpaceSearchHit,
-} from './knowledgeSpaces';
+import { type KnowledgeSpace, type SpaceSearchHit } from './knowledgeSpaces';
+import { collectConnectorEvidence } from './assistantConnectors';
+import { detectAssistantContext, suggestFollowUps } from './assistantContext';
+import { evidenceFromReferences, evidenceFromWeb } from './assistantEvidence';
 import {
   ASSISTANT_INTENT_LABELS,
   type AssistantIntent,
@@ -58,12 +55,61 @@ const LEVEL_LABELS: Record<string, string> = {
 
 export const assistantLevelLabel = (level: string): string => LEVEL_LABELS[level] || (level ? level : 'كل المستويات');
 
+const ARABIC_LEVEL_PATTERNS: Array<[RegExp, string]> = [
+  [/(?:ال|ل)?سنه\s*(?:ال)?(اولي|اول)(?=\s|$)/, '1am'],
+  [/(?:ال|ل)?سنه\s*(?:ال)?(ثانيه|ثاني)(?=\s|$)/, '2am'],
+  [/(?:ال|ل)?سنه\s*(?:ال)?(ثالثه|ثالث)(?=\s|$)/, '3am'],
+  [/(?:ال|ل)?سنه\s*(?:ال)?(رابعه|رابع)(?=\s|$)/, '4am'],
+];
+
 /** استنتاج المستوى من السؤال ثم من سياق المنصة. */
 export function detectAssistantLevel(question: string, fallback = ''): string {
   const direct = String(question || '').match(LEVEL_SUFFIX)?.[1]?.toLowerCase();
   if (direct) return direct;
+  const normalized = normalizeArabic(question);
+  const arabic = ARABIC_LEVEL_PATTERNS.find(([pattern]) => pattern.test(normalized))?.[1];
+  if (arabic) return arabic;
   const level = detectLevel(question, (fallback || 'all') as KnowledgeLevel);
   return level || fallback || 'all';
+}
+
+const SOURCE_REQUEST = /(?:ما|ماذا|اذكر|أذكر|ارني|أرني|اظهر|أظهر|عين|حدد|من اين|من وين)\s+(?:هي\s+|هو\s+)?(?:ال)?(?:مصدر|مصادر|مرجع|مراجع)|من اين|من وين|معرفه (?:ال)?(?:مصدر|مصادر)|مصادرك|مراجعك|رقم الصفحه|اي صفحه|الوثيقه التي/;
+const LEVEL_REQUEST = /اي مستوي|أي مستوي|اي سنه|أي سنه|المستوي الدراسي|مستوي دراسي|اي صف/;
+
+/** هل طلب الأستاذ صراحةً رؤية المصادر؟ */
+export const wantsSources = (question: string): boolean => SOURCE_REQUEST.test(normalizeArabic(question));
+
+/** هل طلب الأستاذ صراحةً معرفة المستوى الدراسي؟ */
+export const wantsLevel = (question: string): boolean => LEVEL_REQUEST.test(normalizeArabic(question));
+
+const FOLLOW_UP = /^(اجعله|اجعلها|اضف|أضف|ادخله|أدخله|حوله|حولها|عدل|عدله|نفسه|نفسها|هذا|هذه|قصير|اعد|أعد|طبقه|طبّقه)/;
+
+/**
+ * توسيع سؤال متابعة قصير بآخر سؤال للأستاذ حتى يبحث المساعد في الموضوع نفسه
+ * (مثال: «اجعله أكثر تفاعلية» بعد «أريد نشاطًا حول الهضم»).
+ */
+export function expandConversationQuery(question: string, history: SmartAiMessage[] = []): string {
+  const clean = String(question || '').trim();
+  if (!clean || !history.length) return clean;
+  const lastUser = [...history].reverse().find(message => message.role === 'user' && message.text?.trim());
+  if (!lastUser || lastUser.text.trim() === clean) return clean;
+  const isFollowUp = FOLLOW_UP.test(normalizeArabic(clean));
+  if (!isFollowUp) return clean;
+  const anchor = lastUser.text.replace(/\s+/g, ' ').trim().slice(0, 180);
+  return anchor && !anchor.includes(clean) ? `${anchor} — ${clean}` : clean;
+}
+
+/** إزالة أثر الاستشهادات والمصادر من الرد العادي. */
+export function stripSourceDetails(text: string): string {
+  return String(text || '')
+    .replace(/\n{2,}#{1,4}\s*(?:📘\s*)?(?:وارد في المصادر|المصادر|المراجع)[\s\S]*$/i, '')
+    .replace(/^\s*>\s*مقتطفات حرفية.*$/gm, '')
+    .replace(/\[(\d{1,2})\]/g, '')
+    .replace(/^\s*(?:المصدر|المصادر|المرجع|المراجع)\s*:.*$/gm, '')
+    .replace(/(?:وفق(?:ًا|ا)|حسب|طبق(?:ًا|ا))\s+(?:للمنهاج|للوثيقة المرافقة|لدليل الأستاذ|للمذكرة|للتدرج)[^،.؛\n]*[،.؛]?/g, '')
+    .replace(/\((?:ص|صفحة)\s*\d+[^)]*\)/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 /** عنوان موضوع مختصر يُعرض في خطة المساعد. */
@@ -80,12 +126,22 @@ export function topicFromQuestion(question: string): string {
 export interface PlanArgs {
   question: string;
   level?: string;
+  lesson?: LessonMemo | null;
+  curriculum?: LessonMemo[];
   space?: KnowledgeSpace | null;
   hasAttachments?: boolean;
   webAllowed?: boolean;
 }
 
-export function planAssistantQuery({ question, level, space, hasAttachments, webAllowed = true }: PlanArgs): AssistantPlan {
+export function planAssistantQuery({
+  question,
+  level,
+  lesson,
+  curriculum = [],
+  space,
+  hasAttachments,
+  webAllowed = true,
+}: PlanArgs): AssistantPlan {
   const detectedIntent = detectAssistantIntent(question);
   const intent = hasAttachments && detectedIntent === 'GENERAL_EDUCATIONAL_QUERY' ? 'ANALYZE_DOCUMENT' : detectedIntent;
   const resolvedLevel = detectAssistantLevel(question, level || '');
@@ -106,6 +162,16 @@ export function planAssistantQuery({ question, level, space, hasAttachments, web
     '🤖 أرتب المعلومات وأتحقق من المصادر…',
   ].filter(Boolean);
 
+  const context = detectAssistantContext({
+    question,
+    level: resolvedLevel,
+    lesson,
+    intent,
+    intentLabel: ASSISTANT_INTENT_LABELS[intent],
+    topic,
+    connectors,
+  });
+
   return {
     intent,
     intentLabel: ASSISTANT_INTENT_LABELS[intent],
@@ -115,38 +181,11 @@ export function planAssistantQuery({ question, level, space, hasAttachments, web
     webMode,
     webReason: webMode === 'explicit' ? 'طلب الأستاذ البحث في الإنترنت أو مصادر خارجية.' : undefined,
     stages,
+    context,
   };
 }
 
 /* ───────────────────────────── تحويل النتائج إلى مصادر ───────────────────────────── */
-
-const spaceRefsOf = (space: KnowledgeSpace, hits: SpaceSearchHit[]): KnowledgeReference[] =>
-  hits.map((hit, index) => ({
-    id: `space-${hit.source.id}-${hit.chunk.id}`,
-    kind: 'teacherDocument',
-    kindLabel: 'وثيقة الأستاذ',
-    title: hit.source.name,
-    section: `مقطع ${index + 1}${hit.chunk.page ? ` — ص ${hit.chunk.page}` : ''}`,
-    facet: 'reference',
-    facetLabel: 'مرجع',
-    level: (space.level || 'all') as KnowledgeLevel,
-    status: 'teacher',
-    statusLabel: 'وثيقة الأستاذ',
-    sourceLabel: `مساحة المعرفة: ${space.title}`,
-    page: hit.chunk.page,
-    snippet: hit.snippet,
-    score: hit.score,
-    scopeLabel: space.title,
-  }));
-
-const dedupeReferences = (references: KnowledgeReference[]): KnowledgeReference[] => {
-  const seen = new Set<string>();
-  return references.filter(reference => {
-    if (!reference || !reference.id || seen.has(reference.id)) return false;
-    seen.add(reference.id);
-    return true;
-  });
-};
 
 const spaceCitationsOf = (hits: SpaceSearchHit[]): SpaceCitation[] =>
   hits.map(hit => ({
@@ -200,6 +239,33 @@ const localizedSuggestions = (plan: AssistantPlan): string[] => {
       ];
   }
 };
+
+/** جواب محلي بأسلوب محادثة: النتيجة أولًا دون أسماء وثائق أو مستويات أو صفحات. */
+export function buildConversationalLocalAnswer(plan: AssistantPlan, references: KnowledgeReference[]): string {
+  if (!references.length) {
+    return [
+      'لم أجد معلومة مؤكدة كافية للإجابة عن هذا الطلب.',
+      '',
+      'جرّب إعادة صياغة الطلب أو تفصيله أكثر، وسأتابع معك.',
+    ].join('\n');
+  }
+
+  const points = references.slice(0, 3).map(reference => `- ${clip(reference.snippet, 300)}`);
+  const suggestions = localizedSuggestions(plan)
+    .filter(item => !/مصدر|مقتطف|صفح|وثيق|المستوى/.test(item))
+    .slice(0, 3);
+  const nextSteps = suggestions.length ? suggestions : [
+    'أخبرني إن أردت تحويل الإجابة إلى نشاط أو تجربة أو مذكرة جاهزة.',
+    'يمكنك طلب التعديل أو التوضيح، وسأتابع نفس الموضوع دون إعادة الشرح.',
+  ];
+  return [
+    '### الإجابة',
+    ...points,
+    '',
+    '### 🤖 اقتراح المساعد',
+    ...nextSteps.map(item => `- ${item}`),
+  ].join('\n');
+}
 
 /** بناء جواب محلي يستند حرفيًا إلى المقاطع المسترجعة، بلا اختراع معلومات. */
 export function buildGroundedLocalAnswer(
@@ -283,38 +349,19 @@ export interface RunAssistantArgs {
   webAllowed?: boolean;
 }
 
-interface PlatformResult {
-  references: KnowledgeReference[];
-  localAnswer: string;
-}
-
-const retrievePlatform = (args: RunAssistantArgs, settings: KnowledgeSettings): PlatformResult | null => {
-  const request: SmartAiRequest = {
-    question: args.question,
-    lesson: args.lesson || null,
-    curriculum: args.curriculum,
-    level: args.level,
-    knowledge: {
-      enabled: true,
-      settings,
-      extraDocs: args.extraDocs || [],
-    },
-  };
-  try {
-    const prepared = prepareKnowledge(request);
-    if (!prepared) return null;
-    return { references: prepared.references, localAnswer: prepared.localAnswer };
-  } catch (error) {
-    console.warn('[assistant] platform retrieval failed', error);
-    return null;
-  }
-};
-
 export async function runAssistantQuery(args: RunAssistantArgs): Promise<AssistantOutcome> {
   const settings = { ...loadKnowledgeSettings(), ...(args.settings || {}) };
+  const retrievalQuestion = expandConversationQuery(args.question, args.history || []);
+  const revealSources = wantsSources(args.question);
+  const revealLevel = wantsLevel(args.question);
+  // لا نقيّد البحث بمستوى مفتوح في المنصة؛ نستخدم المورد فقط إذا طابق المستوى المطلوب صراحةً.
+  const requestedLevel = detectAssistantLevel(retrievalQuestion, '');
+  const scopedLesson = args.lesson && requestedLevel !== 'all' && args.lesson.level === requestedLevel ? args.lesson : null;
   const plan = planAssistantQuery({
-    question: args.question,
+    question: retrievalQuestion,
     level: args.level,
+    lesson: scopedLesson,
+    curriculum: args.curriculum,
     space: args.space,
     hasAttachments: Boolean(args.attachments && args.attachments.length),
     webAllowed: args.webAllowed !== false,
@@ -324,10 +371,17 @@ export async function runAssistantQuery(args: RunAssistantArgs): Promise<Assista
     await preloadOfficialSources();
   }
 
-  const platform = retrievePlatform(args, settings);
-  const spaceHits = searchSpace(args.space, args.question, 6);
-  const spaceReferences = args.space ? spaceRefsOf(args.space, spaceHits) : [];
-  let references = dedupeReferences([...(platform?.references || []), ...spaceReferences]);
+  const collected = await collectConnectorEvidence({
+    question: retrievalQuestion,
+    plan,
+    lesson: scopedLesson,
+    curriculum: args.curriculum,
+    space: args.space,
+    settings,
+    extraDocs: args.extraDocs,
+  });
+  const spaceHits = collected.spaceHits;
+  let references = collected.references;
 
   let webUsed = plan.webMode === 'explicit';
   const hasAttachments = Boolean(args.attachments && args.attachments.length);
@@ -340,9 +394,19 @@ export async function runAssistantQuery(args: RunAssistantArgs): Promise<Assista
     if (!plan.stages.includes(stage)) plan.stages.splice(Math.max(1, plan.stages.length - 1), 0, stage);
   }
 
+  const allFollowUps = suggestFollowUps(plan.intent, plan.topic);
+  const followUps = revealSources
+    ? allFollowUps
+    : allFollowUps.filter(item => !/مصدر|مرجع|وثيق|صفح/.test(item));
   const buildFallback = (notice?: string): AssistantOutcome => ({
-    text: buildGroundedLocalAnswer(plan, references, args.space?.title || ''),
+    text: revealSources
+      ? buildGroundedLocalAnswer(plan, references, args.space?.title || '')
+      : buildConversationalLocalAnswer(plan, references),
     references,
+    evidence: evidenceFromReferences(references),
+    followUps,
+    revealSources,
+    revealLevel,
     spaceCitations: spaceCitationsOf(spaceHits),
     webSources: [],
     plan,
@@ -359,7 +423,7 @@ export async function runAssistantQuery(args: RunAssistantArgs): Promise<Assista
     return buildFallback();
   }
 
-  const platformCount = platform?.references.length || 0;
+  const platformCount = references.filter(reference => reference.kind !== 'teacherDocument').length;
   const extraContext = spaceHits.length
     ? [
       `مقتطفات من مساحة المعرفة «${args.space?.title || ''}» (وثائق الأستاذ) — استشهد بها بأسماء الملفات وأرقام صفحاتها ولا تنسبها إلى المنهاج:`,
@@ -372,13 +436,15 @@ export async function runAssistantQuery(args: RunAssistantArgs): Promise<Assista
 
   try {
     const reply = await askSmartAi({
-      question: args.question,
-      lesson: args.lesson || null,
+      question: retrievalQuestion,
+      lesson: scopedLesson,
       curriculum: args.curriculum,
       attachments: args.attachments || [],
       useWeb: webUsed,
-      level: plan.level === 'all' ? args.level : plan.level,
+      level: plan.level === 'all' ? undefined : plan.level,
       expertMode: true,
+      conversationMode: true,
+      sourcesAllowed: revealSources,
       history: args.history || [],
       signal: args.signal,
       knowledge: {
@@ -386,14 +452,21 @@ export async function runAssistantQuery(args: RunAssistantArgs): Promise<Assista
         settings,
         extraDocs: args.extraDocs || [],
         extraContext,
-        extraReferences: spaceReferences,
+        extraReferences: references.filter(reference => reference.kind === 'teacherDocument'),
       },
     });
 
     if (!reply) return buildFallback();
 
-    const merged = dedupeReferences([...(reply.knowledge || []), ...references]);
-    if (merged.length) references = merged;
+    if (reply.knowledge?.length) {
+      const seen = new Set<string>();
+      const merged = [...reply.knowledge, ...references].filter(reference => {
+        if (!reference?.id || seen.has(reference.id)) return false;
+        seen.add(reference.id);
+        return true;
+      });
+      references = merged;
+    }
 
     if (reply.localAnswer) {
       return {
@@ -406,19 +479,29 @@ export async function runAssistantQuery(args: RunAssistantArgs): Promise<Assista
     const text = String(reply.text || '').trim();
     if (!text) return buildFallback();
 
-    let validated = ensureSourcesSection(validateCitationMarkers(text, Math.max(1, references.length)), references);
+    const answerText = !revealSources && reply.localAnswer
+      ? buildConversationalLocalAnswer(plan, references)
+      : text;
+    let validated = revealSources
+      ? ensureSourcesSection(validateCitationMarkers(answerText, Math.max(1, references.length)), references)
+      : stripSourceDetails(validateCitationMarkers(answerText, 0));
     const generative: AssistantIntent[] = ['GENERATE_ACTIVITY', 'GENERATE_ASSESSMENT', 'REMEDIATION', 'SEARCH_ACTIVITY'];
     if (generative.includes(plan.intent) && !/اقتراح/.test(validated)) {
       validated += '\n\n> 🤖 الاقتراحات أعلاه مولّدة للمساعدة، والقرار النهائي للأستاذ.';
     }
-    if (!references.length && !(reply.sources || []).length) {
+    if (!references.length && !(reply.sources || []).length && revealSources) {
       validated = `> 🤖 إجابة عامة لا تستند إلى مصدر موثق في المنصة.\n\n${validated}`;
     }
+    const webSources = (reply.sources || []).filter(source => source && source.uri);
     return {
       text: validated,
       references,
+      evidence: [...evidenceFromReferences(references), ...evidenceFromWeb(webSources)],
+      followUps,
+      revealSources,
+      revealLevel,
       spaceCitations: spaceCitationsOf(spaceHits),
-      webSources: (reply.sources || []).filter(source => source && source.uri),
+      webSources,
       plan,
       usedLocal: false,
       fallbackNotice: reply.fallbackNotice,
@@ -428,16 +511,26 @@ export async function runAssistantQuery(args: RunAssistantArgs): Promise<Assista
     if (args.signal?.aborted) throw error;
     console.error('[assistant] generation failed', error);
     if (references.length || spaceHits.length) {
-      return buildFallback('تعذر تشغيل التحليل الذكي مؤقتًا، لكن تم العثور على نتائج موثقة في المصادر وعُرضت كما هي.');
+      return buildFallback(revealSources
+        ? 'تعذر تشغيل التحليل الذكي مؤقتًا، لكن تم العثور على نتائج موثقة في المصادر وعُرضت كما هي.'
+        : 'تعذر تشغيل التحليل الذكي مؤقتًا، لكن وجدت مقاطع مناسبة وعرضتها كما هي.');
     }
     return {
-      ...buildFallback('تعذر تشغيل التحليل الذكي مؤقتًا، ولم أجد نتائج موثقة كافية.'),
-      text: [
-        NO_CONFIRMED_INFORMATION,
-        '',
-        'تعذر تشغيل التحليل الذكي مؤقتًا، ولم أجد نتائج موثقة كافية في المصادر المتاحة.',
-        'يمكنك إعادة المحاولة، أو إضافة الوثيقة إلى مساحة معرفة، أو السماح بالبحث الخارجي.',
-      ].join('\n'),
+      ...buildFallback(revealSources
+        ? 'تعذر تشغيل التحليل الذكي مؤقتًا، ولم أجد نتائج موثقة كافية.'
+        : 'تعذر تشغيل التحليل الذكي مؤقتًا، ولم أجد نتائج كافية.'),
+      text: revealSources
+        ? [
+          NO_CONFIRMED_INFORMATION,
+          '',
+          'تعذر تشغيل التحليل الذكي مؤقتًا، ولم أجد نتائج موثقة كافية في المصادر المتاحة.',
+          'يمكنك إعادة المحاولة، أو إضافة الوثيقة إلى مساحة معرفة، أو السماح بالبحث الخارجي.',
+        ].join('\n')
+        : [
+          'لم أجد معلومة مؤكدة كافية للإجابة عن هذا الطلب.',
+          '',
+          'تعذر تشغيل التحليل الذكي مؤقتًا. يمكنك إعادة المحاولة أو تفصيل طلبك أكثر.',
+        ].join('\n'),
     };
   }
 }

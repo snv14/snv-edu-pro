@@ -1,13 +1,18 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  buildConversationalLocalAnswer,
   buildGroundedLocalAnswer,
   detectAssistantIntent,
   detectAssistantLevel,
   ensureSourcesSection,
+  expandConversationQuery,
   NO_CONFIRMED_INFORMATION,
   planAssistantQuery,
+  stripSourceDetails,
   validateCitationMarkers,
+  wantsLevel,
+  wantsSources,
 } from '../src/services/assistantOrchestrator';
 import { chunkSpaceText, searchSpace, splitIntoPages, type KnowledgeSpace } from '../src/services/knowledgeSpaces';
 import type { KnowledgeReference } from '../src/services/knowledgeBase';
@@ -106,6 +111,45 @@ test('لا يخترع المساعد معلومة عند غياب المصادر
   const answer = buildGroundedLocalAnswer(plan, []);
   assert.match(answer, new RegExp(NO_CONFIRMED_INFORMATION));
   assert.doesNotMatch(answer, /📘 وارد في المصادر/);
+});
+
+test('البحث الافتراضي شامل لكل المستويات دون تقييد', () => {
+  const plan = planAssistantQuery({ question: 'أريد نشاطًا حول الهضم' });
+  assert.equal(plan.level, 'all');
+  assert.ok(plan.connectors.includes('platform'));
+});
+
+test('أسئلة المتابعة القصيرة تُوسّع بسياق آخر سؤال للأستاذ', () => {
+  const history = [
+    { role: 'user' as const, text: 'أريد نشاطًا حول الهضم' },
+    { role: 'assistant' as const, text: 'إليك نشاطًا أوليًا حول الهضم.' },
+  ];
+  const expanded = expandConversationQuery('اجعله أكثر تفاعلية', history);
+  assert.match(expanded, /الهضم/);
+  assert.match(expanded, /أكثر تفاعلية/);
+  assert.equal(expandConversationQuery('ما هو الهضم؟', history), 'ما هو الهضم؟');
+});
+
+test('كشف طلب المصادر أو المستوى الصريح فقط', () => {
+  assert.equal(wantsSources('من أين أتت هذه المعلومة؟'), true);
+  assert.equal(wantsSources('أريد نشاطًا حول الهضم'), false);
+  assert.equal(wantsLevel('أي مستوى يناسب هذا النشاط؟'), true);
+  assert.equal(wantsLevel('أريد نشاطًا حول الهضم'), false);
+});
+
+test('تنظيف الرد العادي يخفي الاستشهادات وأسماء المصادر', () => {
+  const raw = 'الهضم عملية تحويل [1]، وفقًا للمنهاج.\n\n### المصادر\n[1] مذكرة الهضم ص 12';
+  const clean = stripSourceDetails(raw);
+  assert.doesNotMatch(clean, /\[1\]|المصادر|المنهاج|مذكرة|ص 12/);
+  assert.match(clean, /الهضم/);
+});
+
+test('الجواب المحلي في المحادثة الحرة لا يعرض مستوى ولا اسم وثيقة', () => {
+  const plan = planAssistantQuery({ question: 'ما هو مقر الامتصاص؟' });
+  const answer = buildConversationalLocalAnswer(plan, [reference()]);
+  assert.match(answer, /الإجابة/);
+  assert.match(answer, /الجذور/);
+  assert.doesNotMatch(answer, /1am|السنة الأولى|ص 14|المصادر|الوثيقة/);
 });
 
 test('تقطيع المساحة يحفظ أرقام الصفحات ويبحث دلاليًا بالكلمات', () => {

@@ -1,13 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Bot, Check, Clipboard, Database, FolderOpen, History, Layers, Loader2,
-  MessageSquarePlus, Paperclip, Plus, Send, ShieldCheck, Sparkles, Trash2, User, X,
+  Bot, Check, Clipboard, FolderOpen, History, Layers, Loader2,
+  MessageSquarePlus, Paperclip, Plus, Send, Sparkles, Trash2, User, X,
 } from 'lucide-react';
 import { LessonMemo } from '../types';
 import type { TeacherKnowledgeDoc } from '../types/knowledge';
 import type { SmartAiMessage, SmartAiSource } from '../services/smartAi';
 import { planAssistantQuery, runAssistantQuery } from '../services/assistantOrchestrator';
-import { CONNECTOR_LABELS, type ConnectorId } from '../services/assistantTypes';
+import { contextGraph } from '../services/assistantContext';
+import type { ConnectorId, ContextNode } from '../services/assistantTypes';
 import {
   createKnowledgeSpace, loadSpaces, saveSpaces, spaceSizeLabel, type KnowledgeSpace,
 } from '../services/knowledgeSpaces';
@@ -17,7 +18,6 @@ import { AssistantThread, createThread, loadThreads, saveThreads, threadTitleFro
 import { loadKnowledgeSettings, saveKnowledgeSettings, type KnowledgeSettings } from '../services/knowledgeLibraryStore';
 import { loadOcrSupplement } from '../services/knowledgeSupplements';
 import { preloadOfficialSources } from '../services/knowledgeOfficialSources';
-import { buildQuickTaskPrompt, describeScope, KNOWLEDGE_QUICK_TASKS } from '../services/knowledgeQuickTasks';
 import type { KnowledgeReference } from '../services/knowledgeBase';
 import { KnowledgeBasePanel } from './KnowledgeBasePanel';
 
@@ -43,6 +43,11 @@ interface ChatEntry {
   intentLabel?: string;
   spaceTitle?: string;
   webReason?: string;
+  followUps?: string[];
+  graph?: ContextNode[];
+  retryQuestion?: string;
+  revealSources?: boolean;
+  revealLevel?: boolean;
 }
 
 const MAX_ATTACHMENTS = 4;
@@ -56,8 +61,8 @@ const ACCEPTED_TYPES = new Set([
 ]);
 
 const GREETING = [
-  'مرحباً زميلي الأستاذ(ة). أنا SNV Smart Assistant: اسأل سؤالًا واحدًا، وأنا أختار المصادر المناسبة تلقائيًا.',
-  'أبحث أولًا في قاعدة المنصة (المنهاج، الوثيقة المرافقة، دليل الأستاذ، المذكرات)، ثم في مساحات معرفتك الخاصة، ثم في الويب عند الحاجة فقط.',
+  'مرحباً زميلي الأستاذ(ة). أنا SNV Smart Assistant — اسأل بحرية كما تشاء، وسأتابع الحوار معك.',
+  'أبحث تلقائيًا في جميع محتويات المنصة وأجيبك مباشرة، دون أن تختار مستوى أو مصدرًا.',
 ].join('\n');
 
 const makeId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -179,20 +184,23 @@ export const ChatRichText: React.FC<{ text: string }> = ({ text }) => {
   return <div className="space-y-0.5">{blocks}</div>;
 };
 
-const SourceChip: React.FC<{ reference: KnowledgeReference }> = ({ reference }) => (
+const SourceChip: React.FC<{ reference: KnowledgeReference; onOpenSpace?: () => void }> = ({ reference, onOpenSpace }) => (
   <details className="rounded-lg border border-emerald-200 bg-emerald-50/70 px-2 py-1">
     <summary className="cursor-pointer list-none truncate text-[10.5px] font-bold text-emerald-900">
       {reference.kindLabel} · {reference.facetLabel} — {reference.section}
       {reference.page ? ` — ص ${reference.page}` : ''}
       <span className="mr-1 rounded bg-white/70 px-1 text-[9px] font-black text-emerald-800">
-        {reference.status === 'teacher' || reference.kind === 'teacherDocument' ? 'وثيقة الأستاذ' : 'مصدر المنصة'}
+        {reference.statusLabel || (reference.kind === 'teacherDocument' ? 'موثق من ملف الأستاذ' : 'موثق رسميًا')}
       </span>
     </summary>
     <p className="mt-1 text-[10.5px] text-slate-700 whitespace-pre-line leading-relaxed">{reference.snippet}</p>
     <p className="mt-1 text-[9.5px] text-slate-500">
-      {reference.title}{reference.scopeLabel ? ` — ${reference.scopeLabel}` : ''} [{reference.statusLabel}]
+      {reference.title}{reference.scopeLabel ? ` — ${reference.scopeLabel}` : ''}
       {reference.url ? (
         <a href={reference.url} target="_blank" rel="noreferrer" className="mr-1 text-blue-700 hover:underline">فتح المصدر</a>
+      ) : null}
+      {reference.kind === 'teacherDocument' && onOpenSpace ? (
+        <button type="button" onClick={onOpenSpace} className="mr-1 text-teal-800 hover:underline">فتح مساحة المصدر</button>
       ) : null}
     </p>
   </details>
@@ -238,7 +246,6 @@ export const AIAssistantDrawer: React.FC<{
   const [spaces, setSpaces] = useState<KnowledgeSpace[]>([]);
   const [activeSpaceId, setActiveSpaceId] = useState('');
   const [showSpacePanel, setShowSpacePanel] = useState(false);
-  const [showConnectors, setShowConnectors] = useState(false);
   const [stage, setStage] = useState('');
   const [spaceNotice, setSpaceNotice] = useState('');
   const threadRef = useRef<HTMLDivElement>(null);
@@ -323,30 +330,6 @@ export const AIAssistantDrawer: React.FC<{
       .slice(0, 5),
     [spaces],
   );
-
-  const taskScope = useMemo(() => ({
-    level: selectedLevel || currentLesson?.level,
-    midan: currentLesson?.midan,
-    maqta: currentLesson?.maqta,
-    mawrid: currentLesson?.mawrid,
-    ta3alom: currentLesson?.ta3alom,
-  }), [selectedLevel, currentLesson]);
-
-  const useQuickTask = (taskId: string) => {
-    const task = KNOWLEDGE_QUICK_TASKS.find(item => item.id === taskId);
-    if (!task) return;
-    setDraft(buildQuickTaskPrompt(task, taskScope));
-    setShowKnowledge(false);
-    setShowTools(false);
-    inputRef.current?.focus();
-  };
-
-  const askSolutionFromDb = () => {
-    setDraft(`اقترح حلولاً من قاعدة بيانات المنصة لـ${describeScope(taskScope)}: أسئلة التقويم مع الأجوبة المرتقبة وسلّم تنقيط مختصر. اعتمد على المصادر الموثقة فقط، وضع أي إضافة جديدة تحت وسم «اقتراح تربوي — يحتاج مراجعة الأستاذ».`);
-    setShowKnowledge(false);
-    setShowTools(false);
-    inputRef.current?.focus();
-  };
 
   const history = useMemo<SmartAiMessage[]>(() => conversationContext(
     entries
@@ -507,7 +490,6 @@ export const AIAssistantDrawer: React.FC<{
     const previousHistory = history;
     const plan = planAssistantQuery({
       question,
-      level: selectedLevel,
       space: activeSpace,
       hasAttachments: outgoingAttachments.length > 0,
     });
@@ -535,7 +517,6 @@ export const AIAssistantDrawer: React.FC<{
         lesson: currentLesson,
         curriculum: curriculumLessons,
         attachments: outgoingAttachments.map(({ name, mimeType, dataUrl }) => ({ name, mimeType, dataUrl })),
-        level: selectedLevel,
         history: previousHistory,
         signal: controller.signal,
         space: activeSpace,
@@ -570,6 +551,10 @@ export const AIAssistantDrawer: React.FC<{
         intentLabel: outcome.plan.intentLabel,
         spaceTitle: activeSpace?.title,
         webReason: outcome.plan.webReason,
+        followUps: outcome.followUps,
+        graph: contextGraph(outcome.plan.context, currentLesson),
+        revealSources: outcome.revealSources,
+        revealLevel: outcome.revealLevel,
       }]);
     } catch (error) {
       if (controller.signal.aborted) return;
@@ -580,6 +565,7 @@ export const AIAssistantDrawer: React.FC<{
         text: 'تعذر إكمال الطلب الآن، لكن يمكنك إعادة المحاولة أو البحث مباشرة في مصادر المنصة من زر «القاعدة».',
         time: clock(),
         failed: true,
+        retryQuestion: question,
       }]);
     } finally {
       window.clearInterval(stageTimer);
@@ -601,37 +587,8 @@ export const AIAssistantDrawer: React.FC<{
     }
   };
 
-  const contextLabel = currentLesson?.ta3alom
-    ? `المورد: ${currentLesson.ta3alom}`
-    : (selectedLevel ? `المستوى: ${selectedLevel}` : 'بدون مورد محدد');
-
   const conversationStarted = entries.some(entry => entry.sender === 'user');
   const lastEntry = entries[entries.length - 1];
-
-  const quickTaskList = (
-    <div className="space-y-1">
-      <button
-        type="button"
-        onClick={askSolutionFromDb}
-        className="w-full text-right inline-flex items-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-2.5 py-2 text-[11.5px] font-black text-teal-900 hover:bg-teal-100 transition"
-      >
-        <Database className="w-3.5 h-3.5 shrink-0" />
-        حلول من قاعدة البيانات
-      </button>
-      {KNOWLEDGE_QUICK_TASKS.map(task => (
-        <button
-          key={task.id}
-          type="button"
-          onClick={() => useQuickTask(task.id)}
-          title={task.hint}
-          className="w-full text-right inline-flex items-center gap-2 rounded-xl border border-transparent px-2.5 py-1.5 text-[11.5px] font-bold text-slate-700 hover:bg-slate-100 transition"
-        >
-          <Sparkles className="w-3.5 h-3.5 shrink-0 text-emerald-700" />
-          <span className="truncate">{task.label}</span>
-        </button>
-      ))}
-    </div>
-  );
 
   return (
     <div
@@ -649,7 +606,7 @@ export const AIAssistantDrawer: React.FC<{
             <div className="w-9 h-9 rounded-xl bg-teal-700 text-white flex items-center justify-center"><Bot className="w-5 h-5" /></div>
             <div className="min-w-0">
               <p className="text-[13px] font-black text-slate-900">SNV Smart Assistant</p>
-              <p className="text-[10px] text-slate-500 truncate">معرفة المنصة · مساحاتك · الويب</p>
+              <p className="text-[10px] text-slate-500 truncate">محادثة حرة · كل المستويات</p>
             </div>
           </div>
         </div>
@@ -661,14 +618,6 @@ export const AIAssistantDrawer: React.FC<{
             className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-teal-700 px-3 py-2 text-[12px] font-black text-white hover:bg-teal-800 transition"
           >
             <MessageSquarePlus className="w-4 h-4" /> محادثة جديدة
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowKnowledge(open => !open)}
-            aria-expanded={showKnowledge}
-            className={`w-full inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-[12px] font-black transition ${showKnowledge ? 'border-teal-700 bg-teal-700 text-white' : 'border-slate-200 bg-white text-slate-800 hover:bg-slate-50'}`}
-          >
-            <Database className="w-4 h-4" /> قاعدة المعرفة
           </button>
         </div>
 
@@ -721,14 +670,6 @@ export const AIAssistantDrawer: React.FC<{
           {spaceNotice && <p className="mt-1 px-1 text-[9.5px] font-bold text-amber-700">{spaceNotice}</p>}
         </div>
 
-        <div className="px-3 pb-2">
-          <div className="rounded-xl bg-slate-50 border border-slate-200 px-3 py-2">
-            <p className="text-[10px] font-black text-slate-400">النطاق الحالي</p>
-            <p className="text-[11.5px] font-bold text-slate-800 mt-0.5">{contextLabel}</p>
-            <p className="text-[10px] text-slate-500 mt-0.5">{describeScope(taskScope)}</p>
-          </div>
-        </div>
-
         <div className="flex-1 overflow-y-auto px-2 py-2 space-y-3">
           <div>
             <p className="px-2 pb-1 text-[10px] font-black text-slate-400 inline-flex items-center gap-1">
@@ -776,49 +717,25 @@ export const AIAssistantDrawer: React.FC<{
               </div>
             </div>
           )}
-          <div>
-            <p className="px-2 pb-1 text-[10px] font-black text-slate-400">مهام سريعة</p>
-            {quickTaskList}
-          </div>
         </div>
 
         <div className="p-3 border-t border-slate-100 space-y-2">
           <button
             type="button"
-            onClick={() => setShowConnectors(open => !open)}
-            aria-expanded={showConnectors}
-            className={`w-full inline-flex items-center justify-between gap-2 rounded-xl border px-2.5 py-2 text-[11px] font-black transition ${showConnectors ? 'border-teal-700 bg-teal-50 text-teal-900' : 'border-slate-200 text-slate-600'}`}
+            onClick={() => { setShowKnowledge(true); setShowSpacePanel(false); }}
+            className="w-full rounded-lg px-2 py-1 text-right text-[10px] font-bold text-slate-500 hover:bg-slate-50 hover:text-teal-800"
           >
-            <span className="inline-flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5" /> Connectors</span>
-            <span className="h-2 w-2 rounded-full bg-emerald-500" />
+            تصفح قاعدة المعرفة
           </button>
-          {showConnectors && (
-            <div className="space-y-1 rounded-xl border border-slate-200 bg-slate-50 p-2">
-              {([
-                ['platform', 'متصل', 'bg-emerald-500'],
-                ['space', spaces.length ? `${spaces.length} مساحة` : 'لا مساحات', spaces.length ? 'bg-emerald-500' : 'bg-slate-300'],
-                ['web', 'تلقائي عند الحاجة', 'bg-amber-400'],
-              ] as Array<[ConnectorId, string, string]>).map(([id, state, tone]) => (
-                <div key={id} className="flex items-center justify-between gap-1 text-[9.5px] font-bold text-slate-600">
-                  <span className="inline-flex items-center gap-1"><span className={`h-1.5 w-1.5 rounded-full ${tone}`} /> {CONNECTOR_LABELS[id]}</span>
-                  <span className="text-slate-400">{state}</span>
-                </div>
-              ))}
-              <p className="pt-1 text-[9px] leading-relaxed text-slate-400">لا تختار أنت المصدر؛ يحدده المساعد تلقائيًا حسب السؤال.</p>
-            </div>
-          )}
           <button
             type="button"
             onClick={() => setKnowledgeSettings(saveKnowledgeSettings({ localFirst: !knowledgeSettings.localFirst }))}
             aria-pressed={knowledgeSettings.localFirst}
-            className={`w-full inline-flex items-center justify-between gap-2 rounded-xl border px-2.5 py-2 text-[11px] font-black transition ${knowledgeSettings.localFirst ? 'border-teal-700 bg-teal-50 text-teal-900' : 'border-slate-200 text-slate-600'}`}
+            className={`w-full inline-flex items-center justify-between gap-2 rounded-lg px-2 py-1 text-[10px] font-bold transition ${knowledgeSettings.localFirst ? 'text-teal-900' : 'text-slate-400 hover:text-slate-600'}`}
           >
-            <span className="inline-flex items-center gap-1.5"><Database className="w-3.5 h-3.5" /> استخراج مباشر</span>
-            <span className={`h-2 w-2 rounded-full ${knowledgeSettings.localFirst ? 'bg-teal-600' : 'bg-slate-300'}`} />
+            <span>إجابات من المصادر فقط</span>
+            <span className={`h-1.5 w-1.5 rounded-full ${knowledgeSettings.localFirst ? 'bg-teal-600' : 'bg-slate-300'}`} />
           </button>
-          <p className="text-[9.5px] leading-relaxed text-slate-400">
-            المصادر: المنهاج، الوثيقة المرافقة، دليل الأستاذ، والمذكرات. التدرج السنوي مستثنى.
-          </p>
         </div>
       </aside>
 
@@ -831,9 +748,7 @@ export const AIAssistantDrawer: React.FC<{
           <div className="min-w-0 flex-1 text-center sm:text-right">
             <h2 className="font-black text-[13px] leading-tight text-slate-900 truncate">{mode === 'section' ? 'SNV Smart Assistant' : 'المحادثة التربوية'}</h2>
             <p className="text-[10px] text-slate-500 truncate">
-              {mode === 'section'
-                ? (activeSpace ? `${activeSpace.title} · ${spaceSizeLabel(activeSpace)}` : 'بحث · قراءة ملفات · فهم · تلخيص · اقتراح')
-                : contextLabel}
+              {activeSpace ? `${activeSpace.title} · ${spaceSizeLabel(activeSpace)}` : 'محادثة حرة — أبحث في كل المستويات'}
             </p>
           </div>
           <div className="flex items-center gap-1 shrink-0">
@@ -844,16 +759,6 @@ export const AIAssistantDrawer: React.FC<{
               className="lg:hidden p-2 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition"
             >
               <Layers className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowKnowledge(open => !open)}
-              title="قاعدة المعرفة: المنهاج، الوثيقة المرافقة، دليل الأستاذ، المذكرات"
-              aria-label="قاعدة المعرفة"
-              aria-pressed={showKnowledge}
-              className={`inline-flex items-center gap-1 px-2 py-2 rounded-lg text-[10.5px] font-bold transition ${showKnowledge ? 'bg-teal-700 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
-            >
-              <Database className="w-4 h-4" /> <span className="hidden sm:inline">القاعدة</span>
             </button>
             {activeSpace && (
               <button
@@ -881,11 +786,7 @@ export const AIAssistantDrawer: React.FC<{
         {context?.label && !showKnowledge && (
           <div className="flex shrink-0 items-center gap-1.5 border-b border-teal-100 bg-teal-50/70 px-3 py-1.5 text-[10px] font-bold text-teal-900">
             <Sparkles className="h-3 w-3 shrink-0" />
-            <span className="truncate">
-              سياق من التقويم: {context.label}
-              {context.error ? ` · الخطأ: ${context.error}` : ''}
-              {context.successRate !== undefined && context.successRate !== '' ? ` · النجاح: ${context.successRate}` : ''}
-            </span>
+            <span className="truncate">سياق من التقويم جاهز</span>
             <span className="mr-auto shrink-0 text-[9px] font-normal text-teal-700/70">راجع الطلب ثم أرسله</span>
           </div>
         )}
@@ -917,11 +818,6 @@ export const AIAssistantDrawer: React.FC<{
               </select>
             </div>
             <div className="rounded-xl bg-slate-50 border border-slate-200 px-3 py-2">
-              <p className="text-[10px] font-black text-slate-400">النطاق الحالي</p>
-              <p className="text-[11.5px] font-bold text-slate-800">{contextLabel}</p>
-              <p className="text-[10px] text-slate-500">{describeScope(taskScope)}</p>
-            </div>
-            <div className="rounded-xl bg-slate-50 border border-slate-200 px-3 py-2">
               <p className="text-[10px] font-black text-slate-400">مساحات المعرفة</p>
               <select
                 value={activeSpaceId}
@@ -936,14 +832,12 @@ export const AIAssistantDrawer: React.FC<{
                 + مساحة معرفة جديدة
               </button>
             </div>
-            {quickTaskList}
             <button
               type="button"
-              onClick={() => setKnowledgeSettings(saveKnowledgeSettings({ localFirst: !knowledgeSettings.localFirst }))}
-              aria-pressed={knowledgeSettings.localFirst}
-              className={`w-full inline-flex items-center gap-2 rounded-xl border px-2.5 py-2 text-[11px] font-black ${knowledgeSettings.localFirst ? 'border-teal-700 bg-teal-50 text-teal-900' : 'border-slate-200 text-slate-600'}`}
+              onClick={() => { setShowKnowledge(true); setShowTools(false); }}
+              className="w-full rounded-xl border border-slate-200 px-2.5 py-2 text-[11px] font-black text-slate-700"
             >
-              <Database className="w-3.5 h-3.5" /> استخراج مباشر
+              تصفح قاعدة المعرفة
             </button>
           </div>
         )}
@@ -976,25 +870,24 @@ export const AIAssistantDrawer: React.FC<{
           <div ref={threadRef} className="flex-1 min-h-0 overflow-y-auto">
             <div className="mx-auto w-full max-w-3xl px-3 sm:px-5 py-4 space-y-4">
               {!conversationStarted && (
-                <div className="rounded-2xl border border-teal-100 bg-gradient-to-l from-teal-50 to-white p-4">
-                  <div className="flex items-center gap-2 text-teal-900">
-                    <Sparkles className="w-4 h-4" />
-                    <p className="text-[13px] font-black">اكتب سؤالك أو اختر مهمة جاهزة</p>
+                <div className="flex flex-col items-center px-4 py-10 text-center">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-teal-700 text-white">
+                    <Bot className="h-6 w-6" />
                   </div>
-                  <p className="mt-1 text-[11.5px] leading-relaxed text-slate-600">
-                    سؤال واحد يكفي: أختار تلقائيًا بين قاعدة المنصة ومساحات معرفتك والويب، وأعرض المصادر والصفحات مع كل جواب.
+                  <h3 className="mt-3 text-[18px] font-black text-slate-900">كيف أساعدك اليوم؟</h3>
+                  <p className="mt-1 max-w-md text-[12px] leading-relaxed text-slate-500">
+                    اكتب سؤالك في الأسفل بحرية. أبحث تلقائيًا في جميع مستويات المنصة ومحتوياتها، ثم أجيبك مباشرة وأتابع الحوار معك.
                     {activeSpace ? ` المساحة النشطة: «${activeSpace.title}».` : ''}
                   </p>
-                  <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                    {KNOWLEDGE_QUICK_TASKS.slice(0, 4).map(task => (
+                  <div className="mt-4 flex flex-wrap justify-center gap-1.5">
+                    {['اقترح نشاطًا حول الهضم', 'كيف أشرح مقر الامتصاص؟', 'أعدّ تقويمًا قصيرًا'].map(prompt => (
                       <button
-                        key={task.id}
+                        key={prompt}
                         type="button"
-                        onClick={() => useQuickTask(task.id)}
-                        className="text-right rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold text-slate-700 hover:border-teal-300 hover:bg-teal-50 transition"
+                        onClick={() => { setDraft(prompt); inputRef.current?.focus(); }}
+                        className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10.5px] font-bold text-slate-600 transition hover:border-teal-300 hover:text-teal-800"
                       >
-                        {task.label}
-                        <span className="block text-[9.5px] font-normal text-slate-400 mt-0.5">{task.hint}</span>
+                        {prompt}
                       </button>
                     ))}
                   </div>
@@ -1020,37 +913,31 @@ export const AIAssistantDrawer: React.FC<{
                       {entry.sender === 'ai' && entry.id !== 'greeting'
                         ? <ChatRichText text={entry.text} />
                         : <p className="whitespace-pre-line leading-relaxed">{entry.text}</p>}
-                      {entry.fromKnowledgeBase && (
-                        <p className="mt-2 inline-flex items-center gap-1 text-[10px] font-black text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-1">
-                          <Database className="w-3.5 h-3.5" />
-                          إجابة موثقة من المصادر المتاحة (دون مزود ذكاء اصطناعي)
-                        </p>
+                      {entry.revealLevel && entry.graph && entry.graph.length > 0 && (
+                        <details className="mt-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1">
+                          <summary className="cursor-pointer text-[9.5px] font-black text-slate-600">السياق التربوي المستنتج</summary>
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {entry.graph.map((node, index) => (
+                              <span key={`${node.label}-${index}`} className="rounded-md bg-white px-1.5 py-0.5 text-[9px] text-slate-600 border border-slate-200">
+                                <span className="text-slate-400">{node.label}:</span> {node.value}
+                              </span>
+                            ))}
+                          </div>
+                        </details>
                       )}
-                      {(entry.intentLabel || (entry.connectors && entry.connectors.length > 0)) && (
-                        <div className="mt-2 flex flex-wrap items-center gap-1">
-                          {entry.intentLabel && (
-                            <span className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-600">🎯 {entry.intentLabel}</span>
-                          )}
-                          {entry.connectors?.map(id => (
-                            <span key={id} className="rounded-md border border-teal-200 bg-teal-50 px-1.5 py-0.5 text-[9px] font-bold text-teal-800">✓ {CONNECTOR_LABELS[id]}</span>
-                          ))}
-                          {entry.spaceTitle && (
-                            <span className="rounded-md border border-sky-200 bg-sky-50 px-1.5 py-0.5 text-[9px] font-bold text-sky-800">{entry.spaceTitle}</span>
-                          )}
-                        </div>
-                      )}
-                      {entry.scopeLabel && (
-                        <p className="mt-1.5 text-[9.5px] font-bold text-slate-500">الموضوع: {entry.scopeLabel}</p>
-                      )}
-                      {entry.knowledge && entry.knowledge.length > 0 && (
+                      {entry.revealSources && entry.knowledge && entry.knowledge.length > 0 && (
                         <div className="mt-2 pt-2 border-t border-emerald-100 space-y-1">
                           <p className="text-[10px] font-black text-emerald-800">المصادر المستخدمة ({entry.knowledge.length}):</p>
                           {entry.knowledge.slice(0, 6).map(reference => (
-                            <SourceChip key={reference.id} reference={reference} />
+                            <SourceChip
+                              key={reference.id}
+                              reference={reference}
+                              onOpenSpace={activeSpace ? () => setShowSpacePanel(true) : undefined}
+                            />
                           ))}
                         </div>
                       )}
-                      {entry.sources && entry.sources.length > 0 && (
+                      {entry.revealSources && entry.sources && entry.sources.length > 0 && (
                         <div className="mt-2 pt-2 border-t border-slate-200 space-y-1">
                           <p className="text-[10px] font-black text-teal-700">مصادر الويب:</p>
                           {entry.webReason && <p className="text-[9px] text-slate-500">سبب البحث الخارجي: {entry.webReason}</p>}
@@ -1060,6 +947,32 @@ export const AIAssistantDrawer: React.FC<{
                             </a>
                           ))}
                         </div>
+                      )}
+                      {entry.followUps && entry.followUps.length > 0 && (
+                        <div className="mt-2 pt-2 border-t border-slate-200">
+                          <p className="text-[9.5px] font-black text-slate-500">يمكنك أيضًا أن تسأل:</p>
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {entry.followUps.slice(0, 3).map(question => (
+                              <button
+                                key={question}
+                                type="button"
+                                onClick={() => { setDraft(question); inputRef.current?.focus(); }}
+                                className="rounded-full border border-teal-200 bg-teal-50 px-2 py-0.5 text-[9.5px] font-bold text-teal-900 hover:bg-teal-100"
+                              >
+                                {question}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {entry.failed && entry.retryQuestion && (
+                        <button
+                          type="button"
+                          onClick={() => void send(entry.retryQuestion)}
+                          className="mt-2 rounded-lg border border-amber-300 bg-amber-100 px-2 py-1 text-[10px] font-black text-amber-900 hover:bg-amber-200"
+                        >
+                          إعادة المحاولة
+                        </button>
                       )}
                     </div>
                     <div className="flex items-center gap-2 px-1 text-[9.5px] text-slate-400">
@@ -1094,27 +1007,6 @@ export const AIAssistantDrawer: React.FC<{
                 </div>
               )}
 
-              {!pending && lastEntry?.sender === 'ai' && lastEntry.id !== 'greeting' && !showKnowledge && (
-                <div className="flex flex-wrap gap-1.5 pr-10">
-                  {KNOWLEDGE_QUICK_TASKS.slice(0, 3).map(task => (
-                    <button
-                      key={task.id}
-                      type="button"
-                      onClick={() => useQuickTask(task.id)}
-                      className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-bold text-slate-600 hover:border-teal-300 hover:text-teal-800 transition"
-                    >
-                      {task.label}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={askSolutionFromDb}
-                    className="rounded-full border border-teal-200 bg-teal-50 px-2.5 py-1 text-[10px] font-bold text-teal-900 hover:bg-teal-100 transition"
-                  >
-                    حلول من قاعدة البيانات
-                  </button>
-                </div>
-              )}
             </div>
           </div>
         )}

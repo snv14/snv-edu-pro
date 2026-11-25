@@ -1,5 +1,5 @@
-import localforage from 'localforage';
 import { normalizeArabic, tokenize } from './knowledgeBase';
+import { indexedDbStorage, localDocumentProvider } from './assistantProviders';
 
 /**
  * مساحات المعرفة: وثائق الأستاذ الخاصة مقسّمة إلى مقاطع مع أرقام الصفحات،
@@ -50,8 +50,6 @@ const MAX_SOURCES = 24;
 const MAX_TEXT = 120_000;
 const CHUNK_SIZE = 900;
 
-const store = localforage.createInstance({ name: 'snv-edu-pro', storeName: 'assistant_spaces' });
-
 const nowIso = () => new Date().toISOString();
 const makeId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 
@@ -67,7 +65,7 @@ export const createKnowledgeSpace = (title = 'مساحة معرفة جديدة',
 
 export async function loadSpaces(): Promise<KnowledgeSpace[]> {
   try {
-    const stored = await store.getItem<KnowledgeSpace[]>(STORAGE_KEY);
+    const stored = await indexedDbStorage.get<KnowledgeSpace[]>(STORAGE_KEY);
     return Array.isArray(stored) ? stored.filter(item => item && typeof item.id === 'string') : [];
   } catch {
     return [];
@@ -76,7 +74,7 @@ export async function loadSpaces(): Promise<KnowledgeSpace[]> {
 
 export async function saveSpaces(spaces: KnowledgeSpace[]): Promise<void> {
   try {
-    await store.setItem(STORAGE_KEY, spaces);
+    await indexedDbStorage.set(STORAGE_KEY, spaces);
   } catch {
     // التخزين المحلي اختياري؛ تبقى المساحات في الذاكرة خلال الجلسة.
   }
@@ -169,33 +167,9 @@ export function kindFromFile(name: string, mimeType = ''): SpaceSourceKind {
   return 'other';
 }
 
-const readAsDataUrl = (file: File): Promise<string> => new Promise((resolve, reject) => {
-  const reader = new FileReader();
-  reader.onload = () => resolve(String(reader.result || ''));
-  reader.onerror = () => reject(reader.error || new Error('تعذر قراءة الملف'));
-  reader.readAsDataURL(file);
-});
-
-/** قراءة ملف عبر قارئ الخادم المحلي (PDF/Word/نص) دون أي مزوّد خارجي. */
+/** قراءة ملف عبر مزود الوثائق المحلي (PDF/Word/نص) دون أي مزوّد خارجي. */
 export async function readSourceFile(file: File): Promise<{ text: string; pages?: number; needsVision?: boolean; note?: string }> {
-  const kind = kindFromFile(file.name, file.type);
-  if (kind === 'text') {
-    return { text: (await file.text()).slice(0, MAX_TEXT) };
-  }
-  const dataUrl = await readAsDataUrl(file);
-  const response = await fetch('/api/document/read', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: file.name, mimeType: file.type, dataUrl }),
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(typeof payload?.error === 'string' ? payload.error : 'تعذر قراءة الملف.');
-  return {
-    text: String(payload?.text || '').slice(0, MAX_TEXT),
-    pages: Number(payload?.pages) || undefined,
-    needsVision: Boolean(payload?.needsVision),
-    note: Array.isArray(payload?.notes) ? payload.notes.join(' · ') : '',
-  };
+  return localDocumentProvider.read(file);
 }
 
 export async function sourceFromFile(file: File): Promise<SpaceSource> {
