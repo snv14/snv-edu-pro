@@ -1,8 +1,8 @@
 import type { ArchivedExperiment, ArchiveSourceTrace } from '../memos/archiveSchema';
 
 const SOURCE_FILE = 'مذكرات السنة الأولى متوسط كاملة.pdf';
-const AUTHOR = 'الأستاذ موسى حمزة';
-const SCHOOL = 'متوسطة الشهيد بلمهدي الجودي، مزلوق - سطيف';
+const AUTHOR = '';
+const SCHOOL = '';
 
 const traceOf = (
   sourcePage: number,

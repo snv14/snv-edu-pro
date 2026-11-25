@@ -294,7 +294,7 @@ export const SourceMemo1AMViewer: React.FC<Props> = ({
 </head>
 <body>
   <h1>${ARCHIVE_1AM_SOURCE_META.sourceTitle}</h1>
-  <p>إعداد: ${ARCHIVE_1AM_SOURCE_META.author} — ${ARCHIVE_1AM_SOURCE_META.school} | المذكرات: ${filteredLessons.length} | الأنشطة: ${ARCHIVE_1AM_DB.activities.length} | التجارب: ${ARCHIVE_1AM_EXPERIMENTS.length}</p>
+  <p>المذكرات: ${filteredLessons.length} | الأنشطة: ${ARCHIVE_1AM_DB.activities.length} | التجارب: ${ARCHIVE_1AM_EXPERIMENTS.length}</p>
   <hr/>
   ${filteredLessons
     .map(
@@ -380,8 +380,7 @@ export const SourceMemo1AMViewer: React.FC<Props> = ({
                   </span>
                 </div>
                 <p className="text-xs md:text-sm text-slate-600 mt-1">
-                  المصدر: <span className="font-bold text-slate-800">{ARCHIVE_1AM_SOURCE_META.sourceFile}</span> ·{' '}
-                  إعداد: <span className="font-bold text-emerald-800">{ARCHIVE_1AM_SOURCE_META.author}</span> ({ARCHIVE_1AM_SOURCE_META.school})
+                  المصدر: <span className="font-bold text-slate-800">{ARCHIVE_1AM_SOURCE_META.sourceFile}</span>
                 </p>
               </div>
             </div>

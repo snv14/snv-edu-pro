@@ -1,5 +1,5 @@
 // Algerian Curriculum 2AM Pedagogical Diagrams (SVG Visual Schematics)
-// Based on official Middle School Natural Sciences - Inspector/Teacher Hamza Moussa
+// Based on the official Middle School Natural Sciences curriculum.
 
 export const DIAGRAMS_2AM = {
   // 1. Biocenose & Biotope Ecosystem Organization (المذكرات 01، 02، 11)
