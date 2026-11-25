@@ -127,7 +127,8 @@ test('empty data has an honest empty state and no fabricated records', () => {
 
 test('all years share the source entry point while keeping the original 1AM archive and existing guides', () => {
   const app = readFileSync('src/App.tsx', 'utf8');
-  assert.match(app, /<span>المحتوى المصدري<\/span>/);
+  assert.match(app, /<YearSectionTabs activeTab=\{yearSubTab\}/);
+  assert.match(app, /<YearSectionTabs mobile activeTab=\{yearSubTab\}/);
   assert.match(app, /<SourceMemo1AMViewer/);
   assert.match(app, /<SourceContentViewer[\s\S]*?key=\{selectedLevel\}/);
   for (const year of ['2', '3', '4']) assert.ok(app.includes(`<SourceGuide${year}AMViewer`));

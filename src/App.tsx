@@ -29,6 +29,7 @@ import { LessonMemo, MemoConfig } from './types';
 import { LEVELS } from './data/memos/lessonsData';
 import { SidebarControls } from './components/SidebarControls';
 import { MemoSheet } from './components/MemoSheet';
+import { YearSectionTabs, type YearSubTab } from './components/YearSectionTabs';
 import { PreviewModal } from './components/PreviewModal';
 import { LevelsHomePage } from './components/LevelsHomePage';
 import { PlatformNavigationDrawer } from './components/PlatformNavigationDrawer';
@@ -51,6 +52,7 @@ const AnnualDistribution = lazy(() => import('./components/AnnualDistribution').
 const DailyLogbook = lazy(() => import('./components/DailyLogbook').then(module => ({ default: module.DailyLogbook })));
 const AccountSettings = lazy(() => import('./components/AccountSettings').then(module => ({ default: module.AccountSettings })));
 const SourceMemo1AMViewer = lazy(() => import('./components/SourceMemo1AMViewer').then(module => ({ default: module.SourceMemo1AMViewer })));
+const YearPlansViewer = lazy(() => import('./components/YearPlansViewer').then(module => ({ default: module.YearPlansViewer })));
 const SourceContentViewer = lazy(() => import('./components/SourceContentViewer').then(module => ({ default: module.SourceContentViewer })));
 const SourceGuide2AMViewer = lazy(() => import('./components/SourceGuide2AMViewer').then(module => ({ default: module.SourceGuide2AMViewer })));
 const SourceGuide3AMViewer = lazy(() => import('./components/SourceGuide3AMViewer').then(module => ({ default: module.SourceGuide3AMViewer })));
@@ -70,7 +72,7 @@ export const App: React.FC = () => {
   const [activeSection, setActiveSection] = useState<MainSectionType>('home');
 
   // Sub-view inside the active year: 'memos' (المذكرات البيداغوجية) | 'distribution' (تدرج التعلمات)
-  const [yearSubTab, setYearSubTab] = useState<'memos' | 'distribution' | 'source'>('memos');
+  const [yearSubTab, setYearSubTab] = useState<YearSubTab>('memos');
 
   // Drawers and Modals
   const [isNavDrawerOpen, setIsNavDrawerOpen] = useState<boolean>(false);
@@ -587,49 +589,7 @@ export const App: React.FC = () => {
                       <span className="text-[12.5px] font-extrabold text-slate-900">{currentLevelLabel}</span>
                     </div>
 
-                    <div className="hidden xl:flex items-center snv-segmented">
-                      <button
-                        type="button"
-                        id="year-subtab-memos"
-                        onClick={() => setYearSubTab('memos')}
-                        className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-[12px] font-bold transition cursor-pointer whitespace-nowrap shrink-0 ${
-                          yearSubTab === 'memos'
-                            ? midanTheme.activeTabBg
-                            : 'text-slate-700 hover:text-slate-900 hover:bg-white/80'
-                        }`}
-                      >
-                        <FileText className="w-3.5 h-3.5" />
-                        <span>المذكرات</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        id="year-subtab-source"
-                        onClick={() => setYearSubTab('source')}
-                        className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-[12px] font-bold transition cursor-pointer whitespace-nowrap shrink-0 ${
-                          yearSubTab === 'source'
-                            ? midanTheme.activeTabBg
-                            : 'text-slate-700 hover:text-slate-900 hover:bg-white/80'
-                        }`}
-                      >
-                        <BookOpen className="w-3.5 h-3.5" />
-                        <span>المحتوى المصدري</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        id="year-subtab-distribution"
-                        onClick={() => setYearSubTab('distribution')}
-                        className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-[12px] font-bold transition cursor-pointer whitespace-nowrap shrink-0 ${
-                          yearSubTab === 'distribution'
-                            ? midanTheme.activeTabBg
-                            : 'text-slate-700 hover:text-slate-900 hover:bg-white/80'
-                        }`}
-                      >
-                        <CalendarDays className="w-3.5 h-3.5" />
-                        <span>التدرج السنوي</span>
-                      </button>
-                    </div>
+                    <YearSectionTabs activeTab={yearSubTab} onChange={setYearSubTab} activeClassName={midanTheme.activeTabBg} />
                   </>
                 ) : activeSection === 'logbook' ? (
                   <div className="flex items-center gap-2 bg-[#eef5f2] px-2.5 sm:px-3 py-1.5 rounded-xl border border-[#cfe3dc] text-[#0a5f51] font-extrabold text-xs sm:text-[13px] whitespace-nowrap truncate">
@@ -839,38 +799,7 @@ export const App: React.FC = () => {
 
         {/* Mobile/Tablet Secondary Year Sub-tabs (prevents header horizontal crowding) */}
         {isYearSection && (
-          <div className="xl:hidden px-3 pb-2 flex items-center gap-1.5 overflow-x-auto border-t border-[#eef2f0] pt-2">
-            <button
-              type="button"
-              onClick={() => setYearSubTab('memos')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer whitespace-nowrap shrink-0 ${
-                yearSubTab === 'memos' ? midanTheme.activeTabBg : 'bg-white border border-[#e2e8e5] text-[#5c6f6a]'
-              }`}
-            >
-              <FileText className="w-3.5 h-3.5" />
-              <span>المذكرات</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setYearSubTab('source')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer whitespace-nowrap shrink-0 ${
-                yearSubTab === 'source' ? midanTheme.activeTabBg : 'bg-white border border-[#e2e8e5] text-[#5c6f6a]'
-              }`}
-            >
-              <BookOpen className="w-3.5 h-3.5" />
-              <span>المصدر والدليل</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setYearSubTab('distribution')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer whitespace-nowrap shrink-0 ${
-                yearSubTab === 'distribution' ? midanTheme.activeTabBg : 'bg-white border border-[#e2e8e5] text-[#5c6f6a]'
-              }`}
-            >
-              <CalendarDays className="w-3.5 h-3.5" />
-              <span>التدرج السنوي</span>
-            </button>
-          </div>
+          <YearSectionTabs mobile activeTab={yearSubTab} onChange={setYearSubTab} activeClassName={midanTheme.activeTabBg} />
         )}
       </header>
 
@@ -1067,16 +996,29 @@ export const App: React.FC = () => {
                   setYearSubTab('memos');
                   showToast(`تم فتح مذكرة ${lesson.memoNumber || ''}: ${lesson.ta3alom}`);
                 }}
-                guide={
-                  <Suspense fallback={<SectionLoading />}>
-                    {selectedLevel === '2am' ? <SourceGuide2AMViewer lessons={curriculumLessons} />
-                      : selectedLevel === '3am' ? <SourceGuide3AMViewer lessons={curriculumLessons} />
-                      : <SourceGuide4AMViewer lessons={curriculumLessons} />}
-                  </Suspense>
-                }
+
               />
             </Suspense>
           )}
+        </div>
+      )}
+
+      {isYearSection && yearSubTab === 'plans' && (
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <Suspense fallback={<SectionLoading />}>
+            <YearPlansViewer key={selectedLevel} level={selectedLevel} />
+          </Suspense>
+        </div>
+      )}
+
+      {isYearSection && yearSubTab === 'guide' && (
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <Suspense fallback={<SectionLoading />}>
+            {selectedLevel === '1am' ? <YearPlansViewer key="guide-1am" level="1am" guideMode />
+              : selectedLevel === '2am' ? <SourceGuide2AMViewer lessons={curriculumLessons} />
+              : selectedLevel === '3am' ? <SourceGuide3AMViewer lessons={curriculumLessons} />
+              : <SourceGuide4AMViewer lessons={curriculumLessons} />}
+          </Suspense>
         </div>
       )}
 
