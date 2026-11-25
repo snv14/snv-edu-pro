@@ -54,7 +54,7 @@ test('guide search finds concepts, prerequisites, and activities with normalized
 
 test('redesigned guide restores the guide banner, four sections, actions and accessible sequence cards', () => {
   const html = renderToStaticMarkup(React.createElement(SourceGuide1AMViewer, { lessons, onOpenMemoUnit: () => {} }));
-  for (const text of ['دليل الأستاذ وبناء التعلمات — السنة الأولى متوسط', 'المقاطع وبناء التعلمات', 'المذكرات والأنشطة', 'الكفاءات والتقويم', 'المستند الرسمي PDF', 'فتح المستند الرسمي', 'تحميل PDF', 'طباعة', 'المكتسبات القبلية', 'الموارد المعرفية', 'التوجيه البيداغوجي', 'مؤشرات متابعة التعلم']) assert.ok(html.includes(text), text);
+  for (const text of ['المخططات السنوية ودليل بناء التعلمات — السنة الأولى متوسط', 'المقاطع والوحدات', 'المذكرات النموذجية والأنشطة', 'الكفاءات والتقويم التكويني', 'قارئ الـ PDF المدمج', 'فتح المستند الرسمي', 'تحميل', 'طباعة', 'المكتسبات القبلية', 'الموارد التعلمية', 'المفاهيم الأساسية', 'سيرورة الأنشطة والتوجيه المنهجي']) assert.ok(html.includes(text), text);
   assert.ok(html.includes('aria-label="البحث في دليل السنة الأولى"'));
   assert.ok(html.includes('aria-label="أقسام دليل الأستاذ للسنة الأولى"'));
   assert.ok(html.includes('aria-controls="guide-1am-nutrition-human"'));
@@ -67,8 +67,8 @@ test('redesigned guide restores the guide banner, four sections, actions and acc
 
 test('guide can display an empty or edited lesson database without substituting archive defaults', () => {
   const html = renderToStaticMarkup(React.createElement(SourceGuide1AMViewer, { lessons: [] }));
-  assert.ok(html.includes('لا توجد مذكرات مرتبطة في القاعدة الحالية'));
-  assert.ok(html.includes('مقاطع في المخطط الرسمي'), 'official outline remains available independently');
+  assert.match(html, />0<\/div><div><div[^>]*>المذكرات المرتبطة/);
+  assert.ok(html.includes('المقاطع البيداغوجية'), 'official outline remains available independently');
 });
 
 test('App uses the dedicated 1AM guide while preserving all other year sections', () => {
