@@ -1007,7 +1007,13 @@ export const App: React.FC = () => {
       {isYearSection && yearSubTab === 'plans' && (
         <div className="flex-1 min-h-0 overflow-hidden">
           <Suspense fallback={<SectionLoading />}>
-            <YearPlansViewer key={selectedLevel} level={selectedLevel} />
+            <YearPlansViewer key={selectedLevel} level={selectedLevel} lessons={curriculumLessons} onOpenMemoUnit={(lesson) => {
+              setSelectedMaqta(lesson.maqta);
+              setSelectedMawrid(lesson.mawrid);
+              setSelectedTa3alom(lesson.ta3alom);
+              setYearSubTab('memos');
+              showToast(`تم فتح مذكرة ${lesson.memoNumber || ''}: ${lesson.ta3alom}`);
+            }} />
           </Suspense>
         </div>
       )}
