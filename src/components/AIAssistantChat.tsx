@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Bot, Check, Clipboard, Database, Layers, Loader2, MessageSquarePlus, Paperclip,
-  Send, Sparkles, User, X,
+  Bot, Check, Clipboard, Database, History, Layers, Loader2, MessageSquarePlus, Paperclip,
+  Send, Sparkles, Trash2, User, X,
 } from 'lucide-react';
 import { LessonMemo } from '../types';
 import type { TeacherKnowledgeDoc } from '../types/knowledge';
 import { askSmartAi, SmartAiMessage, SmartAiSource } from '../services/smartAi';
 import { clearConversation, conversationContext, loadConversation, saveConversation } from '../services/conversationHistory';
+import { AssistantThread, createThread, loadThreads, saveThreads, threadTitleFrom } from '../services/assistantThreads';
 import { loadKnowledgeSettings, saveKnowledgeSettings, type KnowledgeSettings } from '../services/knowledgeLibraryStore';
 import { loadOcrSupplement } from '../services/knowledgeSupplements';
 import { preloadOfficialSources } from '../services/knowledgeOfficialSources';
@@ -183,16 +184,33 @@ const SourceChip: React.FC<{ reference: KnowledgeReference }> = ({ reference }) 
   </details>
 );
 
+export interface AssistantChatContext {
+  prompt?: string;
+  level?: string;
+  maqta?: string;
+  mawrid?: string;
+  label?: string;
+}
+
 export const AIAssistantDrawer: React.FC<{
   isOpen: boolean;
-  onClose: () => void;
+  onClose?: () => void;
   selectedLevel?: string;
   currentLesson?: LessonMemo | null;
   curriculumLessons?: LessonMemo[];
-}> = ({ isOpen, onClose, selectedLevel, currentLesson, curriculumLessons = [] }) => {
+  /** "section": صفحة كاملة داخل المنصة · "drawer": نافذة سريعة. */
+  mode?: 'drawer' | 'section';
+  context?: AssistantChatContext | null;
+  contextKey?: string;
+}> = ({ isOpen, onClose, selectedLevel, currentLesson, curriculumLessons = [], mode = 'drawer', context, contextKey }) => {
   const [entries, setEntries] = useState<ChatEntry[]>([]);
+  const [threads, setThreads] = useState<AssistantThread[]>([]);
+  const [activeThreadId, setActiveThreadId] = useState('');
+  const contextKeyRef = useRef('');
   const [draft, setDraft] = useState('');
   const [pending, setPending] = useState(false);
+  const [readingFiles, setReadingFiles] = useState(false);
+  const [fileReading, setFileReading] = useState(false);
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [fileError, setFileError] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -207,10 +225,31 @@ export const AIAssistantDrawer: React.FC<{
 
   useEffect(() => {
     if (!isOpen) return;
-    const stored = loadConversation(selectedLevel);
-    const restored = stored ? toEntries(stored.messages) : [];
+    let list = loadThreads();
+    if (!list.length) {
+      const legacy = loadConversation(selectedLevel);
+      const seed = createThread(selectedLevel, legacy?.messages?.length ? threadTitleFrom(legacy.messages[0]?.text || '') : 'محادثة جديدة');
+      if (legacy?.messages?.length) seed.messages = legacy.messages;
+      list = [seed];
+      saveThreads(list);
+    }
+    setThreads(list);
+    const active = list.find(thread => thread.level === selectedLevel) || list[0];
+    setActiveThreadId(active.id);
+    const restored = toEntries(active.messages);
     setEntries(restored.length ? restored : [{ id: 'greeting', sender: 'ai', text: GREETING, time: clock() }]);
   }, [isOpen, selectedLevel]);
+
+  // سياق قادم من التقويم: يُكتب الطلب في المربع ليراجعه الأستاذ قبل الإرسال.
+  useEffect(() => {
+    if (!isOpen) return;
+    const key = contextKey || (context?.prompt ? context.prompt.slice(0, 48) : '');
+    if (!key || key === contextKeyRef.current) return;
+    contextKeyRef.current = key;
+    if (context?.prompt) setDraft(context.prompt);
+    setShowKnowledge(false);
+    inputRef.current?.focus();
+  }, [isOpen, contextKey, context?.prompt]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -269,12 +308,24 @@ export const AIAssistantDrawer: React.FC<{
   if (!isOpen) return null;
 
   const persist = (next: ChatEntry[]) => {
-    saveConversation(
-      next
-        .filter(entry => entry.id !== 'greeting' && !entry.failed)
-        .map(entry => ({ role: entry.sender === 'user' ? 'user' : 'assistant', text: entry.text })),
-      selectedLevel
-    );
+    const messages = next
+      .filter(entry => entry.id !== 'greeting' && !entry.failed)
+      .map(entry => ({ role: (entry.sender === 'user' ? 'user' : 'assistant') as 'user' | 'assistant', text: entry.text }));
+    saveConversation(messages, selectedLevel);
+    setThreads(previous => {
+      const list = previous.map(thread => {
+        if (thread.id !== activeThreadId) return thread;
+        const firstQuestion = messages.find(message => message.role === 'user')?.text;
+        return {
+          ...thread,
+          messages,
+          title: thread.title && thread.title !== 'محادثة جديدة' ? thread.title : threadTitleFrom(firstQuestion || ''),
+          updatedAt: new Date().toISOString(),
+        };
+      });
+      saveThreads(list);
+      return list;
+    });
   };
 
   const updateEntries = (updater: (previous: ChatEntry[]) => ChatEntry[]) => {
@@ -293,14 +344,62 @@ export const AIAssistantDrawer: React.FC<{
     setFileError('');
     setDraft('');
     setPending(false);
+    const fresh = createThread(selectedLevel, 'محادثة جديدة');
+    setThreads(previous => {
+      const list = [fresh, ...previous].slice(0, 30);
+      saveThreads(list);
+      return list;
+    });
+    setActiveThreadId(fresh.id);
     setEntries([{ id: 'greeting', sender: 'ai', text: GREETING, time: clock() }]);
     inputRef.current?.focus();
+  };
+
+  const selectThread = (threadId: string) => {
+    if (!threadId || threadId === activeThreadId) return;
+    const target = threads.find(thread => thread.id === threadId);
+    if (!target) return;
+    const currentMessages = entries
+      .filter(entry => entry.id !== 'greeting' && !entry.failed)
+      .map(entry => ({ role: (entry.sender === 'user' ? 'user' : 'assistant') as 'user' | 'assistant', text: entry.text }));
+    setThreads(previous => {
+      const list = previous.map(thread => (thread.id === activeThreadId
+        ? { ...thread, messages: currentMessages, updatedAt: new Date().toISOString() }
+        : thread));
+      saveThreads(list);
+      return list;
+    });
+    setActiveThreadId(threadId);
+    const restored = toEntries(target.messages);
+    setEntries(restored.length ? restored : [{ id: 'greeting', sender: 'ai', text: GREETING, time: clock() }]);
+    setShowKnowledge(false);
+  };
+
+  const deleteThread = (threadId: string) => {
+    if (!window.confirm('حذف هذه المحادثة من السجل؟')) return;
+    const remaining = threads.filter(thread => thread.id !== threadId);
+    saveThreads(remaining);
+    setThreads(remaining);
+    if (threadId !== activeThreadId) return;
+    const fallback = remaining[0];
+    if (fallback) {
+      setActiveThreadId(fallback.id);
+      const restored = toEntries(fallback.messages);
+      setEntries(restored.length ? restored : [{ id: 'greeting', sender: 'ai', text: GREETING, time: clock() }]);
+    } else {
+      const fresh = createThread(selectedLevel, 'محادثة جديدة');
+      saveThreads([fresh]);
+      setThreads([fresh]);
+      setActiveThreadId(fresh.id);
+      setEntries([{ id: 'greeting', sender: 'ai', text: GREETING, time: clock() }]);
+    }
   };
 
   const addFiles = async (files: FileList | null) => {
     if (!files || !files.length) return;
     setFileError('');
     const incoming = Array.from(files).slice(0, MAX_ATTACHMENTS - attachments.length);
+    setFileReading(true);
     const accepted: ChatAttachment[] = [];
     for (const file of incoming) {
       const type = file.type || '';
@@ -319,6 +418,7 @@ export const AIAssistantDrawer: React.FC<{
       }
     }
     if (accepted.length) setAttachments(previous => [...previous, ...accepted].slice(0, MAX_ATTACHMENTS));
+    setFileReading(false);
   };
 
   const send = async () => {
@@ -332,6 +432,7 @@ export const AIAssistantDrawer: React.FC<{
     setAttachments([]);
     setFileError('');
     setPending(true);
+    setReadingFiles(outgoingAttachments.length > 0);
     updateEntries(previous => [...previous, { id: makeId(), sender: 'user', text: question, time: clock() }]);
 
     const controller = new AbortController();
@@ -388,6 +489,7 @@ export const AIAssistantDrawer: React.FC<{
     } finally {
       if (abortRef.current === controller) abortRef.current = null;
       setPending(false);
+      setReadingFiles(false);
       inputRef.current?.focus();
     }
   };
@@ -437,7 +539,9 @@ export const AIAssistantDrawer: React.FC<{
   return (
     <div
       id="ai-assistant-chat"
-      className="fixed inset-0 z-50 bg-[#eef3f1] flex"
+      className={mode === 'section'
+        ? 'flex h-[calc(100dvh-7.5rem)] min-h-[560px] w-full flex-1 bg-[#eef3f1]'
+        : 'fixed inset-0 z-50 bg-[#eef3f1] flex'}
       dir="rtl"
       aria-label="محادثة المساعد التربوي"
     >
@@ -479,9 +583,39 @@ export const AIAssistantDrawer: React.FC<{
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-2 py-2">
-          <p className="px-2 pb-1 text-[10px] font-black text-slate-400">مهام سريعة</p>
-          {quickTaskList}
+        <div className="flex-1 overflow-y-auto px-2 py-2 space-y-3">
+          <div>
+            <p className="px-2 pb-1 text-[10px] font-black text-slate-400 inline-flex items-center gap-1">
+              <History className="w-3 h-3" /> المحادثات السابقة
+            </p>
+            <div className="max-h-56 space-y-0.5 overflow-y-auto">
+              {threads.map(thread => (
+                <div
+                  key={thread.id}
+                  className={`group flex items-center gap-0.5 rounded-xl border px-2 py-1.5 transition ${thread.id === activeThreadId ? 'border-teal-200 bg-teal-50' : 'border-transparent hover:bg-slate-50'}`}
+                >
+                  <button type="button" onClick={() => selectThread(thread.id)} className="min-w-0 flex-1 text-right">
+                    <span className={`block truncate text-[11px] font-bold ${thread.id === activeThreadId ? 'text-teal-900' : 'text-slate-700'}`}>{thread.title}</span>
+                    <span className="block text-[9px] text-slate-400 tabular-nums">
+                      {thread.messages.length} رسالة · {new Date(thread.updatedAt).toLocaleDateString('ar-DZ', { day: '2-digit', month: 'short' })}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deleteThread(thread.id)}
+                    aria-label={`حذف ${thread.title}`}
+                    className="rounded p-0.5 text-slate-300 opacity-0 transition group-hover:opacity-100 hover:text-red-600"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="px-2 pb-1 text-[10px] font-black text-slate-400">مهام سريعة</p>
+            {quickTaskList}
+          </div>
         </div>
 
         <div className="p-3 border-t border-slate-100 space-y-2">
@@ -503,17 +637,17 @@ export const AIAssistantDrawer: React.FC<{
       {/* عمود المحادثة */}
       <section className="flex-1 min-w-0 flex flex-col h-full bg-white lg:bg-transparent" aria-label="نافذة الدردشة">
         <header className="shrink-0 px-2.5 sm:px-5 py-2 bg-white border-b border-slate-200 flex items-center gap-2">
-          <button type="button" onClick={onClose} aria-label="إغلاق المحادثة" className="p-2 rounded-lg text-slate-600 hover:bg-slate-100 transition shrink-0">
+          <button type="button" onClick={() => onClose?.()} aria-label="إغلاق المحادثة" className={`${mode === 'section' ? 'hidden' : ''} p-2 rounded-lg text-slate-600 hover:bg-slate-100 transition shrink-0`}>
             <X className="w-4 h-4" />
           </button>
           <div className="min-w-0 flex-1 text-center sm:text-right">
-            <h2 className="font-black text-[13px] leading-tight text-slate-900 truncate">المحادثة التربوية</h2>
-            <p className="text-[10px] text-slate-500 truncate">{contextLabel}</p>
+            <h2 className="font-black text-[13px] leading-tight text-slate-900 truncate">{mode === 'section' ? 'المساعد الذكي' : 'المحادثة التربوية'}</h2>
+            <p className="text-[10px] text-slate-500 truncate">
+              {mode === 'section' ? 'بحث · قراءة ملفات · فهم · تلخيص · اقتراح' : contextLabel}
+            </p>
           </div>
           <div className="flex items-center gap-1 shrink-0">
-            <button
-              type="button"
-              onClick={() => setShowTools(open => !open)}
+            <button type="button" onClick={() => setShowTools(open => !open)}
               title="أدوات المحادثة والمهام السريعة"
               aria-label="أدوات المحادثة"
               aria-expanded={showTools}
@@ -543,8 +677,27 @@ export const AIAssistantDrawer: React.FC<{
           </div>
         </header>
 
+        {context?.label && !showKnowledge && (
+          <div className="flex shrink-0 items-center gap-1.5 border-b border-teal-100 bg-teal-50/70 px-3 py-1.5 text-[10px] font-bold text-teal-900">
+            <Sparkles className="h-3 w-3 shrink-0" />
+            <span className="truncate">سياق من التقويم: {context.label}</span>
+            <span className="mr-auto shrink-0 text-[9px] font-normal text-teal-700/70">راجع الطلب ثم أرسله</span>
+          </div>
+        )}
+
         {showTools && !showKnowledge && (
           <div className="lg:hidden shrink-0 border-b border-slate-200 bg-white px-3 py-2 space-y-2 max-h-[45vh] overflow-y-auto">
+            <div className="rounded-xl bg-slate-50 border border-slate-200 px-3 py-2">
+              <p className="text-[10px] font-black text-slate-400">المحادثات السابقة</p>
+              <select
+                value={activeThreadId}
+                onChange={event => selectThread(event.target.value)}
+                aria-label="اختيار محادثة سابقة"
+                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-bold text-slate-800"
+              >
+                {threads.map(thread => <option key={thread.id} value={thread.id}>{thread.title}</option>)}
+              </select>
+            </div>
             <div className="rounded-xl bg-slate-50 border border-slate-200 px-3 py-2">
               <p className="text-[10px] font-black text-slate-400">النطاق الحالي</p>
               <p className="text-[11.5px] font-bold text-slate-800">{contextLabel}</p>
@@ -674,7 +827,7 @@ export const AIAssistantDrawer: React.FC<{
               {pending && (
                 <div className="flex items-center gap-2 text-[11px] font-bold text-slate-500 px-1">
                   <Loader2 className="w-4 h-4 text-teal-700 animate-spin" />
-                  <span>جارٍ كتابة الرد…</span>
+                  <span>{readingFiles ? 'جارٍ قراءة الوثيقة وتحليلها… ستُعرض النتائج مع مصدرها.' : 'جارٍ كتابة الرد…'}</span>
                 </div>
               )}
 
@@ -707,6 +860,11 @@ export const AIAssistantDrawer: React.FC<{
           <footer className="shrink-0 border-t border-slate-200 bg-white px-3 sm:px-5 py-2.5">
             <div className="mx-auto w-full max-w-3xl space-y-2">
               {fileError && <p className="text-[10.5px] font-bold text-red-700">{fileError}</p>}
+              {fileReading && (
+                <p className="inline-flex items-center gap-1 text-[10px] font-bold text-teal-800">
+                  <Loader2 className="w-3 h-3 animate-spin" /> جارٍ قراءة الملف…
+                </p>
+              )}
               {attachments.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
                   {attachments.map(file => (

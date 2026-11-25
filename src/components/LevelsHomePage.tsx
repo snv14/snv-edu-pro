@@ -39,7 +39,8 @@ interface LevelsHomePageProps {
   onOpenLogbook: () => void;
   onOpenTimetable: () => void;
   onOpenDatabase: () => void;
-  onOpenTool: (tool: 'assistant' | 'correction' | 'agent') => void;
+  onOpenAssessment: () => void;
+  onOpenAssistant: () => void;
   onOpenInfoModal?: (tab: 'about' | 'guide' | 'contact') => void;
   config: MemoConfig;
   curriculumLessons?: LessonMemo[];
@@ -71,7 +72,8 @@ export const LevelsHomePage: React.FC<LevelsHomePageProps> = ({
   onOpenLogbook,
   onOpenTimetable,
   onOpenDatabase,
-  onOpenTool,
+  onOpenAssessment,
+  onOpenAssistant,
   onOpenInfoModal,
   config,
   curriculumLessons = LESSONS_DATA,
@@ -221,28 +223,21 @@ export const LevelsHomePage: React.FC<LevelsHomePageProps> = ({
     {
       id: 'group-eval-ai',
       title: 'التقويم والمساعد الذكي',
-      subtitle: 'مذكرات التصحيح والمساعدة التربوية وقراءة الملفات',
+      subtitle: 'تنفيذ العمل التقييمي، والبحث والفهم والمساعدة',
       items: [
         {
           id: 'service-assessment',
-          title: 'الاختبارات والتقويم',
-          description: 'بناء مذكرات تصحيح الفروض والاختبارات وتحليل أوراق التقييم.',
+          title: 'التقويم',
+          description: 'أنشئ اختباراتك، صححها، أنجز مذكرة التصحيح، أدخل النتائج وحلل أداء التلاميذ.',
           icon: ClipboardCheck,
-          onClick: () => onOpenTool('correction'),
+          onClick: onOpenAssessment,
         },
         {
           id: 'service-assistant',
           title: 'المساعد الذكي',
-          description: 'محادثة بيداغوجية تفاعلية مستندة إلى المنهاج والوثائق المرافقة.',
+          description: 'بحث وقراءة ملفات وفهم وتلخيص واقتراح — مستندًا إلى المنهاج والوثائق المرافقة.',
           icon: MessagesSquare,
-          onClick: () => onOpenTool('assistant'),
-        },
-        {
-          id: 'service-document-agent',
-          title: 'وكيل المستندات',
-          description: 'قراءة PDF وWord والصور وتحليلها محليًا، مع تعلّم من قاعدة بيانات المنصة.',
-          icon: FileSearch,
-          onClick: () => onOpenTool('agent'),
+          onClick: onOpenAssistant,
         },
       ],
     },
@@ -285,7 +280,7 @@ export const LevelsHomePage: React.FC<LevelsHomePageProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={() => onOpenTool('assistant')}
+                  onClick={onOpenAssistant}
                   className="snv-btn snv-btn--outline-light"
                 >
                   <MessagesSquare className="h-4 w-4" aria-hidden="true" />
