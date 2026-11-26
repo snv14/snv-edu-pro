@@ -5,6 +5,7 @@ import { AuthProvider } from './components/Auth.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import { installImageFallback } from './utils/imageFallback.ts';
 import './index.css';
+import './styles/dashboard.css';
 
 installImageFallback();
 
@@ -17,3 +18,10 @@ createRoot(document.getElementById('root')!).render(
     </ErrorBoundary>
   </StrictMode>,
 );
+
+// Production-only app shell cache: assessment and its local bank remain available after an offline reload.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    void navigator.serviceWorker.register('/assessment-offline.js').catch(error => console.warn('Offline shell unavailable:', error));
+  });
+}

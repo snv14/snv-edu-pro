@@ -36,8 +36,8 @@ export const DEFAULT_KNOWLEDGE_SETTINGS: KnowledgeSettings = {
   includeTeacherDocs: true,
   includeOcrSupplement: false,
   includeCorpus: true,
-  // مستثنى من المساعد التربوي بطلب صريح: المساعد متصل بجميع المصادر ما عدا التدرج
-  includeProgression: false,
+  // Free chat includes annual progressions along with every other knowledge family.
+  includeProgression: true,
   topK: 12,
   localFirst: false,
 };

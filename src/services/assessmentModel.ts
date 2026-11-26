@@ -516,10 +516,10 @@ export function addExamExercise(exam: AssessmentExam, proposal: ExerciseProposal
     .map((question, index) => ({
       id: uid('q'),
       number: String(index + 1),
-      text: question.text.trim().slice(0, 2000),
+      text: question.text.trim().slice(0, 12000),
       points: question.points ?? '',
-      expected: (question.expected || '').trim().slice(0, 4000),
-      source: proposal.source || 'ai',
+      expected: (question.expected || '').trim().slice(0, 16000),
+      source: proposal.source || 'platform',
       needsReview: true,
     }));
 
@@ -531,10 +531,10 @@ export function addExamExercise(exam: AssessmentExam, proposal: ExerciseProposal
     maqta: (proposal.maqta || '').slice(0, 300),
     knowledge: (proposal.knowledge || '').slice(0, 4000),
     criteria: (proposal.criteria || '').slice(0, 4000),
-    source: proposal.source || 'ai',
+    source: proposal.source || 'platform',
     questions: questions.length
       ? questions
-      : [{ id: uid('q'), number: '1', text: '', points: '', expected: '', source: 'ai', needsReview: true }],
+      : [{ id: uid('q'), number: '1', text: '', points: '', expected: '', source: 'platform', needsReview: true }],
   };
 
   next.memo.exercises.push(exercise);
@@ -544,9 +544,9 @@ export function addExamExercise(exam: AssessmentExam, proposal: ExerciseProposal
     maqta: exercise.maqta,
     knowledge: exercise.knowledge,
     criteria: exercise.criteria,
-    maqtaSource: exercise.maqta ? 'ai' : 'template',
-    knowledgeSource: exercise.knowledge ? 'ai' : 'template',
-    criteriaSource: exercise.criteria ? 'ai' : 'template',
+    maqtaSource: exercise.maqta ? 'platform' : 'template',
+    knowledgeSource: exercise.knowledge ? 'platform' : 'template',
+    criteriaSource: exercise.criteria ? 'platform' : 'template',
   });
 
   return rebalanceExamPoints(next);

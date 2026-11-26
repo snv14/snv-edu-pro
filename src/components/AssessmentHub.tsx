@@ -30,6 +30,8 @@ import {
   Users,
   X,
 } from 'lucide-react';
+import { AssessmentStore as LocalQuestionStore } from '../assessment/assessmentStore';
+import { EMPTY_ASSESSMENT } from '../assessment/types';
 import { LessonMemo, MemoConfig } from '../types';
 import {
   ASSESSMENT_LEVELS,
@@ -82,7 +84,7 @@ import {
   generateExamAnswers,
   proposeNextExercise,
   ThirdExerciseProposal,
-} from '../services/assessmentAi';
+} from '../services/assessmentLocal';
 import {
   CorrectionExercise,
   CorrectionMemoData,
@@ -159,6 +161,9 @@ export interface AssessmentHubProps {
     successRate?: string | number;
   }) => void;
   showToast: (message: string) => void;
+  currentLesson?: LessonMemo | null;
+  assessmentOwner?: string;
+  onOpenLocalAssessment?: () => void;
 }
 
 const StatCard: React.FC<{ label: string; value: string; hint?: string; tone?: string }> = ({ label, value, hint, tone = 'text-white' }) => (
@@ -190,8 +195,9 @@ export const AssessmentHub: React.FC<AssessmentHubProps> = ({
   curriculumLessons,
   initialLevel,
   onOpenAssistant,
-  showToast,
+  showToast, currentLesson, assessmentOwner, onOpenLocalAssessment,
 }) => {
+  const questionStore = useMemo(() => new LocalQuestionStore(assessmentOwner || 'local'), [assessmentOwner]);
   const [library, setLibrary] = useState<AssessmentLibrary>(() => emptyAssessmentLibrary());
   const [ready, setReady] = useState(false);
   const [savedAt, setSavedAt] = useState('');
@@ -470,24 +476,24 @@ export const AssessmentHub: React.FC<AssessmentHubProps> = ({
   };
 
   const handlePropose = async () => {
-    if (!exam) return;
-    setBusy('propose');
-    setNotice(null);
-    const outcome = await proposeNextExercise(exam, curriculumLessons);
-    setBusy(null);
-    if (!outcome.proposal) {
-      setNotice({ tone: 'warn', text: outcome.error || 'لم يصل اقتراح. أضف التمرين يدويًا.' });
-      return;
-    }
-    setProposal(outcome.proposal);
+    if (!exam || busy) return;
+    setBusy('propose'); setNotice(null);
+    try {
+      const outcome = await proposeNextExercise(exam, curriculumLessons, currentLesson, questionStore);
+      if (!outcome.proposal) { setNotice({tone:'warn',text:outcome.error || EMPTY_ASSESSMENT}); return; }
+      setProposal(outcome.proposal);
+    } catch { setNotice({tone:'warn',text:EMPTY_ASSESSMENT}); }
+    finally { setBusy(null); }
   };
 
-  const applyProposal = () => {
-    if (!exam || !proposal) return;
+  const applyProposal = async () => {
+    if (!exam || !proposal || busy) return;
+    setBusy('propose');
+    try { await questionStore.save(proposal.bankRecord); } catch (error) { setNotice({ tone:'warn', text: error instanceof Error ? error.message : EMPTY_ASSESSMENT }); setBusy(null); return; }
     updateActive(current => addExamExercise(snapshotExam(current, 'قبل إضافة تمرين'), proposal));
     setProposal(null);
     setNotice({ tone: 'ok', text: 'اعتُمد التمرين المقترح وأُعيد توزيع النقاط على 20. راجع الإجابات قبل الاعتماد النهائي.' });
-    showToast('اعتُمد التمرين الجديد');
+    showToast('اعتُمد التمرين الجديد'); setBusy(null);
   };
 
   const handleGenerateAnswers = async () => {
@@ -497,12 +503,13 @@ export const AssessmentHub: React.FC<AssessmentHubProps> = ({
     const outcome = await generateExamAnswers(
       exam,
       curriculumLessons,
-      null,
+      currentLesson,
       answerTarget === 'all' ? undefined : answerTarget,
+      questionStore,
     );
     setBusy(null);
     if (!outcome) {
-      setNotice({ tone: 'warn', text: 'تعذر التوليد الآلي. تحقق من مزوّد الذكاء الاصطناعي أو اكتب عناصر الإجابة يدويًا.' });
+      setNotice({ tone: 'warn', text: EMPTY_ASSESSMENT });
       return;
     }
     updateActive(current => ({ ...current, memo: { ...outcome.memo, updatedAt: nowIso() }, updatedAt: nowIso() }));
@@ -606,15 +613,8 @@ export const AssessmentHub: React.FC<AssessmentHubProps> = ({
     });
   };
 
-  const askAssistantGeneral = () => {
-    onOpenAssistant({
-      prompt: exam
-        ? `لديّ الاختبار «${exam.title}» (${exam.memo.level || exam.level}). أريد مساعدتك في تحليل أسئلته واقتراح تحسينات بيداغوجية.`
-        : 'أريد مساعدتك في إعداد تقويم لمادة علوم الطبيعة والحياة: أفكار أسئلة ونشاط علاجي.',
-      level: exam?.level || initialLevel || config.level,
-      maqta: exam ? examMaqta(exam) : undefined,
-    });
-  };
+  // Explicit navigation only: question creation never invokes the general assistant.
+  const askAssistantGeneral = () => onOpenAssistant({prompt:''});
 
   const addStudent = () => {
     updateActive(current => ({ ...current, results: [...current.results, makeStudentResult()], updatedAt: nowIso() }));
@@ -702,6 +702,7 @@ export const AssessmentHub: React.FC<AssessmentHubProps> = ({
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
+              {onOpenLocalAssessment && <button type="button" onClick={onOpenLocalAssessment} className="rounded-xl border border-white/30 px-3 py-2 text-xs font-bold">التقويم من المذكرة وبنك الأسئلة</button>}
               <button type="button" onClick={openCreate} className="inline-flex items-center gap-1.5 rounded-xl bg-[#f0d492] px-3 py-2 text-[11.5px] font-black text-[#0b1f1c] hover:brightness-105">
                 <Plus className="h-4 w-4" /> إنشاء اختبار
               </button>
@@ -709,7 +710,7 @@ export const AssessmentHub: React.FC<AssessmentHubProps> = ({
                 {busy === 'import' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileUp className="h-4 w-4" />} استيراد ورقة
               </button>
               <button type="button" onClick={askAssistantGeneral} className="inline-flex items-center gap-1.5 rounded-xl border border-white/20 bg-white/5 px-3 py-2 text-[11.5px] font-black text-white/90 hover:bg-white/15">
-                <Bot className="h-4 w-4" /> المساعد الذكي
+                <Bot className="h-4 w-4" /> فتح المساعد العام
               </button>
             </div>
           </div>
@@ -1004,7 +1005,7 @@ export const AssessmentHub: React.FC<AssessmentHubProps> = ({
                   </div>
                   {partOneExercises(exam).length < 3 && (
                     <button type="button" onClick={handlePropose} disabled={busy === 'propose'} className="mt-2 inline-flex w-full items-center justify-center gap-1 rounded-xl border border-dashed border-teal-300 bg-teal-50/50 px-2 py-1.5 text-[10.5px] font-black text-teal-900 hover:bg-teal-50 disabled:opacity-50">
-                      <Sparkles className="h-3.5 w-3.5" /> أضف التمرين {partOneExercises(exam).length + 1} باقتراح المساعد
+                      <Sparkles className="h-3.5 w-3.5" /> أضف التمرين {partOneExercises(exam).length + 1} من بنك التقويم
                     </button>
                   )}
                 </div>
@@ -1144,7 +1145,7 @@ export const AssessmentHub: React.FC<AssessmentHubProps> = ({
                 {exam.memo.exercises.map(exercise => <option key={exercise.id} value={exercise.id}>{exercise.label}</option>)}
               </select>
               <button type="button" onClick={handleGenerateAnswers} disabled={busy === 'answers'} className="inline-flex items-center gap-1 rounded-xl bg-amber-600 px-2.5 py-1.5 text-[11px] font-black text-white hover:bg-amber-700 disabled:opacity-50">
-                {busy === 'answers' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} توليد عناصر الإجابة
+                {busy === 'answers' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} مطابقة عناصر الإجابة من البنك
               </button>
               <button type="button" onClick={handleRedistribute} className="inline-flex items-center gap-1 rounded-xl border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-[11px] font-black text-indigo-900">
                 <RefreshCw className="h-3.5 w-3.5" /> اقتراح التنقيط على 20
@@ -1185,7 +1186,7 @@ export const AssessmentHub: React.FC<AssessmentHubProps> = ({
               </div>
             </div>
             <p className="text-center text-[9.5px] text-slate-400">
-              الأولوية: ما أكده الأستاذ ← الورقة الأصلية ← قاعدة المنصة ← مقترح AI. لا يُملأ القالب الفارغ بالتخمين.
+              الأولوية: ما أكده الأستاذ ← الورقة الأصلية ← قاعدة المنصة ← مطابقة البنك المحلي. لا يُملأ القالب الفارغ بالتخمين.
             </p>
           </section>
         )}

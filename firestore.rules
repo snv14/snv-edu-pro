@@ -39,6 +39,53 @@ service cloud.firestore {
       allow delete: if isOwner(userId) && isAllowedDoc(docId);
     }
 
+    function isAssessmentCollection(name) {
+      return name in ['assessmentItems', 'assessments', 'memoAssessments', 'assessmentTemplates', 'assessmentCategories'];
+    }
+
+    function validAssessmentPayload(name, id) {
+      let data = request.resource.data;
+      return data.id == id && data.userId == request.auth.uid && (
+        (name == 'assessmentItems'
+          && data.keys().hasOnly(['id','userId','subject','level','domain','unit','lesson','objective','competency','concept','type','question','expectedAnswer','difficulty','keywords','tags','templateId','active','points','updatedAt','syncedAt'])
+          && data.subject is string && data.domain is string
+          && data.level in ['1am','2am','3am','4am']
+          && data.type in ['direct','blank','boolean','mcq','matching','ordering','document','experiment','explanation','conclusion','application','integration','formative','summative']
+          && data.question is string && data.question.size() > 0 && data.question.size() <= 12000
+          && data.get('expectedAnswer','') is string && data.get('expectedAnswer','').size() <= 16000
+          && data.difficulty in ['easy','medium','hard'] && data.active is bool
+          && data.keywords is list && data.keywords.size() <= 80 && data.tags is list && data.tags.size() <= 80
+          && data.updatedAt is string)
+        || (name == 'assessments'
+          && data.keys().hasOnly(['id','userId','lessonId','memoId','assessment','assessmentItems','usedItemIds','usedFingerprints','createdAt','updatedAt','syncedAt'])
+          && data.lessonId is string && data.memoId is string
+          && data.assessment is map && data.assessment.variant in ['student','correction']
+          && data.assessmentItems is list && data.assessmentItems.size() <= 30
+          && data.usedItemIds is list && data.usedFingerprints is list
+          && data.createdAt is string && data.updatedAt is string)
+        || (name == 'memoAssessments'
+          && data.keys().hasOnly(['id','userId','lessonId','assessmentId','updatedAt','syncedAt'])
+          && data.lessonId is string && data.assessmentId is string && data.updatedAt is string)
+        || (name == 'assessmentTemplates'
+          && data.keys().hasOnly(['id','userId','title','type','requires','syncedAt'])
+          && data.title is string && data.type is string && data.requires is list)
+        || (name == 'assessmentCategories'
+          && data.keys().hasOnly(['id','userId','title','syncedAt']) && data.title is string)
+      );
+    }
+
+    // Private per-teacher bank, snapshots and memo links. No cross-account reads or writes.
+    match /users/{userId}/{assessmentCollection}/{documentId} {
+      allow read: if isOwner(userId) && isAssessmentCollection(assessmentCollection);
+      allow create: if isOwner(userId) && isAssessmentCollection(assessmentCollection)
+        && isValidId(documentId) && validAssessmentPayload(assessmentCollection, documentId);
+      allow update: if isOwner(userId) && isAssessmentCollection(assessmentCollection)
+        && resource.data.userId == request.auth.uid
+        && isValidId(documentId) && validAssessmentPayload(assessmentCollection, documentId);
+      allow delete: if isOwner(userId) && isAssessmentCollection(assessmentCollection)
+        && resource.data.userId == request.auth.uid;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

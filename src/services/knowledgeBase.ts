@@ -24,6 +24,7 @@ import {
   type OfficialKnowledgeDoc,
 } from '../types/knowledge';
 import { getOfficialCurriculumDatabase } from '../data/memos/curriculumDb';
+import { assistantLearningResources } from '../data/assistantLearningResources';
 import {
   OFFICIAL_1AM_DISTRIBUTION,
   OFFICIAL_2AM_DISTRIBUTION,
@@ -898,6 +899,9 @@ export function buildKnowledgeIndex(options: IndexBuildOptions = {}): KnowledgeI
   const progressionPart = options.includeProgression === false ? { documents: [], chunks: [] } : buildProgression();
   const corpusPart = options.includeCorpus === false ? { documents: [], chunks: [] } : buildCorpus();
   const teacherPart = buildTeacherDocs(Array.isArray(options.teacherDocs) ? options.teacherDocs : []);
+  const learningPart = buildTeacherDocs(assistantLearningResources().filter(doc => options.includeProgression !== false || doc.kind !== 'progression'));
+  learningPart.documents.forEach(doc => { doc.status = 'reference'; });
+  learningPart.chunks.forEach(chunk => { chunk.status = 'reference'; });
   const officialPart = options.includeOfficialDocs === false
     ? { documents: [], chunks: [] }
     : buildOfficialDocs(Array.isArray(options.officialDocs) ? options.officialDocs : []);
@@ -909,6 +913,7 @@ export function buildKnowledgeIndex(options: IndexBuildOptions = {}): KnowledgeI
     ...progressionPart.documents,
     ...memoPart.documents,
     ...teacherPart.documents,
+    ...learningPart.documents,
   ];
   const chunks = [
     ...mapPart.chunks,
@@ -917,6 +922,7 @@ export function buildKnowledgeIndex(options: IndexBuildOptions = {}): KnowledgeI
     ...progressionPart.chunks,
     ...memoPart.chunks,
     ...teacherPart.chunks,
+    ...learningPart.chunks,
   ];
 
   for (const document of documents) {
@@ -1027,7 +1033,7 @@ const STATUS_BOOST: Record<KnowledgeStatus, number> = {
 };
 
 const levelWeight = (chunkLevel: KnowledgeLevel, wanted?: string): number => {
-  if (!wanted) return 1;
+  if (!wanted || wanted === 'all') return 1;
   if (chunkLevel === 'all') return 1.02;
   return chunkLevel === String(wanted).toLowerCase() ? 1.35 : 0.35;
 };
@@ -1344,6 +1350,8 @@ export function resolveScope(query: string, options: ScopeResolutionOptions = {}
 /* ───────────────────────────── الاستخراج الموجه ───────────────────────────── */
 
 export interface ExtractionOptions extends IndexBuildOptions {
+  /** Free chat searches every level; inferred scope ranks evidence but never excludes other years. */
+  globalSearch?: boolean;
   level?: string;
   facets?: KnowledgeFacet[];
   maxCandidates?: number;
@@ -1373,7 +1381,7 @@ const toCandidate = (hit: KnowledgeHit): ExtractionCandidate => ({
 export function extractKnowledge(query: string, options: ExtractionOptions = {}): KnowledgeExtraction {
   const task = detectTask(query);
   const scope = resolveScope(query, { lessons: options.lessons, level: options.level || options.lesson?.level });
-  const effectiveLevel = scope.level !== 'all'
+  const effectiveLevel = options.globalSearch ? 'all' : scope.level !== 'all'
     ? scope.level
     : ((options.lesson?.level as KnowledgeLevel) || 'all');
 
@@ -1382,7 +1390,7 @@ export function extractKnowledge(query: string, options: ExtractionOptions = {})
     ? options.facets
     : (detectedFacets.length ? detectedFacets.slice(0, 5) : TASK_DEFAULT_FACETS[task]);
 
-  const searchScope = {
+  const searchScope: KnowledgeScope = options.globalSearch ? {} : {
     maqta: scope.maqta || (options.lesson ? cleanText(options.lesson.maqta) : undefined),
     mawrid: scope.mawrid || (options.lesson ? cleanText(options.lesson.mawrid) : undefined),
     ta3alom: scope.ta3alom || (options.lesson ? cleanText(options.lesson.ta3alom) : undefined),
@@ -1440,7 +1448,9 @@ export function extractKnowledge(query: string, options: ExtractionOptions = {})
       .map(candidate => ({ candidate, weight: scopeWeight(candidate) }))
       .filter(item => effectiveLevel === 'all' || item.candidate.level === 'all' || item.candidate.level === effectiveLevel)
       .filter(item => !scoped || item.weight !== 0)
-      .sort((a, b) => b.weight - a.weight || a.candidate.priority - b.candidate.priority || b.candidate.score - a.candidate.score);
+      .sort((a, b) => options.globalSearch
+        ? b.candidate.score - a.candidate.score || a.candidate.priority - b.candidate.priority
+        : b.weight - a.weight || a.candidate.priority - b.candidate.priority || b.candidate.score - a.candidate.score);
 
     const kept = weighted.slice(0, maxCandidates).map(item => item.candidate);
     if (!kept.length) missing.push(facet);

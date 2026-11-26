@@ -37,13 +37,17 @@ import { ActionMenu, PageTemplateSwitcher } from './components/ActionMenu';
 import { PlatformInfoModal } from './components/PlatformInfoModal';
 import { UserProfile } from './components/UserProfile';
 import { FirebaseDataSync } from './components/FirebaseDataSync';
+import { AssessmentCloudSync } from './components/AssessmentCloudSync';
+import { embedAssessmentInLesson } from './assessment/embedAssessment';
+import { memoIdentity } from './assessment/types';
 import { FlagRibbon } from './components/FlagRibbon';
 import { useAuth } from './components/Auth';
 import { getFirebaseConfigStatus } from './firebase';
-import { loadCurriculumDatabase } from './data/memos/curriculumDb';
+import { loadCurriculumDatabase, saveCurriculumDatabase } from './data/memos/curriculumDb';
 import heroScienceLabImg from './assets/images/hero_science_lab.jpg';
 
 const AIAssistantChat = lazy(() => import('./components/AIAssistantChat').then(module => ({ default: module.AIAssistantDrawer })));
+const AssessmentWorkspace = lazy(() => import('./assessment/AssessmentWorkspace').then(module => ({ default: module.AssessmentWorkspace })));
 const AssessmentHub = lazy(() => import('./components/AssessmentHub').then(module => ({ default: module.AssessmentHub })));
 
 const AnnualDistribution = lazy(() => import('./components/AnnualDistribution').then(module => ({ default: module.AnnualDistribution })));
@@ -85,6 +89,8 @@ export const App: React.FC = () => {
 
   // Drawers and Modals
   const [isNavDrawerOpen, setIsNavDrawerOpen] = useState<boolean>(false);
+  const [assessmentLesson, setAssessmentLesson] = useState<LessonMemo | null>(null);
+  const [assessmentAdvanced, setAssessmentAdvanced] = useState(false);
   const [assistantContext, setAssistantContext] = useState<AssistantLaunchContext | null>(null);
   const [assistantContextKey, setAssistantContextKey] = useState('');
   const [infoModalTab, setInfoModalTab] = useState<'about' | 'contact' | 'guide' | null>(null);
@@ -102,7 +108,7 @@ export const App: React.FC = () => {
     cancelFallback: cancelWordFallback,
   } = useDocxFontFallbackDialog();
 
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const firebaseStatus = useMemo(() => getFirebaseConfigStatus(), []);
 
   // Is current section a school year?
@@ -541,8 +547,23 @@ export const App: React.FC = () => {
     return items.filter((item) => !dismissedNotifications.includes(item.id));
   }, [config.teacherName, config.schoolName, config.teacherStamp, curriculumLessons.length, user, firebaseStatus.isValid, dismissedNotifications]);
 
+  // The desktop sidebar and mobile drawer share exactly the same routing.
+  const handlePlatformNavigate = (section: string) => {
+    setLogbookInitialTimetable(false);
+    if (section === 'assessment') {
+      setAssessmentLesson(isYearSection ? currentLesson : null);
+      setAssessmentAdvanced(false);
+    }
+    setActiveSection(section as MainSectionType);
+    setYearSubTab('memos');
+  };
+  const handlePlatformTimetable = () => {
+    setLogbookInitialTimetable(true);
+    setActiveSection('logbook');
+  };
+
   return (
-    <div className="min-h-screen flex flex-col font-sans app-shell overflow-x-clip" dir="rtl">
+    <div className={`min-h-screen flex flex-col font-sans app-shell overflow-x-clip ${activeSection === 'home' ? 'is-overview' : ''}`} dir="rtl">
       {/* Toast Notification */}
       {toastMessage && (
         <div
@@ -846,7 +867,7 @@ export const App: React.FC = () => {
             setActiveSection('logbook');
           }}
           onOpenDatabase={() => setActiveSection('database')}
-          onOpenAssessment={() => setActiveSection('assessment')}
+          onOpenAssessment={() => { setAssessmentLesson(null); setAssessmentAdvanced(false); setActiveSection('assessment'); }}
           onOpenAssistant={() => openAssistant()}
           onOpenInfoModal={(tab) => setInfoModalTab(tab)}
           config={config}
@@ -976,6 +997,7 @@ export const App: React.FC = () => {
               lesson={currentLesson}
               config={config}
               activeActivities={activeActivities}
+              onOpenAssessment={() => { setAssessmentLesson(currentLesson); setAssessmentAdvanced(false); setActiveSection('assessment'); }}
               onToggleActivity={handleToggleActivity}
               onFormatChange={(fmt) => {
                 setConfig((prev) => ({ ...prev, memoFormat: fmt }));
@@ -1160,9 +1182,21 @@ export const App: React.FC = () => {
         </Suspense>
       )}
 
-      {activeSection === 'assessment' && (
+      {activeSection === 'assessment' && !assessmentAdvanced && (
+        <Suspense fallback={<SectionLoading />}><AssessmentWorkspace owner={user?.uid} authLoading={authLoading}
+          currentLesson={assessmentLesson} curriculumLessons={curriculumLessons} config={config}
+          onClose={() => setActiveSection(assessmentLesson?.level || 'home')}
+          onOpenAdvanced={(lesson) => { setAssessmentLesson(lesson); setAssessmentAdvanced(true); }}
+          onEmbed={(record) => {
+            const next = curriculumLessons.map(lesson => memoIdentity(lesson) === record.memoId ? embedAssessmentInLesson(lesson, record) : lesson);
+            saveCurriculumDatabase(next); setCurriculumLessons(next);
+          }} /></Suspense>
+      )}
+      {activeSection === 'assessment' && assessmentAdvanced && (
         <Suspense fallback={<SectionLoading />}>
           <AssessmentHub
+            currentLesson={assessmentLesson} assessmentOwner={user?.uid}
+            onOpenLocalAssessment={() => setAssessmentAdvanced(false)}
             config={config}
             curriculumLessons={curriculumLessons}
             initialLevel={selectedLevel}
@@ -1194,20 +1228,25 @@ export const App: React.FC = () => {
         </Suspense>
       )}
 
+      {activeSection === 'home' && (
+        <PlatformNavigationDrawer
+          variant="sidebar"
+          isOpen
+          onClose={() => setIsNavDrawerOpen(false)}
+          activeSection={activeSection}
+          config={config}
+          onNavigate={handlePlatformNavigate}
+          onOpenTimetable={handlePlatformTimetable}
+          onOpenInfoModal={(tab) => setInfoModalTab(tab)}
+        />
+      )}
       {/* Global Navigation Drawer */}
       <PlatformNavigationDrawer
         isOpen={isNavDrawerOpen}
         onClose={() => setIsNavDrawerOpen(false)}
         activeSection={activeSection}
-        onNavigate={(sec) => {
-          setLogbookInitialTimetable(false);
-          setActiveSection(sec as MainSectionType);
-          setYearSubTab('memos');
-        }}
-        onOpenTimetable={() => {
-          setLogbookInitialTimetable(true);
-          setActiveSection('logbook');
-        }}
+        onNavigate={handlePlatformNavigate}
+        onOpenTimetable={handlePlatformTimetable}
         onOpenInfoModal={(tab) => setInfoModalTab(tab)}
         config={config}
       />
@@ -1242,6 +1281,7 @@ export const App: React.FC = () => {
         onCancel={cancelWordFallback}
       />
       <FirebaseDataSync />
+      <AssessmentCloudSync />
     </div>
   );
 };

@@ -1,0 +1,13 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "assessmentItems",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "level", "order": "ASCENDING" },
+        { "fieldPath": "syncedAt", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

@@ -1115,3 +1115,6 @@ h1, h2, h3, h4, h5 {
 @media print {
   .snv-hero, .snv-footer, .snv-level-card, .snv-service-panel { box-shadow: none !important; }
 }
+
+/* Locally cached Arabic face for assessment preview, PDF and offline printing. */
+@font-face { font-family: AssessmentArabic; src: url('/fonts/Cairo-Regular.ttf') format('truetype'); font-display: swap; }

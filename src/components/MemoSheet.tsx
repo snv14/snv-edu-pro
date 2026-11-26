@@ -16,6 +16,7 @@ interface MemoSheetProps {
   onToggleActivity: (idx: number) => void;
   onFormatChange?: (format: 'standard' | 'merged_teacher') => void;
   editable?: boolean;
+  onOpenAssessment?: () => void;
 }
 
 const THEMES: Record<string, {
@@ -148,6 +149,7 @@ export const MemoSheet: React.FC<MemoSheetProps> = ({
   activeActivities,
   onToggleActivity,
   editable = true,
+  onOpenAssessment,
 }) => {
   const { settings: hwStyle } = useHandwritingStyle();
   const hwActive = isHandwritingActiveFor('memos', hwStyle);
@@ -219,6 +221,7 @@ export const MemoSheet: React.FC<MemoSheetProps> = ({
     >
       <style>{` .editable-cell { padding: 2px; border-radius: 4px; min-height: 1.5em; white-space: pre-wrap; word-break: break-word; outline: none; } .editable-cell:hover { background-color: rgba(0,0,0,0.03); } .editable-cell:focus { outline: 2px solid ${theme.hex}; outline-offset: 1px; background-color: #f0fdfa; } @media print { .editable-cell:focus { outline: none; background-color: transparent; } } `}</style>
 
+      {onOpenAssessment && <div className="no-print mb-3 text-left" data-html2canvas-ignore="true"><button type="button" onClick={onOpenAssessment} className="rounded-lg border border-teal-300 bg-teal-50 text-teal-900 px-4 py-2 text-sm font-bold">التقويم</button></div>}
       {/* 1. الترويسة العليا للمذكرة */}
       <div
         className={`border-2 rounded-lg p-3.5 mb-4 bg-gradient-to-l ${theme.headerGrad}`}

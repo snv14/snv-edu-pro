@@ -1,3 +1,5 @@
+import type { AssessmentRecord } from './assessment/types';
+
 export interface MemoTable {
   table_id?: string;
   table_title?: string;
@@ -20,6 +22,9 @@ export interface Activity {
 }
 
 export interface LessonMemo {
+  assessment?: AssessmentRecord;
+  assessmentOriginalTaqwim?: string;
+  assessmentOriginalTaqwimTables?: DB_Table[];
   /** Stable source identifiers used for exact curriculum traceability. */
   sourceSequenceId?: string;
   sourceResourceId?: string;
