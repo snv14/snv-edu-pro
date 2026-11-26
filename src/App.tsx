@@ -37,6 +37,9 @@ import { ActionMenu, PageTemplateSwitcher } from './components/ActionMenu';
 import { PlatformInfoModal } from './components/PlatformInfoModal';
 import { UserProfile } from './components/UserProfile';
 import { FirebaseDataSync } from './components/FirebaseDataSync';
+import { AssessmentCloudSync } from './components/AssessmentCloudSync';
+import { embedAssessmentInLesson } from './assessment/embedAssessment';
+import { memoIdentity } from './assessment/types';
 import { FlagRibbon } from './components/FlagRibbon';
 import { useAuth } from './components/Auth';
 import { getFirebaseConfigStatus } from './firebase';
@@ -45,7 +48,7 @@ import { appendAssistantMemoContent } from './services/assistantMemoInsertion';
 import heroScienceLabImg from './assets/images/hero_science_lab.jpg';
 
 const AIAssistantChat = lazy(() => import('./components/AIAssistantChat').then(module => ({ default: module.AIAssistantDrawer })));
-const CorrectionMemoDrawer = lazy(() => import('./components/CorrectionMemoDrawer').then(module => ({ default: module.CorrectionMemoDrawer })));
+const AssessmentWorkspace = lazy(() => import('./assessment/AssessmentWorkspace').then(module => ({ default: module.AssessmentWorkspace })));
 const DocumentAgentDrawer = lazy(() => import('./components/DocumentAgentDrawer').then(module => ({ default: module.DocumentAgentDrawer })));
 const TeacherAssistantDrawer = lazy(() => import('./components/TeacherAssistantDrawer').then(module => ({ default: module.TeacherAssistantDrawer })));
 
@@ -94,7 +97,7 @@ export const App: React.FC = () => {
     cancelFallback: cancelWordFallback,
   } = useDocxFontFallbackDialog();
 
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const firebaseStatus = useMemo(() => getFirebaseConfigStatus(), []);
 
   // Is current section a school year?
@@ -950,6 +953,7 @@ export const App: React.FC = () => {
               lesson={currentLesson}
               config={config}
               activeActivities={activeActivities}
+              onOpenAssessment={() => setActiveTool('correction')}
               onToggleActivity={handleToggleActivity}
               onFormatChange={(fmt) => {
                 setConfig((prev) => ({ ...prev, memoFormat: fmt }));
@@ -1150,10 +1154,16 @@ export const App: React.FC = () => {
             showToast('تمت إضافة المحتوى إلى المذكرة دون حذف محتواها السابق');
           }}
         />}
-        {activeTool === 'correction' && <CorrectionMemoDrawer
-          isOpen onClose={() => setActiveTool(null)}
+        {activeTool === 'correction' && <AssessmentWorkspace
+          owner={user?.uid} authLoading={authLoading}
+          onClose={() => setActiveTool(null)}
           currentLesson={isYearSection ? currentLesson : null}
           curriculumLessons={curriculumLessons} config={config}
+          onEmbed={(record) => {
+            const next = curriculumLessons.map(lesson => memoIdentity(lesson) === record.memoId ? embedAssessmentInLesson(lesson, record) : lesson);
+            saveCurriculumDatabase(next);
+            setCurriculumLessons(next);
+          }}
         />}
         {activeTool === 'agent' && <DocumentAgentDrawer
           isOpen onClose={() => setActiveTool(null)}
@@ -1217,6 +1227,7 @@ export const App: React.FC = () => {
         onCancel={cancelWordFallback}
       />
       <FirebaseDataSync />
+      <AssessmentCloudSync />
     </div>
   );
 };

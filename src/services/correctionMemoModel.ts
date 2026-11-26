@@ -8,7 +8,7 @@ export type MemoConfidence = 'مرتفعة' | 'متوسطة' | 'منخفضة';
 export const SOURCE_LABEL: Record<MemoFieldSource, string> = {
   platform: 'من المنصة',
   imported: 'مستورد من الورقة',
-  ai: 'اقتراح AI',
+  ai: 'اقتراح سابق — للمراجعة',
   teacher: 'محرَّر يدويًا',
   template: 'قالب فارغ',
 };

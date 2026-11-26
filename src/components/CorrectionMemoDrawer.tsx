@@ -1,3 +1,4 @@
+import type { AssessmentStore } from '../assessment/assessmentStore';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle, Calculator, CheckCircle2, Database, FileDown, FileSearch, FileUp, Loader2, Printer, Plus, RotateCcw,
@@ -13,7 +14,7 @@ import {
   applyPointSuggestion, buildPointSuggestion, enrichCorrectionMemoFromDb, PointSuggestion,
 } from '../services/correctionMemoEnrich';
 import { importCorrectionFile, isSupportedCorrectionFile, readFileAsDataUrl } from '../services/correctionMemoImport';
-import { applyCorrectionSuggestions, suggestAnswersForExercises, CorrectionSuggestionsResult } from '../services/correctionMemoAi';
+import { applyCorrectionSuggestions, suggestAnswersForExercises, CorrectionSuggestionsResult } from '../services/correctionMemoLocalAnswers';
 import { exportCorrectionMemoDataToDocx, exportCorrectionMemoToPdf, printCorrectionMemo } from '../utils/correctionMemoExport';
 import { CorrectionMemoSheet, SourceLegend } from './CorrectionMemoSheet';
 import { CorrectionImportRecovery, RecoveryPreset, RecoveryStatus, RecoverySummary } from './CorrectionImportRecovery';
@@ -111,16 +112,17 @@ export const CorrectionMemoDrawer: React.FC<{
   currentLesson?: LessonMemo | null;
   curriculumLessons?: LessonMemo[];
   config?: MemoConfig;
-}> = ({ isOpen, onClose, currentLesson, curriculumLessons = [], config }) => {
+  assessmentStore?: AssessmentStore;
+}> = ({ isOpen, onClose, currentLesson, curriculumLessons = [], config, assessmentStore }) => {
   const [data, setData] = useState<CorrectionMemoData>(() => loadStored());
   const [filledFromPlatform, setFilledFromPlatform] = useState<string[]>([]);
   const [skippedFromPlatform, setSkippedFromPlatform] = useState<string[]>([]);
-  const [busy, setBusy] = useState<'import' | 'ai' | null>(null);
+  const [busy, setBusy] = useState<'import' | 'matching' | null>(null);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [importMeta, setImportMeta] = useState<{ exercises: number; questions: number; points: number; usedAI: boolean; missing: string[] } | null>(null);
-  const [aiResult, setAiResult] = useState<CorrectionSuggestionsResult | null>(null);
-  const [aiTarget, setAiTarget] = useState<string>('all');
+  const [localResult, setLocalResult] = useState<CorrectionSuggestionsResult | null>(null);
+  const [localTarget, setLocalTarget] = useState<string>('all');
   const [pointSuggestion, setPointSuggestion] = useState<PointSuggestion | null>(null);
   const [recovery, setRecovery] = useState<RecoveryState | null>(null);
   const [showPreview, setShowPreview] = useState(true);
@@ -168,7 +170,7 @@ export const CorrectionMemoDrawer: React.FC<{
     if (examType === data.examType) return;
     const count = data.exercises.filter(exercise => exercise.part === 1).length;
     setData(applyExamStructure(data, examType, count));
-    setAiResult(null);
+    setLocalResult(null);
     setPointSuggestion(null);
     setNotice(examType === 'فرض'
       ? 'تحوّلت الورقة إلى فرض: تمارين فقط بلا وضعية إدماجية، والمجموع من 20.'
@@ -308,16 +310,16 @@ export const CorrectionMemoDrawer: React.FC<{
       missing: recovery.summary?.missing || [],
     });
     setRecovery(null);
-    setNotice('اعتُمدت الورقة المستوردة وبيانات المنصة. راجع الإجابة النموذجية، ثم «توليد آلي لعناصر الإجابة» أو اكتبها يدويًا قبل المعاينة والتصدير.');
+    setNotice('اعتُمدت الورقة المستوردة وبيانات المنصة. راجع الإجابة النموذجية، ثم «مطابقة عناصر الإجابة من البنك» أو اكتبها يدويًا قبل المعاينة والتصدير.');
   };
 
   const targetedExercises = (): CorrectionExercise[] => {
-    if (aiTarget === 'all') return data.exercises;
-    const found = data.exercises.find(exercise => exercise.id === aiTarget);
+    if (localTarget === 'all') return data.exercises;
+    const found = data.exercises.find(exercise => exercise.id === localTarget);
     return found ? [found] : [];
   };
 
-  const generateAnswers = async () => {
+  const matchAnswers = async () => {
     const targets = targetedExercises();
     if (!targets.some(exercise => exercise.questions.some(question => question.text.trim()))) {
       setError('لا توجد أسئلة مستوردة لتوليد إجابات لها. استورد ورقة التقييم أو أدخل نص الأسئلة أولًا.');
@@ -325,28 +327,28 @@ export const CorrectionMemoDrawer: React.FC<{
     }
     setError('');
     setNotice('');
-    setBusy('ai');
+    setBusy('matching');
     try {
-      const result = await suggestAnswersForExercises({ data, exercises: targets, lesson: currentLesson, curriculum: curriculumLessons });
+      const result = await suggestAnswersForExercises({ data, exercises: targets, lesson: currentLesson, curriculum: curriculumLessons, store: assessmentStore });
       if (!result) {
-        setError('تعذر التوليد الآلي. تحقق من إعداد مزوّد الذكاء الاصطناعي على الخادم، أو اكتب عناصر الإجابة يدويًا.');
-        setAiResult(null);
+        setError('لا توجد عناصر كافية لهذا الدرس. يمكنك إضافة عناصر جديدة إلى بنك التقويم.');
+        setLocalResult(null);
         return;
       }
-      setAiResult(result);
+      setLocalResult(result);
       setNotice('وصلت مقترحات الإجابة. لم تُطبَّق بعد؛ راجعها ثم اختر «تطبيق المقترحات».');
     } catch {
-      setError('تعذر التوليد الآلي. اكتب عناصر الإجابة يدويًا.');
+      setError('لا توجد عناصر كافية لهذا الدرس. يمكنك إضافة عناصر جديدة إلى بنك التقويم.');
     } finally {
       setBusy(null);
     }
   };
 
-  const applyAi = () => {
-    if (!aiResult) return;
-    const applied = applyCorrectionSuggestions(data, aiResult);
+  const applyLocal = () => {
+    if (!localResult) return;
+    const applied = applyCorrectionSuggestions(data, localResult);
     setData(applied.data);
-    setAiResult(null);
+    setLocalResult(null);
     setNotice(`طُبّقت ${applied.applied} عنصر إجابة مقترح.${applied.skipped ? ` وتُرك ${applied.skipped} عنصرًا لأنك كتبته يدويًا أو لأن المقترح فارغ.` : ''}`);
   };
 
@@ -357,7 +359,7 @@ export const CorrectionMemoDrawer: React.FC<{
     setFilledFromPlatform(filled.filled);
     setSkippedFromPlatform(filled.skipped);
     setImportMeta(null);
-    setAiResult(null);
+    setLocalResult(null);
     setNotice('أُعيدت المذكرة إلى قالب فارغ مع تعبئة بيانات المنصة.');
     setError('');
   };
@@ -498,19 +500,19 @@ export const CorrectionMemoDrawer: React.FC<{
 
           <div className="flex flex-wrap items-center gap-1.5 bg-white rounded-2xl border border-amber-100 p-2.5">
             <span className="text-[11px] font-black text-slate-500 px-1">التصحيح</span>
-            <select value={aiTarget} onChange={event => setAiTarget(event.target.value)} className="border border-slate-200 rounded-lg px-2 py-1.5 text-[11px] font-bold bg-white">
+            <select value={localTarget} onChange={event => setLocalTarget(event.target.value)} className="border border-slate-200 rounded-lg px-2 py-1.5 text-[11px] font-bold bg-white">
               <option value="all">كل التمارين</option>
               {data.exercises.map((exercise, index) => (
                 <option key={exercise.id} value={exercise.id}>{exercise.label || `التمرين ${index + 1}`}</option>
               ))}
             </select>
-            <button type="button" onClick={generateAnswers} disabled={busy !== null} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-600 text-white text-[11.5px] font-black disabled:opacity-50">
-              {busy === 'ai' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-              توليد آلي لعناصر الإجابة
+            <button type="button" onClick={matchAnswers} disabled={busy !== null} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-600 text-white text-[11.5px] font-black disabled:opacity-50">
+              {busy === 'matching' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+              مطابقة عناصر الإجابة من البنك
             </button>
-            {aiResult && (
-              <button type="button" onClick={applyAi} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-700 text-white text-[11.5px] font-black">
-                <CheckCircle2 className="w-3.5 h-3.5" /> تطبيق المقترحات ({aiResult.suggestions.length})
+            {localResult && (
+              <button type="button" onClick={applyLocal} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-700 text-white text-[11.5px] font-black">
+                <CheckCircle2 className="w-3.5 h-3.5" /> تطبيق المقترحات ({localResult.suggestions.length})
               </button>
             )}
             <button type="button" onClick={proposePoints} disabled={!data.exercises.some(exercise => exercise.questions.length)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-700 text-white text-[11.5px] font-black disabled:opacity-50">
@@ -599,17 +601,17 @@ export const CorrectionMemoDrawer: React.FC<{
             </div>
           )}
 
-          {aiResult && (
+          {localResult && (
             <div className="rounded-xl bg-white border border-amber-200 p-2.5 space-y-1.5">
               <div className="text-[11px] font-black text-amber-800">مقترحات لم تُطبَّق بعد — راجعها قبل القبول</div>
-              {aiResult.suggestions.slice(0, 4).map(suggestion => (
+              {localResult.suggestions.slice(0, 4).map(suggestion => (
                 <div key={suggestion.questionId} className="text-[10.5px] text-slate-700 border-t border-slate-100 pt-1">
                   <span className="font-bold">{suggestion.expected.slice(0, 160) || 'لا يوجد نص'}</span>
                   {suggestion.needsReview && <span className="text-amber-700 font-bold"> · يحتاج مراجعة الأستاذ</span>}
                 </div>
               ))}
-              {aiResult.ambiguous.length > 0 && <div className="text-[10px] text-amber-800">غير واضح: {aiResult.ambiguous.slice(0, 3).join(' · ')}</div>}
-              <button type="button" onClick={() => setAiResult(null)} className="text-[10px] font-black text-slate-500 hover:text-slate-800">تجاهل المقترحات</button>
+              {localResult.ambiguous.length > 0 && <div className="text-[10px] text-amber-800">غير واضح: {localResult.ambiguous.slice(0, 3).join(' · ')}</div>}
+              <button type="button" onClick={() => setLocalResult(null)} className="text-[10px] font-black text-slate-500 hover:text-slate-800">تجاهل المقترحات</button>
             </div>
           )}
 
@@ -712,8 +714,8 @@ export const CorrectionMemoDrawer: React.FC<{
         )}
 
         <div className="cm-toolbar px-3 pb-6 text-[10px] text-slate-500 space-y-1">
-          <div className="font-bold">الرموز الملونة: أخضر = من المنصة · أزرق = مستورد من الورقة · برتقالي = اقتراح AI · رمادي داكن = محرَّر يدويًا.</div>
-          <div>الأولوية: ما أكده الأستاذ ← الورقة الأصلية ← قاعدة المنصة ← مقترح AI. لا يُستبدل أي نص كتبته يدويًا. القالب الفارغ لا يُملأ بالتخمين.</div>
+          <div className="font-bold">الرموز الملونة: أخضر = من المنصة · أزرق = مستورد من الورقة · برتقالي = اقتراح قديم للمراجعة · رمادي داكن = محرَّر يدويًا.</div>
+          <div>الأولوية: ما أكده الأستاذ ← الورقة الأصلية ← قاعدة المنصة ← مطابقة البنك المحلي. لا يُستبدل أي نص كتبته يدويًا. القالب الفارغ لا يُملأ بالتخمين.</div>
         </div>
         {recovery && (
           <CorrectionImportRecovery

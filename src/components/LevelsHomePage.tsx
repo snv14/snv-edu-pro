@@ -225,8 +225,8 @@ export const LevelsHomePage: React.FC<LevelsHomePageProps> = ({
       items: [
         {
           id: 'service-assessment',
-          title: 'الاختبارات والتقويم',
-          description: 'بناء مذكرات تصحيح الفروض والاختبارات وتحليل أوراق التقييم.',
+          title: 'التقويم وبنك التقويم',
+          description: 'إنشاء التقويم من المذكرة دون اتصال، وتحرير بنك الأسئلة ومذكرات التصحيح.',
           icon: ClipboardCheck,
           onClick: () => onOpenTool('correction'),
         },

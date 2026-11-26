@@ -32,7 +32,7 @@ export interface CorrectionSourceMapping {
   meta?: MappedMeta;
   exercises: MappedExercise[];
   totalPoints?: number | string;
-  source: 'file' | 'ai';
+  source: 'file';
 }
 
 export interface ExtractionOutcome {
@@ -216,7 +216,7 @@ const buildExercises = (
         text: (question.text || '').trim(),
         points: toPointsString(question.points),
         expected: (question.expected || '').trim(),
-        source: (question.expected ? 'ai' : 'imported') as 'ai' | 'imported',
+        source: 'imported' as const,
         needsReview: !question.text,
       })),
     };
@@ -281,8 +281,8 @@ export async function importCorrectionFile(args: ImportCorrectionArgs): Promise<
   const base = fillFromPlatform(current, { config, lesson, level: lesson?.level }).data;
   let mapping: CorrectionSourceMapping | null = null;
   let notice = '';
-  let usedAI = false;
-  let providerError = '';
+  const usedAI = false; // Compatibility field for the import recovery UI; all readers are local.
+  let readerError = '';
 
   if (file.type === 'text/plain' || /\.txt$/i.test(file.name)) {
     const text = decodeTextDataUrl(dataUrl);
@@ -340,9 +340,8 @@ export async function importCorrectionFile(args: ImportCorrectionArgs): Promise<
               meta: normalizeMeta(parsed),
               exercises,
               totalPoints: parsed?.totalPoints,
-              source: payload?.provider === 'local' ? 'file' : 'ai',
+              source: 'file',
             };
-            usedAI = payload?.provider !== 'local';
           } else {
             notice = 'لم أستخرج أسئلة قابلة للاعتماد من الملف. أدخل التمارين يدويًا.';
           }
@@ -351,14 +350,14 @@ export async function importCorrectionFile(args: ImportCorrectionArgs): Promise<
         }
       } else {
         const body = await response.json().catch(() => ({}));
-        providerError = typeof body?.error === 'string' ? body.error : '';
+        readerError = typeof body?.error === 'string' ? body.error : '';
         if (response.status === 503) {
           notice = 'لم أقرأ تمارين من هذا الملف. الصور والوثائق المصوّرة تحتاج OCR أو نصًا بديلًا يدويًا، أما PDF النصي وWord فيُقرآن محليًا. أدخل التمارين يدويًا أو الصق النص ثم استعمل «تعبئة من قاعدة البيانات» و«اقتراح التنقيط».';
         } else if (/\.doc$/i.test(file.name)) {
           notice = 'صيغة .doc القديمة غير مدعومة. احفظ الملف بصيغة .docx أو PDF ثم أعد الاستيراد.';
         } else {
-          notice = providerError
-            ? `تعذر تحليل الملف: ${providerError}. أدخل التمارين يدويًا.`
+          notice = readerError
+            ? `تعذر تحليل الملف: ${readerError}. أدخل التمارين يدويًا.`
             : 'تعذر تحليل الملف. أدخل التمارين يدويًا.';
         }
       }
@@ -423,9 +422,9 @@ export async function importCorrectionFile(args: ImportCorrectionArgs): Promise<
     duration: meta.duration || base.duration,
     level: meta.level || base.level,
     midan: meta.midan || base.midan,
-    midanSource: meta.midan ? 'ai' : base.midanSource,
+    midanSource: meta.midan ? 'imported' : base.midanSource,
     competence: meta.kafaa || base.competence,
-    competenceSource: meta.kafaa ? 'ai' : base.competenceSource,
+    competenceSource: meta.kafaa ? 'imported' : base.competenceSource,
     part1DeclaredPoints: part1Declared,
     integration: {
       declaredPoints: examType === 'اختبار' ? String(structure.integrationPoints) : '',
@@ -443,8 +442,8 @@ export async function importCorrectionFile(args: ImportCorrectionArgs): Promise<
       maqta: meta.maqta || existing?.maqta || '',
       knowledge: meta.mawrid || existing?.knowledge || '',
       criteria: existing?.criteria || '',
-      maqtaSource: (meta.maqta ? 'ai' : existing?.maqtaSource || 'template') as CorrectionMemoData['resources'][number]['maqtaSource'],
-      knowledgeSource: (meta.mawrid ? 'ai' : existing?.knowledgeSource || 'template') as CorrectionMemoData['resources'][number]['knowledgeSource'],
+      maqtaSource: (meta.maqta ? 'imported' : existing?.maqtaSource || 'template') as CorrectionMemoData['resources'][number]['maqtaSource'],
+      knowledgeSource: (meta.mawrid ? 'imported' : existing?.knowledgeSource || 'template') as CorrectionMemoData['resources'][number]['knowledgeSource'],
       criteriaSource: (existing?.criteriaSource || 'template') as CorrectionMemoData['resources'][number]['criteriaSource'],
     };
   });
@@ -456,17 +455,15 @@ export async function importCorrectionFile(args: ImportCorrectionArgs): Promise<
       maqta: meta.maqta || integrationRow?.maqta || '',
       knowledge: meta.mawrid || integrationRow?.knowledge || '',
       criteria: base.integration.criteria.map(criterion => criterion.label).join(' · '),
-      maqtaSource: meta.maqta ? 'ai' : integrationRow?.maqtaSource || 'template',
-      knowledgeSource: meta.mawrid ? 'ai' : integrationRow?.knowledgeSource || 'template',
+      maqtaSource: meta.maqta ? 'imported' : integrationRow?.maqtaSource || 'template',
+      knowledgeSource: meta.mawrid ? 'imported' : integrationRow?.knowledgeSource || 'template',
       criteriaSource: 'platform',
     });
   }
 
   const summary = viaAgent
     ? 'قرأ وكيل المستندات الملف محليًا وعبّأ قالب التصحيح من قاعدة المنصة. راجع كل سؤال ونقطة قبل الاعتماد.'
-    : usedAI
-      ? 'قُرئ الملف عبر خدمة التحليل، وعُبّئت الحقول التربوية المتاحة. راجع كل سؤال ونقطة قبل الاعتماد.'
-      : 'قُرئ الملف محليًا داخل المنصة، واستُخرجت التمارين والنقاط دون مزوّد خارجي. راجعها قبل الاعتماد.';
+    : 'قُرئ الملف محليًا داخل المنصة، واستُخرجت التمارين والنقاط دون مزوّد خارجي. راجعها قبل الاعتماد.';
 
   return {
     data,

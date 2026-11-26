@@ -236,7 +236,7 @@ export const PlatformNavigationDrawer: React.FC<PlatformNavigationDrawerProps> =
             >
               <span className="flex items-center gap-2.5">
                 <ClipboardCheck className="w-4 h-4 text-[#0e7a68]" />
-                <span>الاختبارات ومذكرة التصحيح</span>
+                <span>التقويم وبنك التقويم</span>
               </span>
               <ChevronLeft className="w-4 h-4 opacity-40" />
             </button>
