@@ -36,6 +36,7 @@ export function AssessmentWorkspace({
   onEmbed,
   owner,
   authLoading = false,
+  onOpenAdvanced,
 }: {
   onClose: () => void;
   currentLesson?: LessonMemo | null;
@@ -44,6 +45,7 @@ export function AssessmentWorkspace({
   onEmbed: (record: AssessmentRecord, lesson: LessonMemo) => void;
   owner?: string;
   authLoading?: boolean;
+  onOpenAdvanced?: (lesson: LessonMemo | null) => void;
 }) {
   const store = useMemo(() => new AssessmentStore(owner || "local"), [owner]);
   const engine = useMemo(() => new AssessmentEngine(store), [store]);
@@ -222,8 +224,13 @@ export function AssessmentWorkspace({
         >
           بنك التقويم
         </button>
-        <button onClick={() => setLegacy(true)} className="text-xs underline">
-          استيراد ورقة ومذكرة التصحيح
+        <button
+          onClick={() =>
+            onOpenAdvanced ? onOpenAdvanced(selected) : setLegacy(true)
+          }
+          className="text-xs underline"
+        >
+          الاختبارات والنتائج ومذكرة التصحيح
         </button>
       </header>
       <main className="flex-1 overflow-y-auto p-4 sm:p-6">

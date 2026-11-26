@@ -29,7 +29,6 @@ interface PlatformNavigationDrawerProps {
   onNavigate: (section: string) => void;
   onOpenTimetable?: () => void;
   onOpenInfoModal: (tab: 'about' | 'contact' | 'guide') => void;
-  onOpenTool: (tool: 'assistant' | 'correction' | 'agent' | 'grading') => void;
   config: MemoConfig;
 }
 
@@ -45,7 +44,6 @@ export const PlatformNavigationDrawer: React.FC<PlatformNavigationDrawerProps> =
   onNavigate,
   onOpenTimetable,
   onOpenInfoModal,
-  onOpenTool,
   config,
 }) => {
   if (!isOpen) return null;
@@ -231,50 +229,32 @@ export const PlatformNavigationDrawer: React.FC<PlatformNavigationDrawerProps> =
 
             <button
               type="button"
-              onClick={() => { onOpenTool('correction'); onClose(); }}
-              className={`${rowBase} ${rowIdle}`}
+              onClick={() => handleSelectSection('assessment')}
+              className={`${rowBase} ${activeSection === 'assessment' ? rowActive : rowIdle}`}
             >
               <span className="flex items-center gap-2.5">
                 <ClipboardCheck className="w-4 h-4 text-[#0e7a68]" />
-                <span>التقويم وبنك التقويم</span>
+                <span>التقويم</span>
               </span>
-              <ChevronLeft className="w-4 h-4 opacity-40" />
+              <span className="flex items-center gap-1.5 shrink-0">
+                <span className="rounded-md border border-[#e2e8e5] bg-white px-1.5 py-0.5 text-[8.5px] font-extrabold text-[#7b8d88]">اختبارات · نتائج</span>
+                <ChevronLeft className="w-4 h-4 opacity-40" />
+              </span>
             </button>
 
             <button
               type="button"
-              onClick={() => { onOpenTool('grading'); onClose(); }}
-              className={`${rowBase} ${rowIdle}`}
-            >
-              <span className="flex items-center gap-2.5">
-                <GraduationCap className="w-4 h-4 text-[#0e7a68]" />
-                <span>المساعد التربوي: التصحيح والدرجات</span>
-              </span>
-              <ChevronLeft className="w-4 h-4 opacity-40" />
-            </button>
-
-            <button
-              type="button"
-              onClick={() => { onOpenTool('assistant'); onClose(); }}
-              className={`${rowBase} ${rowIdle}`}
+              onClick={() => handleSelectSection('assistant')}
+              className={`${rowBase} ${activeSection === 'assistant' ? rowActive : rowIdle}`}
             >
               <span className="flex items-center gap-2.5">
                 <MessagesSquare className="w-4 h-4 text-[#0d6f8f]" />
                 <span>المساعد الذكي</span>
               </span>
-              <ChevronLeft className="w-4 h-4 opacity-40" />
-            </button>
-
-            <button
-              type="button"
-              onClick={() => { onOpenTool('agent'); onClose(); }}
-              className={`${rowBase} ${rowIdle}`}
-            >
-              <span className="flex items-center gap-2.5">
-                <FileSearch className="w-4 h-4 text-[#a06a12]" />
-                <span>وكيل المستندات (قراءة وتحليل الملفات)</span>
+              <span className="flex items-center gap-1.5 shrink-0">
+                <span className="rounded-md border border-[#e2e8e5] bg-white px-1.5 py-0.5 text-[8.5px] font-extrabold text-[#7b8d88]">بحث · ملفات</span>
+                <ChevronLeft className="w-4 h-4 opacity-40" />
               </span>
-              <ChevronLeft className="w-4 h-4 opacity-40" />
             </button>
           </div>
 

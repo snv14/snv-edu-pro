@@ -44,13 +44,11 @@ import { FlagRibbon } from './components/FlagRibbon';
 import { useAuth } from './components/Auth';
 import { getFirebaseConfigStatus } from './firebase';
 import { loadCurriculumDatabase, saveCurriculumDatabase } from './data/memos/curriculumDb';
-import { appendAssistantMemoContent } from './services/assistantMemoInsertion';
 import heroScienceLabImg from './assets/images/hero_science_lab.jpg';
 
 const AIAssistantChat = lazy(() => import('./components/AIAssistantChat').then(module => ({ default: module.AIAssistantDrawer })));
 const AssessmentWorkspace = lazy(() => import('./assessment/AssessmentWorkspace').then(module => ({ default: module.AssessmentWorkspace })));
-const DocumentAgentDrawer = lazy(() => import('./components/DocumentAgentDrawer').then(module => ({ default: module.DocumentAgentDrawer })));
-const TeacherAssistantDrawer = lazy(() => import('./components/TeacherAssistantDrawer').then(module => ({ default: module.TeacherAssistantDrawer })));
+const AssessmentHub = lazy(() => import('./components/AssessmentHub').then(module => ({ default: module.AssessmentHub })));
 
 const AnnualDistribution = lazy(() => import('./components/AnnualDistribution').then(module => ({ default: module.AnnualDistribution })));
 const DailyLogbook = lazy(() => import('./components/DailyLogbook').then(module => ({ default: module.DailyLogbook })));
@@ -70,7 +68,17 @@ const SectionLoading = () => (
   </div>
 );
 
-export type MainSectionType = 'home' | '1am' | '2am' | '3am' | '4am' | 'logbook' | 'settings' | 'database';
+export type MainSectionType = 'home' | '1am' | '2am' | '3am' | '4am' | 'logbook' | 'settings' | 'database' | 'assessment' | 'assistant';
+
+interface AssistantLaunchContext {
+  prompt?: string;
+  level?: string;
+  maqta?: string;
+  mawrid?: string;
+  label?: string;
+  error?: string;
+  successRate?: string | number;
+}
 
 export const App: React.FC = () => {
   // 0. Primary Navigation State: 'home' (Home page of levels) | '1am' | '2am' | '3am' | '4am' | 'logbook' | 'settings'
@@ -81,7 +89,10 @@ export const App: React.FC = () => {
 
   // Drawers and Modals
   const [isNavDrawerOpen, setIsNavDrawerOpen] = useState<boolean>(false);
-  const [activeTool, setActiveTool] = useState<'assistant' | 'correction' | 'agent' | 'grading' | null>(null);
+  const [assessmentLesson, setAssessmentLesson] = useState<LessonMemo | null>(null);
+  const [assessmentAdvanced, setAssessmentAdvanced] = useState(false);
+  const [assistantContext, setAssistantContext] = useState<AssistantLaunchContext | null>(null);
+  const [assistantContextKey, setAssistantContextKey] = useState('');
   const [infoModalTab, setInfoModalTab] = useState<'about' | 'contact' | 'guide' | null>(null);
   const [logbookInitialTimetable, setLogbookInitialTimetable] = useState<boolean>(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState<boolean>(false);
@@ -274,6 +285,13 @@ export const App: React.FC = () => {
     setTimeout(() => {
       setToastMessage(null);
     }, 3000);
+  };
+
+  // المساعد الذكي قسم مستقل؛ قد يُفتح بسياق قادم من التقويم (مورد/خطأ/نتيجة).
+  const openAssistant = (context?: AssistantLaunchContext) => {
+    setAssistantContext(context || null);
+    setAssistantContextKey(context ? `${Date.now()}-${context.prompt?.slice(0, 24) || ''}` : '');
+    setActiveSection('assistant');
   };
 
   // 8. طباعة مباشرة عبر المتصفح
@@ -606,6 +624,16 @@ export const App: React.FC = () => {
                     <Database className="w-4 h-4 text-emerald-700 shrink-0" />
                     <span className="truncate">الموارد التعليمية</span>
                   </div>
+                ) : activeSection === 'assessment' ? (
+                  <div className="flex items-center gap-2 bg-[#eef5f2] px-2.5 sm:px-3 py-1.5 rounded-xl border border-[#cfe3dc] text-[#0a5f51] font-extrabold text-xs sm:text-[13px] whitespace-nowrap truncate">
+                    <BookOpenCheck className="w-4 h-4 text-emerald-700 shrink-0" />
+                    <span className="truncate">التقويم</span>
+                  </div>
+                ) : activeSection === 'assistant' ? (
+                  <div className="flex items-center gap-2 bg-[#eef5f2] px-2.5 sm:px-3 py-1.5 rounded-xl border border-[#cfe3dc] text-[#0a5f51] font-extrabold text-xs sm:text-[13px] whitespace-nowrap truncate">
+                    <Microscope className="w-4 h-4 text-emerald-700 shrink-0" />
+                    <span className="truncate">المساعد الذكي</span>
+                  </div>
                 ) : (
                   <div className="flex items-center gap-2 bg-white px-2.5 sm:px-3 py-1.5 rounded-xl border border-[#e2e8e5] text-[#0b1f1c] font-extrabold text-xs sm:text-[13px] whitespace-nowrap truncate">
                     <Settings className="w-4 h-4 text-slate-700 shrink-0" />
@@ -651,7 +679,7 @@ export const App: React.FC = () => {
               </button>
               <button
                 type="button"
-                onClick={() => setActiveTool('assistant')}
+                onClick={() => openAssistant()}
                 className="rounded-full px-3 py-1.5 text-[#5c6f6a] transition-colors whitespace-nowrap shrink-0 cursor-pointer hover:bg-[#eef5f2] hover:text-[#0a5f51]"
               >
                 المساعد الذكي
@@ -824,7 +852,8 @@ export const App: React.FC = () => {
             setActiveSection('logbook');
           }}
           onOpenDatabase={() => setActiveSection('database')}
-          onOpenTool={(tool) => setActiveTool(tool)}
+          onOpenAssessment={() => { setAssessmentLesson(null); setAssessmentAdvanced(false); setActiveSection('assessment'); }}
+          onOpenAssistant={() => openAssistant()}
           onOpenInfoModal={(tab) => setInfoModalTab(tab)}
           config={config}
           curriculumLessons={curriculumLessons}
@@ -953,7 +982,7 @@ export const App: React.FC = () => {
               lesson={currentLesson}
               config={config}
               activeActivities={activeActivities}
-              onOpenAssessment={() => setActiveTool('correction')}
+              onOpenAssessment={() => { setAssessmentLesson(currentLesson); setAssessmentAdvanced(false); setActiveSection('assessment'); }}
               onToggleActivity={handleToggleActivity}
               onFormatChange={(fmt) => {
                 setConfig((prev) => ({ ...prev, memoFormat: fmt }));
@@ -1138,45 +1167,51 @@ export const App: React.FC = () => {
         </Suspense>
       )}
 
-      <Suspense fallback={<SectionLoading />}>
-        {activeTool === 'assistant' && <AIAssistantChat
-          isOpen onClose={() => setActiveTool(null)}
-          selectedLevel={isYearSection ? selectedLevel : undefined}
-          currentLesson={isYearSection ? currentLesson : null}
-          curriculumLessons={curriculumLessons}
-          onInsertMemoContent={(lesson, field, text) => {
-            const index = curriculumLessons.indexOf(lesson);
-            if (index < 0) throw new Error('المذكرة لم تعد متاحة؛ أعد اختيارها قبل الإدراج.');
-            const next = curriculumLessons.map((item, i) => i === index ? appendAssistantMemoContent(item, field, text) : item);
-            saveCurriculumDatabase(next);
-            setCurriculumLessons(next);
-            window.dispatchEvent(new CustomEvent('curriculum-db-updated'));
-            showToast('تمت إضافة المحتوى إلى المذكرة دون حذف محتواها السابق');
-          }}
-        />}
-        {activeTool === 'correction' && <AssessmentWorkspace
-          owner={user?.uid} authLoading={authLoading}
-          onClose={() => setActiveTool(null)}
-          currentLesson={isYearSection ? currentLesson : null}
-          curriculumLessons={curriculumLessons} config={config}
+      {activeSection === 'assessment' && !assessmentAdvanced && (
+        <Suspense fallback={<SectionLoading />}><AssessmentWorkspace owner={user?.uid} authLoading={authLoading}
+          currentLesson={assessmentLesson} curriculumLessons={curriculumLessons} config={config}
+          onClose={() => setActiveSection(assessmentLesson?.level || 'home')}
+          onOpenAdvanced={(lesson) => { setAssessmentLesson(lesson); setAssessmentAdvanced(true); }}
           onEmbed={(record) => {
             const next = curriculumLessons.map(lesson => memoIdentity(lesson) === record.memoId ? embedAssessmentInLesson(lesson, record) : lesson);
-            saveCurriculumDatabase(next);
-            setCurriculumLessons(next);
-          }}
-        />}
-        {activeTool === 'agent' && <DocumentAgentDrawer
-          isOpen onClose={() => setActiveTool(null)}
-          selectedLevel={isYearSection ? selectedLevel : undefined}
-          showToast={showToast}
-        />}
-        {activeTool === 'grading' && <TeacherAssistantDrawer
-          isOpen onClose={() => setActiveTool(null)}
-          config={config}
-          selectedLevel={isYearSection ? selectedLevel : undefined}
-          showToast={showToast}
-        />}
-      </Suspense>
+            saveCurriculumDatabase(next); setCurriculumLessons(next);
+          }} /></Suspense>
+      )}
+      {activeSection === 'assessment' && assessmentAdvanced && (
+        <Suspense fallback={<SectionLoading />}>
+          <AssessmentHub
+            currentLesson={assessmentLesson} assessmentOwner={user?.uid}
+            onOpenLocalAssessment={() => setAssessmentAdvanced(false)}
+            config={config}
+            curriculumLessons={curriculumLessons}
+            initialLevel={selectedLevel}
+            onOpenAssistant={(context) => openAssistant({
+              prompt: context.prompt,
+              level: context.level || selectedLevel,
+              maqta: context.maqta,
+              mawrid: context.mawrid,
+              error: context.error,
+              successRate: context.successRate,
+              label: [context.level, context.maqta, context.mawrid].filter(Boolean).join(' · ') || 'تحليل التقويم',
+            })}
+            showToast={showToast}
+          />
+        </Suspense>
+      )}
+
+      {activeSection === 'assistant' && (
+        <Suspense fallback={<SectionLoading />}>
+          <AIAssistantChat
+            isOpen
+            mode="section"
+            selectedLevel={assistantContext?.level || selectedLevel}
+            currentLesson={isYearSection ? currentLesson : null}
+            curriculumLessons={curriculumLessons}
+            context={assistantContext}
+            contextKey={assistantContextKey}
+          />
+        </Suspense>
+      )}
 
       {/* Global Navigation Drawer */}
       <PlatformNavigationDrawer
@@ -1185,6 +1220,7 @@ export const App: React.FC = () => {
         activeSection={activeSection}
         onNavigate={(sec) => {
           setLogbookInitialTimetable(false);
+          if (sec === 'assessment') { setAssessmentLesson(isYearSection ? currentLesson : null); setAssessmentAdvanced(false); }
           setActiveSection(sec as MainSectionType);
           setYearSubTab('memos');
         }}
@@ -1193,7 +1229,6 @@ export const App: React.FC = () => {
           setActiveSection('logbook');
         }}
         onOpenInfoModal={(tab) => setInfoModalTab(tab)}
-        onOpenTool={(tool) => setActiveTool(tool)}
         config={config}
       />
 

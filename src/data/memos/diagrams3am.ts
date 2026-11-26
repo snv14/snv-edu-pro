@@ -1,5 +1,5 @@
 // Algerian Curriculum 3AM Pedagogical Diagrams (SVG Visual Schematics)
-// Based on official Middle School Natural Sciences - Inspector/Teacher Hamza Moussa
+// Based on the official Middle School Natural Sciences curriculum.
 
 export const DIAGRAMS_3AM = {
   // 1. Seismic Waves & Hypocenter Diagram (المذكرة 3)

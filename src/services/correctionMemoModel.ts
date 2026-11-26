@@ -547,9 +547,9 @@ export function normalizeCorrectionMemo(raw: unknown): CorrectionMemoData {
           ? (exercise as any).questions.slice(0, 40).map((question: any, qIndex: number) => ({
               id: clampString(question?.id, 80) || uid('q'),
               number: clampString(question?.number, 20) || String(qIndex + 1),
-              text: clampString(question?.text, 2000),
+              text: clampString(question?.text, 12000),
               points: clampString(question?.points, 20),
-              expected: clampString(question?.expected),
+              expected: clampString(question?.expected, 16000),
               source: normalizeSource(question?.source),
               needsReview: Boolean(question?.needsReview),
             }))

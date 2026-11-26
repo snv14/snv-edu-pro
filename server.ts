@@ -56,7 +56,7 @@ async function startServer() {
   // Limit expensive AI calls before parsing request bodies.
   const configuredLimit = Number(process.env.AI_RATE_LIMIT_PER_MINUTE);
   const maxRequests = Number.isInteger(configuredLimit) && configuredLimit > 0 ? configuredLimit : 20;
-  app.use(['/api/gemini', '/api/correction'], createRateLimiter({ windowMs: 60_000, max: maxRequests }));
+  app.use(['/api/gemini', '/api/correction', '/api/document', '/api/agent'], createRateLimiter({ windowMs: 60_000, max: maxRequests }));
 
   // Mount backend API router
   app.use(apiApp);

@@ -4,6 +4,11 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import {
+  proposeNextExercise,
+  generateExamAnswers,
+} from "../src/services/assessmentLocal";
+import { createAssessmentExam } from "../src/services/assessmentModel";
 import { AssessmentStore } from "../src/assessment/assessmentStore";
 import { AssessmentEngine } from "../src/assessment/AssessmentEngine";
 import { AssessmentRulesEngine } from "../src/assessment/AssessmentRulesEngine";
@@ -407,6 +412,8 @@ test("assessment generation/import dependency boundary has no external provider 
       .filter((f) => /\.tsx?$/.test(f))
       .map((f) => `src/assessment/${f}`),
     "src/services/correctionMemoLocalAnswers.ts",
+    "src/services/assessmentLocal.ts",
+    "src/components/AssessmentHub.tsx",
     "src/services/correctionMemoImport.ts",
     "src/components/CorrectionMemoDrawer.tsx",
   ];
@@ -446,6 +453,44 @@ test("cloud cache demand and checkpoints are local, durable and per-used-level o
     )?.documentId,
     "last-row",
   );
+});
+
+test("existing assessment hub proposals and corrections use the local bank, reserving only accepted questions", async () => {
+  const s = store(),
+    exam = createAssessmentExam({ examType: "اختبار", level: lesson.level });
+  const original = globalThis.fetch;
+  globalThis.fetch = (async () => {
+    throw new Error("EXTERNAL REQUEST FORBIDDEN");
+  }) as typeof fetch;
+  try {
+    const proposal = await proposeNextExercise(exam, lessons, lesson, s);
+    assert.ok(proposal.proposal?.questions.length);
+    assert.equal(proposal.proposal?.source, "platform");
+    assert.equal((await s.history(data.lessonId)).length, 0);
+    await s.save(proposal.proposal!.bankRecord);
+    const next = await proposeNextExercise(exam, lessons, lesson, s);
+    const old = new Set(proposal.proposal!.bankRecord.usedItemIds);
+    assert.ok(
+      !next.proposal ||
+        next.proposal.bankRecord.usedItemIds.every((id) => !old.has(id)),
+    );
+    const question = proposal.proposal!.questions.find((q) =>
+      q.expected?.trim(),
+    );
+    if (question) {
+      exam.memo.exercises[0].questions[0].text = question.text;
+      const answers = await generateExamAnswers(
+        exam,
+        lessons,
+        lesson,
+        undefined,
+        s,
+      );
+      assert.ok(answers?.applied);
+    }
+  } finally {
+    globalThis.fetch = original;
+  }
 });
 
 test("Firestore rules enforce owner isolation and all five assessment collections with strict fields", () => {

@@ -31,10 +31,10 @@ export const ARCHIVE_1AM_SOURCE_META = {
   sourceFile: 'مذكرات السنة الأولى متوسط كاملة.pdf',
   sourcePdfUrl: ARCHIVE_1AM_SOURCE_PDF_URL,
   totalPages: 98,
-  author: 'الأستاذ موسى حمزة',
-  school: 'متوسطة الشهيد بلمهدي الجودي، مزلوق - سطيف',
-  location: 'مزلوق - سطيف، الجزائر',
-  email: 'hamzamoussa748@gmail.com',
+  author: '',
+  school: '',
+  location: '',
+  email: '',
 };
 
 export const ARCHIVE_1AM_LESSONS: LessonMemo[] = [
