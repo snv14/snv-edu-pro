@@ -54,3 +54,20 @@ test('the knowledge base panel shows the four source families, their sizes and t
   // يجب أن يعرض عدداً حقيقياً من المقاطع المفهرسة لا صفراً.
   assert.doesNotMatch(markup, /إجمالي المقاطع المفهرسة: <strong class="text-slate-800">0</);
 });
+
+test('chat uses only the shared modern avatar and keeps legacy sidebar tools in one collapsible panel', () => {
+  const markup = renderToStaticMarkup(React.createElement(AIAssistantDrawer, {
+    isOpen: true, mode: 'section', selectedLevel: '4am', currentLesson: null, curriculumLessons: lessons,
+  }));
+  assert.doesNotMatch(markup, /<aside|lucide-bot/);
+  assert.match(markup, /assistant-avatar--large/);
+  assert.match(markup, /assistant-avatar--medium/);
+  assert.equal((markup.match(/id="assistant-tools-panel"/g) || []).length, 1);
+  assert.match(markup, /aria-controls="assistant-tools-panel"/);
+  assert.match(markup, /المحادثات السابقة/);
+  assert.match(markup, /مساحات المعرفة/);
+  assert.match(markup, /إنشاء مساحة معرفة/);
+  assert.match(markup, /تصفح قاعدة المعرفة/);
+  assert.match(markup, /إجابات من المصادر فقط/);
+  assert.match(markup, /type="file"/);
+});

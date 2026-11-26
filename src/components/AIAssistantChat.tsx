@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Bot, Check, Clipboard, FolderOpen, History, Layers, Loader2,
+  Check, Clipboard, FolderOpen, History, Layers, Loader2,
   MessageSquarePlus, Paperclip, Plus, Send, Sparkles, Trash2, User, X,
 } from 'lucide-react';
 import { LessonMemo } from '../types';
@@ -12,6 +12,7 @@ import type { ConnectorId, ContextNode } from '../services/assistantTypes';
 import {
   createKnowledgeSpace, loadSpaces, saveSpaces, spaceSizeLabel, type KnowledgeSpace,
 } from '../services/knowledgeSpaces';
+import { AssistantAvatar } from './AssistantAvatar';
 import { KnowledgeSpacePanel } from './KnowledgeSpacePanel';
 import { clearConversation, conversationContext, loadConversation, saveConversation } from '../services/conversationHistory';
 import { AssistantThread, createThread, loadThreads, saveThreads, threadTitleFrom } from '../services/assistantThreads';
@@ -594,157 +595,18 @@ export const AIAssistantDrawer: React.FC<{
     <div
       id="ai-assistant-chat"
       className={mode === 'section'
-        ? 'flex h-[calc(100dvh-7.5rem)] min-h-[560px] w-full flex-1 bg-[#eef3f1]'
-        : 'fixed inset-0 z-50 bg-[#eef3f1] flex'}
+        ? 'flex h-[calc(100dvh-4.5rem)] min-h-[560px] w-full shrink-0 bg-[#f2f3fc]'
+        : 'fixed inset-0 z-50 bg-[#f2f3fc] flex'}
       dir="rtl"
       aria-label="محادثة المساعد التربوي"
     >
-      {/* شريط الأدوات الجانبي (سطح المكتب) */}
-      <aside className="hidden lg:flex w-72 shrink-0 flex-col border-l border-slate-200 bg-white">
-        <div className="px-3 py-3 border-b border-slate-100">
-          <div className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-xl bg-teal-700 text-white flex items-center justify-center"><Bot className="w-5 h-5" /></div>
-            <div className="min-w-0">
-              <p className="text-[13px] font-black text-slate-900">SNV Smart Assistant</p>
-              <p className="text-[10px] text-slate-500 truncate">محادثة حرة · كل المستويات</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="p-3 space-y-2">
-          <button
-            type="button"
-            onClick={resetConversation}
-            className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-teal-700 px-3 py-2 text-[12px] font-black text-white hover:bg-teal-800 transition"
-          >
-            <MessageSquarePlus className="w-4 h-4" /> محادثة جديدة
-          </button>
-        </div>
-
-        <div className="px-3 pb-2">
-          <div className="flex items-center justify-between px-1 pb-1">
-            <p className="inline-flex items-center gap-1 text-[10px] font-black text-slate-400">
-              <FolderOpen className="w-3 h-3" /> مساحات المعرفة
-            </p>
-            <button
-              type="button"
-              onClick={createSpace}
-              aria-label="إنشاء مساحة معرفة"
-              title="مساحة معرفة جديدة"
-              className="rounded-lg border border-slate-200 p-1 text-slate-600 hover:bg-teal-50 hover:text-teal-800"
-            >
-              <Plus className="w-3.5 h-3.5" />
-            </button>
-          </div>
-          <div className="space-y-0.5">
-            {spaces.slice(0, 5).map(space => (
-              <button
-                key={space.id}
-                type="button"
-                onClick={() => {
-                  setActiveSpaceId(space.id);
-                  setShowSpacePanel(false);
-                  setShowKnowledge(false);
-                }}
-                className={`w-full rounded-xl border px-2 py-1.5 text-right transition ${space.id === activeSpaceId ? 'border-teal-200 bg-teal-50' : 'border-transparent hover:bg-slate-50'}`}
-              >
-                <span className={`block truncate text-[11px] font-bold ${space.id === activeSpaceId ? 'text-teal-900' : 'text-slate-700'}`}>{space.title}</span>
-                <span className="block text-[9px] text-slate-400">{spaceSizeLabel(space)}</span>
-              </button>
-            ))}
-            {!spaces.length && (
-              <p className="rounded-lg border border-dashed border-slate-200 px-2 py-2 text-[9.5px] leading-relaxed text-slate-500">
-                أنشئ مساحة وأضف ملفاتك (PDF/Word/صور/روابط) لتسأل عنها.
-              </p>
-            )}
-          </div>
-          {activeSpace && (
-            <button
-              type="button"
-              onClick={() => { setShowSpacePanel(true); setShowKnowledge(false); }}
-              className="mt-1 w-full inline-flex items-center justify-center gap-1 rounded-lg border border-slate-200 px-2 py-1.5 text-[10px] font-black text-slate-700 hover:bg-slate-50"
-            >
-              <FolderOpen className="w-3.5 h-3.5" /> إدارة «{activeSpace.title}»
-            </button>
-          )}
-          {spaceNotice && <p className="mt-1 px-1 text-[9.5px] font-bold text-amber-700">{spaceNotice}</p>}
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-2 py-2 space-y-3">
-          <div>
-            <p className="px-2 pb-1 text-[10px] font-black text-slate-400 inline-flex items-center gap-1">
-              <History className="w-3 h-3" /> المحادثات السابقة
-            </p>
-            <div className="max-h-56 space-y-0.5 overflow-y-auto">
-              {threads.map(thread => (
-                <div
-                  key={thread.id}
-                  className={`group flex items-center gap-0.5 rounded-xl border px-2 py-1.5 transition ${thread.id === activeThreadId ? 'border-teal-200 bg-teal-50' : 'border-transparent hover:bg-slate-50'}`}
-                >
-                  <button type="button" onClick={() => selectThread(thread.id)} className="min-w-0 flex-1 text-right">
-                    <span className={`block truncate text-[11px] font-bold ${thread.id === activeThreadId ? 'text-teal-900' : 'text-slate-700'}`}>{thread.title}</span>
-                    <span className="block text-[9px] text-slate-400 tabular-nums">
-                      {thread.messages.length} رسالة · {new Date(thread.updatedAt).toLocaleDateString('ar-DZ', { day: '2-digit', month: 'short' })}
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => deleteThread(thread.id)}
-                    aria-label={`حذف ${thread.title}`}
-                    className="rounded p-0.5 text-slate-300 opacity-0 transition group-hover:opacity-100 hover:text-red-600"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-          {recentSources.length > 0 && (
-            <div>
-              <p className="px-2 pb-1 text-[10px] font-black text-slate-400">الملفات الأخيرة</p>
-              <div className="space-y-0.5">
-                {recentSources.map(({ space, source }) => (
-                  <button
-                    key={source.id}
-                    type="button"
-                    onClick={() => { setActiveSpaceId(space.id); setShowSpacePanel(true); setShowKnowledge(false); }}
-                    className="w-full truncate rounded-lg px-2 py-1 text-right text-[10px] font-bold text-slate-600 hover:bg-slate-50"
-                    title={`${space.title} — ${source.name}`}
-                  >
-                    📄 {source.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="p-3 border-t border-slate-100 space-y-2">
-          <button
-            type="button"
-            onClick={() => { setShowKnowledge(true); setShowSpacePanel(false); }}
-            className="w-full rounded-lg px-2 py-1 text-right text-[10px] font-bold text-slate-500 hover:bg-slate-50 hover:text-teal-800"
-          >
-            تصفح قاعدة المعرفة
-          </button>
-          <button
-            type="button"
-            onClick={() => setKnowledgeSettings(saveKnowledgeSettings({ localFirst: !knowledgeSettings.localFirst }))}
-            aria-pressed={knowledgeSettings.localFirst}
-            className={`w-full inline-flex items-center justify-between gap-2 rounded-lg px-2 py-1 text-[10px] font-bold transition ${knowledgeSettings.localFirst ? 'text-teal-900' : 'text-slate-400 hover:text-slate-600'}`}
-          >
-            <span>إجابات من المصادر فقط</span>
-            <span className={`h-1.5 w-1.5 rounded-full ${knowledgeSettings.localFirst ? 'bg-teal-600' : 'bg-slate-300'}`} />
-          </button>
-        </div>
-      </aside>
-
       {/* عمود المحادثة */}
-      <section className="flex-1 min-w-0 flex flex-col h-full bg-white lg:bg-transparent" aria-label="نافذة الدردشة">
+      <section className="flex-1 min-w-0 min-h-0 flex flex-col bg-white lg:bg-transparent" aria-label="نافذة الدردشة">
         <header className="shrink-0 px-2.5 sm:px-5 py-2 bg-white border-b border-slate-200 flex items-center gap-2">
           <button type="button" onClick={() => onClose?.()} aria-label="إغلاق المحادثة" className={`${mode === 'section' ? 'hidden' : ''} p-2 rounded-lg text-slate-600 hover:bg-slate-100 transition shrink-0`}>
             <X className="w-4 h-4" />
           </button>
+          <AssistantAvatar size="medium" />
           <div className="min-w-0 flex-1 text-center sm:text-right">
             <h2 className="font-black text-[13px] leading-tight text-slate-900 truncate">{mode === 'section' ? 'SNV Smart Assistant' : 'المحادثة التربوية'}</h2>
             <p className="text-[10px] text-slate-500 truncate">
@@ -752,11 +614,16 @@ export const AIAssistantDrawer: React.FC<{
             </p>
           </div>
           <div className="flex items-center gap-1 shrink-0">
-            <button type="button" onClick={() => setShowTools(open => !open)}
+            <button type="button" onClick={() => {
+                setShowTools(open => showKnowledge || showSpacePanel ? true : !open);
+                setShowKnowledge(false);
+                setShowSpacePanel(false);
+              }}
               title="أدوات المحادثة والمهام السريعة"
               aria-label="أدوات المحادثة"
-              aria-expanded={showTools}
-              className="lg:hidden p-2 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition"
+              aria-expanded={showTools && !showKnowledge && !showSpacePanel}
+              aria-controls="assistant-tools-panel"
+              className="p-2 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition"
             >
               <Layers className="w-4 h-4" />
             </button>
@@ -804,43 +671,128 @@ export const AIAssistantDrawer: React.FC<{
           </div>
         )}
 
-        {showTools && !showKnowledge && !showSpacePanel && (
-          <div className="lg:hidden shrink-0 border-b border-slate-200 bg-white px-3 py-2 space-y-2 max-h-[45vh] overflow-y-auto">
-            <div className="rounded-xl bg-slate-50 border border-slate-200 px-3 py-2">
-              <p className="text-[10px] font-black text-slate-400">المحادثات السابقة</p>
-              <select
-                value={activeThreadId}
-                onChange={event => selectThread(event.target.value)}
-                aria-label="اختيار محادثة سابقة"
-                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-bold text-slate-800"
-              >
-                {threads.map(thread => <option key={thread.id} value={thread.id}>{thread.title}</option>)}
-              </select>
-            </div>
-            <div className="rounded-xl bg-slate-50 border border-slate-200 px-3 py-2">
-              <p className="text-[10px] font-black text-slate-400">مساحات المعرفة</p>
-              <select
-                value={activeSpaceId}
-                onChange={event => { setActiveSpaceId(event.target.value); setShowSpacePanel(false); }}
-                aria-label="اختيار مساحة معرفة"
-                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-bold text-slate-800"
-              >
-                <option value="">بدون مساحة</option>
-                {spaces.map(space => <option key={space.id} value={space.id}>{space.title}</option>)}
-              </select>
-              <button type="button" onClick={createSpace} className="mt-1 w-full rounded-lg border border-teal-200 bg-teal-50 px-2 py-1.5 text-[10px] font-black text-teal-900">
-                + مساحة معرفة جديدة
-              </button>
-            </div>
+        <div id="assistant-tools-panel" role="region" aria-label="أدوات المحادثة المحفوظة"
+          hidden={!showTools || showKnowledge || showSpacePanel}
+          className={`shrink-0 border-b border-slate-200 bg-white px-3 py-2 max-h-[45vh] overflow-y-auto grid-cols-1 md:grid-cols-3 gap-3 ${showTools && !showKnowledge && !showSpacePanel ? 'grid' : 'hidden'}`}>
+        <div className="px-3 pb-2">
+          <div className="flex items-center justify-between px-1 pb-1">
+            <p className="inline-flex items-center gap-1 text-[10px] font-black text-slate-400">
+              <FolderOpen className="w-3 h-3" /> مساحات المعرفة
+            </p>
             <button
               type="button"
-              onClick={() => { setShowKnowledge(true); setShowTools(false); }}
-              className="w-full rounded-xl border border-slate-200 px-2.5 py-2 text-[11px] font-black text-slate-700"
+              onClick={createSpace}
+              aria-label="إنشاء مساحة معرفة"
+              title="مساحة معرفة جديدة"
+              className="rounded-lg border border-slate-200 p-1 text-slate-600 hover:bg-teal-50 hover:text-teal-800"
             >
-              تصفح قاعدة المعرفة
+              <Plus className="w-3.5 h-3.5" />
             </button>
           </div>
-        )}
+          <div className="space-y-0.5">
+            {spaces.map(space => (
+              <button
+                key={space.id}
+                type="button"
+                onClick={() => {
+                  setActiveSpaceId(space.id);
+                  setShowSpacePanel(false);
+                  setShowKnowledge(false);
+                }}
+                className={`w-full rounded-xl border px-2 py-1.5 text-right transition ${space.id === activeSpaceId ? 'border-teal-200 bg-teal-50' : 'border-transparent hover:bg-slate-50'}`}
+              >
+                <span className={`block truncate text-[11px] font-bold ${space.id === activeSpaceId ? 'text-teal-900' : 'text-slate-700'}`}>{space.title}</span>
+                <span className="block text-[9px] text-slate-400">{spaceSizeLabel(space)}</span>
+              </button>
+            ))}
+            {!spaces.length && (
+              <p className="rounded-lg border border-dashed border-slate-200 px-2 py-2 text-[9.5px] leading-relaxed text-slate-500">
+                أنشئ مساحة وأضف ملفاتك (PDF/Word/صور/روابط) لتسأل عنها.
+              </p>
+            )}
+          </div>
+          <button type="button" onClick={() => { setActiveSpaceId(''); setShowSpacePanel(false); }}
+            className="mt-2 rounded-lg border border-slate-200 px-2 py-1 text-[10px] font-bold text-slate-600">بدون مساحة معرفة</button>
+          {activeSpace && (
+            <button
+              type="button"
+              onClick={() => { setShowSpacePanel(true); setShowKnowledge(false); }}
+              className="mt-1 w-full inline-flex items-center justify-center gap-1 rounded-lg border border-slate-200 px-2 py-1.5 text-[10px] font-black text-slate-700 hover:bg-slate-50"
+            >
+              <FolderOpen className="w-3.5 h-3.5" /> إدارة «{activeSpace.title}»
+            </button>
+          )}
+          {spaceNotice && <p className="mt-1 px-1 text-[9.5px] font-bold text-amber-700">{spaceNotice}</p>}
+        </div>
+
+        <div className="min-w-0 px-2 py-2 space-y-3">
+          <div>
+            <p className="px-2 pb-1 text-[10px] font-black text-slate-400 inline-flex items-center gap-1">
+              <History className="w-3 h-3" /> المحادثات السابقة
+            </p>
+            <div className="max-h-56 space-y-0.5 overflow-y-auto">
+              {threads.map(thread => (
+                <div
+                  key={thread.id}
+                  className={`group flex items-center gap-0.5 rounded-xl border px-2 py-1.5 transition ${thread.id === activeThreadId ? 'border-teal-200 bg-teal-50' : 'border-transparent hover:bg-slate-50'}`}
+                >
+                  <button type="button" onClick={() => selectThread(thread.id)} className="min-w-0 flex-1 text-right">
+                    <span className={`block truncate text-[11px] font-bold ${thread.id === activeThreadId ? 'text-teal-900' : 'text-slate-700'}`}>{thread.title}</span>
+                    <span className="block text-[9px] text-slate-400 tabular-nums">
+                      {thread.messages.length} رسالة · {new Date(thread.updatedAt).toLocaleDateString('ar-DZ', { day: '2-digit', month: 'short' })}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deleteThread(thread.id)}
+                    aria-label={`حذف ${thread.title}`}
+                    className="rounded p-1 text-slate-500 transition hover:text-red-600 focus-visible:outline-2 focus-visible:outline-blue-500"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+          {recentSources.length > 0 && (
+            <div>
+              <p className="px-2 pb-1 text-[10px] font-black text-slate-400">الملفات الأخيرة</p>
+              <div className="space-y-0.5">
+                {recentSources.map(({ space, source }) => (
+                  <button
+                    key={source.id}
+                    type="button"
+                    onClick={() => { setActiveSpaceId(space.id); setShowSpacePanel(true); setShowKnowledge(false); }}
+                    className="w-full truncate rounded-lg px-2 py-1 text-right text-[10px] font-bold text-slate-600 hover:bg-slate-50"
+                    title={`${space.title} — ${source.name}`}
+                  >
+                    📄 {source.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="p-3 border-t border-slate-100 space-y-2">
+          <button
+            type="button"
+            onClick={() => { setShowKnowledge(true); setShowSpacePanel(false); }}
+            className="w-full rounded-lg px-2 py-1 text-right text-[10px] font-bold text-slate-500 hover:bg-slate-50 hover:text-teal-800"
+          >
+            تصفح قاعدة المعرفة
+          </button>
+          <button
+            type="button"
+            onClick={() => setKnowledgeSettings(saveKnowledgeSettings({ localFirst: !knowledgeSettings.localFirst }))}
+            aria-pressed={knowledgeSettings.localFirst}
+            className={`w-full inline-flex items-center justify-between gap-2 rounded-lg px-2 py-1 text-[10px] font-bold transition ${knowledgeSettings.localFirst ? 'text-teal-900' : 'text-slate-400 hover:text-slate-600'}`}
+          >
+            <span>إجابات من المصادر فقط</span>
+            <span className={`h-1.5 w-1.5 rounded-full ${knowledgeSettings.localFirst ? 'bg-teal-600' : 'bg-slate-300'}`} />
+          </button>
+        </div>
+        </div>
 
         {showSpacePanel && activeSpace ? (
           <KnowledgeSpacePanel
@@ -871,9 +823,7 @@ export const AIAssistantDrawer: React.FC<{
             <div className="mx-auto w-full max-w-3xl px-3 sm:px-5 py-4 space-y-4">
               {!conversationStarted && (
                 <div className="flex flex-col items-center px-4 py-10 text-center">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-teal-700 text-white">
-                    <Bot className="h-6 w-6" />
-                  </div>
+                  <AssistantAvatar size="large" />
                   <h3 className="mt-3 text-[18px] font-black text-slate-900">كيف أساعدك اليوم؟</h3>
                   <p className="mt-1 max-w-md text-[12px] leading-relaxed text-slate-500">
                     اكتب سؤالك في الأسفل بحرية. أبحث تلقائيًا في جميع مستويات المنصة ومحتوياتها، ثم أجيبك مباشرة وأتابع الحوار معك.
@@ -896,9 +846,7 @@ export const AIAssistantDrawer: React.FC<{
 
               {entries.filter(entry => conversationStarted || entry.id !== 'greeting').map(entry => (
                 <article key={entry.id} className={`flex gap-2 ${entry.sender === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${entry.sender === 'user' ? 'bg-slate-800 text-white' : 'bg-teal-700 text-white'}`}>
-                    {entry.sender === 'user' ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
-                  </div>
+                  {entry.sender === 'user' ? <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-slate-800 text-white"><User className="w-4 h-4" /></div> : <AssistantAvatar size="small" />}
                   <div className={`min-w-0 max-w-[86%] ${entry.sender === 'user' ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
                     <div className={`w-full rounded-2xl px-3.5 py-2.5 text-[13px] shadow-2xs ${
                       entry.sender === 'user'

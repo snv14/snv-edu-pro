@@ -622,7 +622,7 @@
 }
 @media (min-width: 1200px) {
   .is-overview {
-    padding-inline-start: 330px;
+    padding-inline-start: 82px;
   }
   .is-overview .app-header > div {
     padding-inline: 26px;
@@ -630,15 +630,12 @@
   .is-overview .app-header nav[aria-label="التنقل السريع"] {
     display: none;
   }
-  .is-overview #btn-open-nav-drawer {
-    display: none;
-  }
   .overview-sidebar {
     position: fixed;
     z-index: 35;
     inset-block: 0;
     inset-inline-start: 0;
-    width: 330px;
+    width: 82px;
     display: flex;
     direction: rtl;
     background: #f5f6fd;
@@ -687,72 +684,6 @@
   }
   .overview-rail button:last-child {
     margin-top: auto;
-  }
-  .overview-sidebar__panel {
-    direction: rtl;
-    min-width: 0;
-    border: none;
-    border-radius: 19px;
-    background: #fff;
-    box-shadow: 0 3px 10px #15234408;
-    animation: none;
-  }
-  .overview-sidebar__panel > div:first-child {
-    background: #fff;
-    color: #152344;
-    padding: 18px 12px;
-    border-bottom: 1px solid #f0f1f7;
-    overflow: visible;
-  }
-  .overview-sidebar__panel > div:first-child > div[aria-hidden] {
-    display: none;
-  }
-  .overview-sidebar__panel > div:first-child h3 {
-    font-size: 12px;
-    line-height: 1.7;
-  }
-  .overview-sidebar__panel > div:first-child p {
-    color: #5e8a42;
-    font-size: 9px;
-    white-space: normal;
-    line-height: 1.7;
-  }
-  .overview-sidebar__panel > div:first-child .h-10 {
-    background: #eef1f9;
-    color: #496181;
-    border-radius: 50%;
-  }
-  .overview-sidebar__panel button[hidden] {
-    display: none;
-  }
-  .overview-sidebar__panel > .flex-1 {
-    padding: 12px 9px;
-  }
-  .overview-sidebar__panel .space-y-5 > :not(:last-child) {
-    margin-block-end: 14px;
-  }
-  .overview-sidebar__panel .group {
-    font-size: 11px;
-    padding: 10px 7px;
-    border-radius: 11px;
-  }
-  .overview-sidebar__panel .group svg {
-    flex-shrink: 0;
-  }
-  .overview-sidebar__panel .group > .shrink-0 {
-    display: none;
-  }
-  .overview-sidebar__panel .group:has(.lucide-house) {
-    background: #eafaeb;
-    border-color: #eafaeb;
-    color: #253e47;
-  }
-  .overview-sidebar__panel > div:last-child {
-    font-size: 9px;
-    line-height: 1.8;
-    padding: 12px 6px;
-    color: #8a94a9;
-    border-color: #f0f1f7;
   }
 }
 @media (min-width: 1200px) and (max-width: 1399px) {
@@ -939,4 +870,32 @@
     box-shadow: none;
     break-inside: avoid;
   }
+}
+
+/* A single, shared modern avatar replaces the legacy bot icons in chat. */
+.assistant-avatar {
+  --assistant-avatar-scale: 0.3;
+  position: relative;
+  width: 40px;
+  height: 46px;
+  flex-shrink: 0;
+}
+.assistant-avatar--small {
+  --assistant-avatar-scale: 0.24;
+  width: 32px;
+  height: 36px;
+}
+.assistant-avatar--large {
+  --assistant-avatar-scale: 0.72;
+  width: 100px;
+  height: 110px;
+}
+.assistant-avatar .overview-robot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  bottom: auto;
+  margin: 0;
+  transform: translate(-50%, -45%) scale(var(--assistant-avatar-scale));
+  transform-origin: center;
 }

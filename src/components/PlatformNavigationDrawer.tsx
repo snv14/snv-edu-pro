@@ -146,8 +146,8 @@ export const PlatformNavigationDrawer: React.FC<
           </button>
         </nav>
       )}
-      <div
-        className={`${sidebar ? "overview-sidebar__panel " : ""}flex h-full w-full max-w-[336px] flex-col border-l border-[#0b1f1c]/10 bg-[#f6f9f8] shadow-2xl animate-in slide-in-from-right-4 duration-200`}
+      {!sidebar && <div
+        className="flex h-full w-full max-w-[336px] flex-col border-l border-[#0b1f1c]/10 bg-[#f6f9f8] shadow-2xl animate-in slide-in-from-right-4 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* ترويسة اللوحة */}
@@ -393,7 +393,7 @@ export const PlatformNavigationDrawer: React.FC<
           تصميم وتطوير:{" "}
           <strong className="text-[#0b1f1c]">الأستاذ بغداد الطيب</strong>
         </div>
-      </div>
+      </div>}
     </div>
   );
 };

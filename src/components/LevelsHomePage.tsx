@@ -32,6 +32,7 @@ import heroScienceLabImg from "../assets/images/hero_science_lab.jpg";
 import heroMicroscopesLabImg from "../assets/images/hero_microscopes_lab.jpg";
 import heroPlantExperimentImg from "../assets/images/hero_plant_experiment.jpg";
 import dashboardBanner from "../assets/images/dashboard-science-banner.webp";
+import { AssistantAvatar } from './AssistantAvatar';
 import { homeDashboardStats } from "../services/homeDashboardStats";
 import { getDesignerPhoto, saveDesignerPhoto } from "../utils/designerPhoto";
 
@@ -435,20 +436,7 @@ export const LevelsHomePage: React.FC<LevelsHomePageProps> = ({
                 ابدأ المحادثة <ArrowLeft size={15} aria-hidden="true" />
               </button>
             </div>
-            <div className="overview-robot" aria-hidden="true">
-              <span className="overview-robot__antenna" />
-              <div className="overview-robot__head">
-                <div>
-                  <i />
-                  <i />
-                </div>
-              </div>
-              <div className="overview-robot__body">
-                <Sprout size={29} />
-              </div>
-              <span className="overview-robot__arm" />
-              <span className="overview-robot__spark">✦</span>
-            </div>
+            <AssistantAvatar size="hero" />
           </div>
           <div className="overview-panel overview-tools">
             <div className="overview-panel__heading">
