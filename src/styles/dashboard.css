@@ -622,7 +622,7 @@
 }
 @media (min-width: 1200px) {
   .is-overview {
-    padding-left: 330px;
+    padding-inline-start: 330px;
   }
   .is-overview .app-header > div {
     padding-inline: 26px;
@@ -636,12 +636,13 @@
   .overview-sidebar {
     position: fixed;
     z-index: 35;
-    inset: 0 auto 0 0;
+    inset-block: 0;
+    inset-inline-start: 0;
     width: 330px;
     display: flex;
-    direction: ltr;
+    direction: rtl;
     background: #f5f6fd;
-    padding: 14px 10px 14px 12px;
+    padding: 14px 12px 14px 10px;
     gap: 12px;
   }
   .overview-rail {
@@ -930,7 +931,7 @@
     display: none !important;
   }
   .is-overview {
-    padding-left: 0 !important;
+    padding-inline-start: 0 !important;
     background: white !important;
   }
   .overview-panel,
