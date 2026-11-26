@@ -5,6 +5,7 @@ import { AuthProvider } from './components/Auth.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import { installImageFallback } from './utils/imageFallback.ts';
 import './index.css';
+import './styles/dashboard.css';
 
 installImageFallback();
 

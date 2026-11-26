@@ -547,8 +547,23 @@ export const App: React.FC = () => {
     return items.filter((item) => !dismissedNotifications.includes(item.id));
   }, [config.teacherName, config.schoolName, config.teacherStamp, curriculumLessons.length, user, firebaseStatus.isValid, dismissedNotifications]);
 
+  // The desktop sidebar and mobile drawer share exactly the same routing.
+  const handlePlatformNavigate = (section: string) => {
+    setLogbookInitialTimetable(false);
+    if (section === 'assessment') {
+      setAssessmentLesson(isYearSection ? currentLesson : null);
+      setAssessmentAdvanced(false);
+    }
+    setActiveSection(section as MainSectionType);
+    setYearSubTab('memos');
+  };
+  const handlePlatformTimetable = () => {
+    setLogbookInitialTimetable(true);
+    setActiveSection('logbook');
+  };
+
   return (
-    <div className="min-h-screen flex flex-col font-sans app-shell overflow-x-clip" dir="rtl">
+    <div className={`min-h-screen flex flex-col font-sans app-shell overflow-x-clip ${activeSection === 'home' ? 'is-overview' : ''}`} dir="rtl">
       {/* Toast Notification */}
       {toastMessage && (
         <div
@@ -1213,21 +1228,25 @@ export const App: React.FC = () => {
         </Suspense>
       )}
 
+      {activeSection === 'home' && (
+        <PlatformNavigationDrawer
+          variant="sidebar"
+          isOpen
+          onClose={() => setIsNavDrawerOpen(false)}
+          activeSection={activeSection}
+          config={config}
+          onNavigate={handlePlatformNavigate}
+          onOpenTimetable={handlePlatformTimetable}
+          onOpenInfoModal={(tab) => setInfoModalTab(tab)}
+        />
+      )}
       {/* Global Navigation Drawer */}
       <PlatformNavigationDrawer
         isOpen={isNavDrawerOpen}
         onClose={() => setIsNavDrawerOpen(false)}
         activeSection={activeSection}
-        onNavigate={(sec) => {
-          setLogbookInitialTimetable(false);
-          if (sec === 'assessment') { setAssessmentLesson(isYearSection ? currentLesson : null); setAssessmentAdvanced(false); }
-          setActiveSection(sec as MainSectionType);
-          setYearSubTab('memos');
-        }}
-        onOpenTimetable={() => {
-          setLogbookInitialTimetable(true);
-          setActiveSection('logbook');
-        }}
+        onNavigate={handlePlatformNavigate}
+        onOpenTimetable={handlePlatformTimetable}
         onOpenInfoModal={(tab) => setInfoModalTab(tab)}
         config={config}
       />
