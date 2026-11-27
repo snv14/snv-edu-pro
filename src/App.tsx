@@ -51,7 +51,7 @@ const AssessmentWorkspace = lazy(() => import('./assessment/AssessmentWorkspace'
 const AssessmentHub = lazy(() => import('./components/AssessmentHub').then(module => ({ default: module.AssessmentHub })));
 
 const AnnualDistribution = lazy(() => import('./components/AnnualDistribution').then(module => ({ default: module.AnnualDistribution })));
-const LogbookStudio = lazy(() => import('./logbook/LogbookStudio').then(module => ({ default: module.LogbookStudio })));
+const DailyLogbook = lazy(() => import('./components/DailyLogbook').then(module => ({ default: module.DailyLogbook })));
 const AccountSettings = lazy(() => import('./components/AccountSettings').then(module => ({ default: module.AccountSettings })));
 const SourceMemo1AMViewer = lazy(() => import('./components/SourceMemo1AMViewer').then(module => ({ default: module.SourceMemo1AMViewer })));
 const YearPlansViewer = lazy(() => import('./components/YearPlansViewer').then(module => ({ default: module.YearPlansViewer })));
@@ -1147,12 +1147,17 @@ export const App: React.FC = () => {
 
       {activeSection === 'logbook' && (
         <Suspense fallback={<SectionLoading />}>
-          <LogbookStudio
-            teacherId={user?.uid || 'local-teacher'}
-            schoolYear={config.schoolYear || '2026-2027'}
-            teacherName={config.teacherName || 'الأستاذ بغداد الطيب'}
-            configLevel={config.level}
+          <DailyLogbook
+            selectedLevel={selectedLevel}
+            setSelectedLevel={(lvl) => {
+              if (lvl) {
+                setConfig((prev) => ({ ...prev, level: lvl }));
+              }
+            }}
+            config={config}
+            setConfig={setConfig}
             showToast={showToast}
+            initialOpenTimetable={logbookInitialTimetable}
           />
         </Suspense>
       )}
