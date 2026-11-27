@@ -85,8 +85,6 @@ interface LogbookStudioProps {
 }
 
 type SidebarSection =
-  | 'date'
-  | 'generate'
   | 'lessons'
   | 'content'
   | 'edit'
@@ -98,7 +96,7 @@ export function LogbookStudio({ teacherId, schoolYear, teacherName, configLevel,
   const store = useLogbookStore(teacherId, schoolYear);
   const level: LogbookLevel = (`${configLevel[0]}م` as LogbookLevel);
 
-  const [activeSection, setActiveSection] = useState<SidebarSection>('date');
+  const [activeSection, setActiveSection] = useState<SidebarSection>('lessons');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editing, setEditing] = useState<Lesson | null>(null);
   const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null);
@@ -243,8 +241,18 @@ export function LogbookStudio({ teacherId, schoolYear, teacherName, configLevel,
 
           {/* Navigation */}
           <nav className="flex-1 px-3 py-4 space-y-1">
-            <NavButton icon={<Calendar className="w-4 h-4" />} label="📅 التاريخ والفترة" active={activeSection === 'date'} onClick={() => { setActiveSection('date'); setMobileSidebarOpen(false); }} />
-            <NavButton icon={<Sparkles className="w-4 h-4" />} label="⚡ التوليد" active={activeSection === 'generate'} onClick={() => { setActiveSection('generate'); setMobileSidebarOpen(false); }} />
+            {/* 📅 التاريخ والفترة — معروض مباشرة داخل الشريط */}
+            <InlineSectionTitle icon={<Calendar className="w-4 h-4" />} title="📅 التاريخ والفترة" />
+            <DateInline
+              selectedDate={store.selectedDate}
+              setSelectedDate={store.setSelectedDate}
+              period={store.period}
+              setPeriod={store.setPeriod}
+            />
+
+            {/* ⚡ التوليد — معروض مباشرة داخل الشريط */}
+            <InlineSectionTitle icon={<Sparkles className="w-4 h-4" />} title="⚡ التوليد" />
+            <GenerateInline onGenerate={handleGenerate} period={store.period} />
 
             <div className="my-3 px-3 text-[10px] font-black uppercase tracking-wide text-slate-400">إدارة الحصص</div>
             <NavButton icon={<Clock className="w-4 h-4" />} label="🕐 حصص اليوم" active={activeSection === 'lessons'} onClick={() => { setActiveSection('lessons'); setMobileSidebarOpen(false); }} badge={store.visibleLessons.length || undefined} />
@@ -373,7 +381,7 @@ export function LogbookStudio({ teacherId, schoolYear, teacherName, configLevel,
       {/* ============ Panels overlay ============ */}
       <SectionPanel
         section={activeSection}
-        onClose={() => setActiveSection('date')}
+        onClose={() => setActiveSection('lessons')}
         store={store}
         level={level}
         selectedLesson={selectedLesson}
@@ -896,38 +904,6 @@ function SectionPanel(props: {
   onOpenPreview: () => void;
 }) {
   const { section, onClose, store, level, selectedLesson } = props;
-  if (section === 'date') {
-    return (
-      <DateSection
-        selectedDate={store.selectedDate}
-        setSelectedDate={store.setSelectedDate}
-        period={store.period}
-        setPeriod={store.setPeriod}
-      />
-    );
-  }
-  if (section === 'generate') {
-    return (
-      <FloatingPanel title="⚡ التوليد" onClose={onClose}>
-        <p className="text-[12px] text-slate-500 mb-4">يعتمد التوليد حصرياً على التاريخ المحدد. لا يُستخدم تاريخ تسجيل الدخول كمصدر.</p>
-        <div className="space-y-2">
-          {(['day', 'week', 'month'] as const).map((p) => (
-            <button
-              key={p}
-              onClick={() => props.onGenerate(p)}
-              className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-slate-200 hover:border-teal-400 hover:bg-teal-50/50 text-[13px] font-bold text-slate-700 cursor-pointer transition"
-            >
-              <span className="flex items-center gap-2"><Sparkles className="w-4 h-4 text-teal-600" /> توليد {PERIOD_LABELS[p]}</span>
-              <span className="text-[11px] text-slate-400">{p === 'day' ? 'اليوم' : p === 'week' ? 'من الأحد' : 'من اليوم 1'}</span>
-            </button>
-          ))}
-        </div>
-        <div className="mt-4 p-3 rounded-lg bg-teal-50 border border-teal-100 text-[11px] text-teal-700">
-          💡 التوليد يبدأ من الأسبوع / الشهر الذي يحتوي على التاريخ المحدد.
-        </div>
-      </FloatingPanel>
-    );
-  }
   if (section === 'lessons') {
     return (
       <FloatingPanel title="🕐 حصص اليوم" onClose={onClose}>
@@ -1055,20 +1031,27 @@ function FloatingPanel({ children, title, onClose }: { children: React.ReactNode
 }
 
 // ---------------------------------------------------------------------------
-// Date section (calendar)
+// Inline section title (للأقسام المعروض داخل الشريط)
 // ---------------------------------------------------------------------------
-function DateSection({ selectedDate, setSelectedDate, period, setPeriod }: { selectedDate: string; setSelectedDate: (d: string) => void; period: 'day' | 'week' | 'month'; setPeriod: (p: 'day' | 'week' | 'month') => void }) {
-  const [viewDate, setViewDate] = useState(selectedDate);
-  const cursor = useMemo(() => new Date(`${startOfMonth(viewDate)}T12:00:00`), [viewDate]);
+function InlineSectionTitle({ icon, title }: { icon: React.ReactNode; title: string }) {
+  return (
+    <div className="flex items-center gap-2 px-1 pt-2 pb-1.5">
+      <span className="text-teal-600">{icon}</span>
+      <h3 className="text-[13px] font-black text-slate-800">{title}</h3>
+    </div>
+  );
+}
 
-  const monthStart = startOfMonth(viewDate);
-  const monthEnd = addDays(monthStart, 31);
-  const year = cursor.getFullYear();
-  const month = cursor.getMonth();
+// ---------------------------------------------------------------------------
+// Date — معروض مباشرة داخل الشريط الجانبي
+// ---------------------------------------------------------------------------
+function DateInline({ selectedDate, setSelectedDate, period, setPeriod }: { selectedDate: string; setSelectedDate: (d: string) => void; period: 'day' | 'week' | 'month'; setPeriod: (p: 'day' | 'week' | 'month') => void }) {
+  const [viewDate, setViewDate] = useState(selectedDate);
+  const year = new Date(`${startOfMonth(viewDate)}T12:00:00`).getFullYear();
+  const month = new Date(`${startOfMonth(viewDate)}T12:00:00`).getMonth();
 
   const cells: (string | null)[] = [];
-  const first = new Date(year, month, 1);
-  const startOffset = first.getDay();
+  const startOffset = new Date(year, month, 1).getDay();
   for (let i = 0; i < startOffset; i++) cells.push(null);
   let d = 1;
   while (d <= new Date(year, month + 1, 0).getDate()) {
@@ -1077,62 +1060,95 @@ function DateSection({ selectedDate, setSelectedDate, period, setPeriod }: { sel
   }
 
   return (
-    <FloatingPanel title="📅 التاريخ والفترة" onClose={() => {}}>
+    <div className="px-1 space-y-2.5">
       {/* Period selector */}
-      <div className="grid grid-cols-3 gap-2 mb-4">
+      <div className="grid grid-cols-3 gap-1.5">
         {(['day', 'week', 'month'] as const).map((p) => (
           <button
             key={p}
             onClick={() => setPeriod(p)}
-            className={`px-2 py-2 rounded-xl text-[12px] font-bold transition ${period === p ? 'bg-teal-600 text-white' : 'bg-slate-100 text-slate-600'}`}
+            className={`px-1 py-1.5 rounded-lg text-[11px] font-bold transition ${period === p ? 'bg-teal-600 text-white shadow-sm shadow-teal-600/30' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
           >
-            {p === 'day' ? 'اليوم' : p === 'week' ? 'الأسبوع' : 'الشهر'}
+            {PERIOD_LABELS[p]}
           </button>
         ))}
       </div>
 
       {/* Calendar */}
-      <div className="flex items-center justify-between mb-2">
-        <button onClick={() => { const nd = new Date(year, month - 1, 1); setViewDate(formatDateToIsoString(nd)); }} className="p-1.5 rounded-lg hover:bg-slate-100 cursor-pointer text-slate-700">‹</button>
-        <span className="font-black text-slate-800 text-sm">{ARABIC_MONTH_NAMES[month]} {year}</span>
-        <button onClick={() => { const nd = new Date(year, month + 1, 1); setViewDate(formatDateToIsoString(nd)); }} className="p-1.5 rounded-lg hover:bg-slate-100 cursor-pointer text-slate-700">›</button>
+      <div className="rounded-xl border border-slate-200 p-2.5 bg-slate-50/40">
+        <div className="flex items-center justify-between mb-2">
+          <button onClick={() => setViewDate(formatDateToIsoString(new Date(year, month - 1, 1)))} className="w-6 h-6 rounded-md hover:bg-slate-200 cursor-pointer text-slate-600 font-bold">‹</button>
+          <span className="font-black text-slate-800 text-[12px]">{ARABIC_MONTH_NAMES[month]} {year}</span>
+          <button onClick={() => setViewDate(formatDateToIsoString(new Date(year, month + 1, 1)))} className="w-6 h-6 rounded-md hover:bg-slate-200 cursor-pointer text-slate-600 font-bold">›</button>
+        </div>
+        <div className="grid grid-cols-7 gap-1 text-center mb-1">
+          {ARABIC_WEEK_DAYS.slice(0, 5).map((day) => (
+            <div key={day} className="text-[9px] font-bold text-slate-400 py-0.5">{day}</div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7 gap-1">
+          {cells.map((iso, i) => {
+            if (!iso) return <div key={i} />;
+            const isSelected = iso === selectedDate;
+            const isSchool = isSchoolDay(iso);
+            return (
+              <button
+                key={i}
+                onClick={() => setSelectedDate(iso)}
+                className={`aspect-square rounded-md text-[11px] font-bold transition flex items-center justify-center ${
+                  isSelected
+                    ? 'bg-teal-600 text-white shadow-sm shadow-teal-600/30'
+                    : isSchool
+                    ? 'bg-white border border-slate-200 text-slate-700 hover:border-teal-400 hover:bg-teal-50'
+                    : 'bg-slate-50 text-slate-300'
+                }`}
+              >
+                {iso.split('-')[2]}
+              </button>
+            );
+          })}
+        </div>
       </div>
-      <div className="grid grid-cols-7 gap-1 text-center mb-1">
-        {ARABIC_WEEK_DAYS.slice(0, 5).map((d) => (
-          <div key={d} className="text-[10px] font-bold text-slate-400 py-1">{d}</div>
-        ))}
-      </div>
-      <div className="grid grid-cols-7 gap-1">
-        {cells.map((iso, i) => {
-          if (!iso) return <div key={i} />;
-          const isSelected = iso === selectedDate;
-          const isSchool = isSchoolDay(iso);
-          return (
-            <button
-              key={i}
-              onClick={() => setSelectedDate(iso)}
-              className={`aspect-square rounded-lg text-[12px] font-bold transition flex items-center justify-center ${
-                isSelected
-                  ? 'bg-teal-600 text-white shadow-md shadow-teal-600/30'
-                  : isSchool
-                  ? 'bg-white border border-slate-200 text-slate-700 hover:border-teal-400 hover:bg-teal-50'
-                  : 'bg-slate-50 text-slate-300'
-              }`}
-            >
-              {iso.split('-')[2]}
-            </button>
-          );
-        })}
-      </div>
-      <div className="mt-4 p-3 rounded-lg bg-teal-50 border border-teal-100 text-[11px] text-teal-700">
+
+      {/* Selected date */}
+      <div className="p-2.5 rounded-lg bg-teal-50 border border-teal-100 text-[11px] text-teal-700">
         ✅ تم اختيار: <strong>{formatDateArabic(selectedDate)}</strong> ({dayNameOf(selectedDate)})
         <br />هذا التاريخ هو المرجع الوحيد لمحتوى الدفتر.
       </div>
-      <div className="flex justify-between pt-2">
-        <button onClick={() => setSelectedDate(todayIso())} className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 text-[12px] font-bold hover:bg-slate-200">اليوم</button>
-        <button onClick={() => setSelectedDate(startOfWeek(selectedDate))} className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 text-[12px] font-bold hover:bg-slate-200">بداية الأسبوع</button>
+      <div className="flex justify-between gap-1.5">
+        <button onClick={() => setSelectedDate(todayIso())} className="flex-1 px-2 py-1.5 rounded-lg bg-slate-100 text-slate-600 text-[11px] font-bold hover:bg-slate-200">اليوم</button>
+        <button onClick={() => setSelectedDate(startOfWeek(selectedDate))} className="flex-1 px-2 py-1.5 rounded-lg bg-slate-100 text-slate-600 text-[11px] font-bold hover:bg-slate-200">بداية الأسبوع</button>
       </div>
-    </FloatingPanel>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Generation — معروض مباشرة داخل الشريط الجانبي
+// ---------------------------------------------------------------------------
+function GenerateInline({ onGenerate, period }: { onGenerate: (p: 'day' | 'week' | 'month') => void; period: 'day' | 'week' | 'month' }) {
+  return (
+    <div className="px-1 space-y-2">
+      <div className="grid grid-cols-3 gap-1.5">
+        {(['day', 'week', 'month'] as const).map((p) => (
+          <button
+            key={p}
+            onClick={() => onGenerate(p)}
+            className={`flex flex-col items-center gap-1 py-2.5 rounded-xl transition border ${
+              p === period
+                ? 'bg-teal-600 text-white border-teal-600 shadow-sm shadow-teal-600/30'
+                : 'bg-white border-slate-200 text-slate-700 hover:border-teal-400 hover:bg-teal-50'
+            }`}
+          >
+            <Sparkles className="w-4 h-4" />
+            <span className="text-[10px] font-black leading-tight">توليد<br />{PERIOD_LABELS[p]}</span>
+          </button>
+        ))}
+      </div>
+      <div className="p-2.5 rounded-lg bg-teal-50 border border-teal-100 text-[10px] text-teal-700 leading-relaxed">
+        💡 التوليد يعتمد حصرياً على التاريخ المحدد، ويبدأ من الأسبوع / الشهر الذي يحتوي عليه.
+      </div>
+    </div>
   );
 }
 
