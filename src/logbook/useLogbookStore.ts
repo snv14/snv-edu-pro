@@ -16,7 +16,7 @@ import {
 } from './store';
 import type { Lesson, LogbookLogEntry, LogbookPeriod } from './types';
 import { lessonsInPeriod, sortLessons } from './exporters';
-import { getPeriodRange, schoolDaysInRange, formatDateArabic, dayNameOf } from './dateUtils';
+import { getPeriodRange, schoolDaysInRange, formatDateArabic, dayNameOf, nearestSchoolDay } from './dateUtils';
 import { generateLessons } from './generation';
 
 export interface LogbookStore {
@@ -51,10 +51,16 @@ export function useLogbookStore(teacherId: string, schoolYear: string): LogbookS
   const [snapshot, setSnapshot] = useState<LogbookSnapshot>(() =>
     loadSnapshot(teacherId, schoolYear)
   );
-  const [selectedDate, setSelectedDate] = useState<string>(() => {
+  const [selectedDate, setSelectedDateRaw] = useState<string>(() => {
     const today = new Date();
-    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    return nearestSchoolDay(iso);
   });
+  // كل اختيار تاريخ يُحوّل تلقائياً إلى أقرب يوم دراسي، حتى لا يعلق الدفتر
+  // على تاريخ (جمعة/سبت) لا توجد فيه حصص.
+  const setSelectedDate = useCallback((d: string) => {
+    setSelectedDateRaw(nearestSchoolDay(d));
+  }, []);
   const [period, setPeriod] = useState<LogbookPeriod>('day');
   const teacherRef = useRef(teacherId);
   const yearRef = useRef(schoolYear);

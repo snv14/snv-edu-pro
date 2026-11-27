@@ -153,3 +153,21 @@ export function weeksOfMonth(iso: string): { start: string; end: string; label: 
 export function todayIso(): string {
   return formatDateToIsoString(new Date());
 }
+
+/**
+ * تحويل أي تاريخ إلى أقرب يوم دراسي (الأحد-الخميس).
+ * - إن كان التاريخ يوماً دراسياً يُردّ كما هو.
+ * - إن كان الجمعة أو السبت، يُردّ الأحد التالي (بداية الأسبوع الدراسي)،
+ *   بحيث لا يعلق الدفتر على تاريخ لا توجد فيه حصص.
+ */
+export function nearestSchoolDay(iso: string): string {
+  const clean = (iso || '').split(' ')[0];
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(clean)) return iso;
+  if (isSchoolDay(clean)) return clean;
+  // الجمعة (5) والسبت (6): الانتقال إلى الأحد التالي.
+  const d = new Date(`${clean}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return iso;
+  const daysToSunday = (7 - d.getDay()) % 7;
+  d.setDate(d.getDate() + daysToSunday);
+  return formatDateToIsoString(d);
+}
